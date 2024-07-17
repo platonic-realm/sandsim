@@ -11,40 +11,16 @@ This directory contains the C++ implementation of the sandsim project, including
 
 You can compile the project using either GCC or Clang. Here are the commands for each version:
 
-### Scalar Version
-
-GCC:
-```
-g++ -std=c++17 -O3 -march=native main.cpp sandsim_scalar.cpp -o sandsim_scalar
-```
-
-Clang:
-```
-clang++ -std=c++17 -O3 -march=native main.cpp sandsim_scalar.cpp -o sandsim_scalar
-```
-
-### SSE Version
-
-GCC:
-```
-g++ -std=c++17 -O3 -march=native -msse4.1 main.cpp sandsim_sse.cpp -o sandsim_sse
-```
-
-Clang:
-```
-clang++ -std=c++17 -O3 -march=native -msse4.1 main.cpp sandsim_sse.cpp -o sandsim_sse
-```
-
 ### AVX2 Version
 
 GCC:
 ```
-g++ -std=c++17 -O3 -march=native -mavx2 main.cpp sandsim_avx2.cpp -o sandsim_avx2
+g++ -std=c++17 -O3 -march=native -mavx2 sandsim_avx2.cpp -o sandsim_avx2 -lSDL2
 ```
 
 Clang:
 ```
-clang++ -std=c++17 -O3 -march=native -mavx2 main.cpp sandsim_avx2.cpp -o sandsim_avx2
+clang++ -std=c++17 -O3 -march=native -mavx2 sandsim_avx2.cpp -o sandsim_avx2 -lSDL2
 ```
 
 
