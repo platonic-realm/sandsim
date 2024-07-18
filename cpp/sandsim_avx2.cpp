@@ -21,15 +21,18 @@ void updateSandSIMD() {
 
     for (int y = GRID_HEIGHT - 2; y >= 0; --y) {
         for (int x = 0; x < GRID_WIDTH; x += 16) {
-            // Load current row and the row below
-            __m128i current = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&grid[y * GRID_WIDTH + x]));
-            __m128i below = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&grid[(y + 1) * GRID_WIDTH + x]));
 
+            // Load current row
+            __m128i current = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&grid[y * GRID_WIDTH + x]));
 
             // Check which cells contain sand
             __m128i is_sand = _mm_cmpeq_epi8(current, sand_value);
 
             /////////////////////////////////////
+
+            // Load the row below
+            __m128i below = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&grid[(y + 1) * GRID_WIDTH + x]));
+
             // Check which cells below are empty
             __m128i is_empty_below = _mm_cmpeq_epi8(below, empty_value);
 
@@ -44,9 +47,10 @@ void updateSandSIMD() {
 
             // Store updated rows back to grid
             _mm_storeu_si128(reinterpret_cast<__m128i*>(&grid[(y + 1) * GRID_WIDTH + x]), below);
+
             /////////////////////////////////////
 
-            // Load current row and the row below
+            // Load the row below-left
             __m128i left = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&grid[(y + 1) * GRID_WIDTH + x - 1]));
 
             // Check which cells below-left are empty
@@ -61,17 +65,18 @@ void updateSandSIMD() {
             // Update current row (remove sand that will fall)
             current = _mm_andnot_si128(can_fall, current);
 
-            // Update row left (add sand that has fallen)
+            // Update row below-left (add sand that has fallen)
             left = _mm_or_si128(left, _mm_and_si128(can_fall, sand_value));
 
             // Store updated rows back to grid
             _mm_storeu_si128(reinterpret_cast<__m128i*>(&grid[(y + 1) * GRID_WIDTH + x - 1]), left);
 
             /////////////////////////////////////
-            // Load current row and the row below
+
+            // Load the row below-right
             __m128i right = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&grid[(y + 1) * GRID_WIDTH + x + 1]));
 
-            // Check which cells below-left are empty
+            // Check which cells below-right are empty
             __m128i is_empty_right = _mm_cmpeq_epi8(right, empty_value);
 
             // Check which cells contain sand
@@ -83,13 +88,13 @@ void updateSandSIMD() {
             // Update current row (remove sand that will fall)
             current = _mm_andnot_si128(can_fall, current);
 
-            // Update row left (add sand that has fallen)
+            // Update row below-right (add sand that has fallen)
             right = _mm_or_si128(right, _mm_and_si128(can_fall, sand_value));
 
             // Store updated rows back to grid
             _mm_storeu_si128(reinterpret_cast<__m128i*>(&grid[(y + 1) * GRID_WIDTH + x + 1]), right);
-            /////////////////////////////////////
 
+            /////////////////////////////////////
 
             // At the end
             _mm_storeu_si128(reinterpret_cast<__m128i*>(&grid[y * GRID_WIDTH + x]), current);
@@ -103,57 +108,84 @@ void updateSandSIMD() {
 void updateSandAVX2() {
     const __m256i sand_value = _mm256_set1_epi8(1);  // Sand is represented by 1
     const __m256i empty_value = _mm256_setzero_si256();  // Empty is represented by 0
+
     for (int y = GRID_HEIGHT - 2; y >= 0; --y) {
         for (int x = 0; x < GRID_WIDTH; x += 32) {
-            // Load current row and the row below
+            // Load current row
             __m256i current = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&grid[y * GRID_WIDTH + x]));
-            __m256i below = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&grid[(y + 1) * GRID_WIDTH + x]));
+
             // Check which cells contain sand
             __m256i is_sand = _mm256_cmpeq_epi8(current, sand_value);
+
+
             /////////////////////////////////////
+
+            // Load current row
+            __m256i below = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&grid[(y + 1) * GRID_WIDTH + x]));
+
             // Check which cells below are empty
             __m256i is_empty_below = _mm256_cmpeq_epi8(below, empty_value);
+
             // Determine which sand particles can fall
             __m256i can_fall = _mm256_and_si256(is_sand, is_empty_below);
+
             // Update current row (remove sand that will fall)
             current = _mm256_andnot_si256(can_fall, current);
+
             // Update row below (add sand that has fallen)
             below = _mm256_or_si256(below, _mm256_and_si256(can_fall, sand_value));
+
             // Store updated rows back to grid
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&grid[(y + 1) * GRID_WIDTH + x]), below);
+
             /////////////////////////////////////
-            // Load current row and the row below
+
+            // Load the row below-left
             __m256i left = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&grid[(y + 1) * GRID_WIDTH + x - 1]));
+
             // Check which cells below-left are empty
             __m256i is_empty_left = _mm256_cmpeq_epi8(left, empty_value);
+
             // Check which cells contain sand
             is_sand = _mm256_cmpeq_epi8(current, sand_value);
 
             // Determine which sand particles can fall
             can_fall = _mm256_and_si256(is_sand, is_empty_left);
+
             // Update current row (remove sand that will fall)
             current = _mm256_andnot_si256(can_fall, current);
-            // Update row left (add sand that has fallen)
+
+            // Update row below-left (add sand that has fallen)
             left = _mm256_or_si256(left, _mm256_and_si256(can_fall, sand_value));
+
             // Store updated rows back to grid
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&grid[(y + 1) * GRID_WIDTH + x - 1]), left);
+
             /////////////////////////////////////
-            // Load current row and the row below
+
+            // Load the row below-right
             __m256i right = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&grid[(y + 1) * GRID_WIDTH + x + 1]));
-            // Check which cells below-left are empty
+
+            // Check which cells below-right are empty
             __m256i is_empty_right = _mm256_cmpeq_epi8(right, empty_value);
+
             // Check which cells contain sand
             is_sand = _mm256_cmpeq_epi8(current, sand_value);
 
             // Determine which sand particles can fall
             can_fall = _mm256_and_si256(is_sand, is_empty_right);
+
             // Update current row (remove sand that will fall)
             current = _mm256_andnot_si256(can_fall, current);
-            // Update row left (add sand that has fallen)
+
+            // Update row below-right (add sand that has fallen)
             right = _mm256_or_si256(right, _mm256_and_si256(can_fall, sand_value));
             // Store updated rows back to grid
+
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&grid[(y + 1) * GRID_WIDTH + x + 1]), right);
+
             /////////////////////////////////////
+
             // At the end
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&grid[y * GRID_WIDTH + x]), current);
         }
