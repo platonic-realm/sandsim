@@ -14,6 +14,7 @@ The core simulation involves a 2D grid where sand particles fall due to gravity 
 
 Target implementations:
 
+- [Bash](bash/README.md)
 - C
 - [C++](cpp/README.md)
 - [Python](python/README.md)

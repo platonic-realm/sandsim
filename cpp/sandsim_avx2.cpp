@@ -263,7 +263,7 @@ int main(int argc, char* args[]) {
         }
 
         SDL_RenderPresent(renderer);
-        SDL_Delay(5);  // Aim for about 60 FPS
+        SDL_Delay(16);  // Aim for about 60 FPS
 
         // Debug output
         if (frameCount % 60 == 0) {  // Print every 60 frames
