@@ -1,54 +1,505 @@
-#include <vulkan/vulkan.h>
 #include <SDL2/SDL.h>
+#include <vulkan/vulkan.h>
 
 #include <cstdint>
-#include <vector>
-#include <random>
-#include <iostream>
-#include <fstream>
-#include <stdexcept>
 #include <cstring>
+#include <fstream>
+#include <iostream>
+#include <random>
+#include <stdexcept>
+#include <vector>
 
-static void vkCheck(VkResult result, const char* msg) { if (result != VK_SUCCESS) throw std::runtime_error(msg); }
-static std::vector<char> readFile(const char* path) { std::ifstream f(path, std::ios::ate | std::ios::binary); if (!f) throw std::runtime_error("Failed to open file"); size_t sz=(size_t)f.tellg(); std::vector<char> buf(sz); f.seekg(0); f.read(buf.data(), sz); return buf; }
+static void vkCheck(VkResult result, const char *msg) {
+  if (result != VK_SUCCESS) {
+    throw std::runtime_error(msg);
+  }
+}
+
+static std::vector<char> readFile(const char *path) {
+  std::ifstream f(path, std::ios::ate | std::ios::binary);
+  if (!f) {
+    throw std::runtime_error("Failed to open file");
+  }
+  size_t sz = (size_t)f.tellg();
+  std::vector<char> buf(sz);
+  f.seekg(0);
+  f.read(buf.data(), sz);
+  return buf;
+}
 
 class VulkanSandSimMB {
 public:
-    static constexpr int PIXEL_SIZE = 2;
-    static constexpr int NUM_BUFFERS = 16;
-    VulkanSandSimMB(int w, int h): width(w), height(h), renderWidth(w*PIXEL_SIZE), renderHeight(h*PIXEL_SIZE), rng(std::random_device{}()) {
-        initSDL(); initVulkan(); createBuffers(); createDescriptorSetLayout(); createPipeline(); createDescriptorPoolAndSet(); createCommandPoolAndBuffer();
+  static constexpr int PIXEL_SIZE = 2;
+  static constexpr int NUM_BUFFERS = 16;
+
+  VulkanSandSimMB(int w, int h)
+      : width(w), height(h), renderWidth(w * PIXEL_SIZE),
+        renderHeight(h * PIXEL_SIZE), rng(std::random_device{}()) {
+    initSDL();
+    initVulkan();
+    createBuffers();
+    createDescriptorSetLayout();
+    createPipeline();
+    createDescriptorPoolAndSet();
+    createCommandPoolAndBuffer();
+  }
+
+  ~VulkanSandSimMB() {
+    vkDeviceWaitIdle(device);
+    vkDestroyFence(device, fence, nullptr);
+    vkDestroyCommandPool(device, commandPool, nullptr);
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+    vkDestroyPipeline(device, pipeline, nullptr);
+    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkDestroyShaderModule(device, computeShaderModule, nullptr);
+    vkDestroyBuffer(device, storageBuffer, nullptr);
+    vkFreeMemory(device, storageMemory, nullptr);
+    vkDestroyDevice(device, nullptr);
+    vkDestroyInstance(instance, nullptr);
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+  }
+
+  void run() {
+    bool quit = false;
+    SDL_Event e;
+    bool mouseDown = false;
+    int mouseX = 0, mouseY = 0;
+    int srcIndex = 0, dstIndex = 1;
+    int activeBuffer = 0;
+    std::memset(mappedPtr, 0, bufferBytes);
+
+    while (!quit) {
+      while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_QUIT) {
+          quit = true;
+        } else if (e.type == SDL_MOUSEBUTTONDOWN) {
+          mouseDown = true;
+        } else if (e.type == SDL_MOUSEBUTTONUP) {
+          mouseDown = false;
+        } else if (e.type == SDL_MOUSEMOTION) {
+          SDL_GetMouseState(&mouseX, &mouseY);
+        } else if (e.type == SDL_KEYDOWN) {
+          if (e.key.keysym.sym == SDLK_c) {
+            std::memset(mappedPtr, 0, bufferBytes);
+          } else if (e.key.keysym.sym == SDLK_r) {
+            randomizeAll();
+          } else if (e.key.keysym.sym == SDLK_SPACE) {
+            activeBuffer = (activeBuffer + 1) % NUM_BUFFERS;
+            std::cout << "Switched to buffer: " << activeBuffer << std::endl;
+          } else if (e.key.keysym.sym >= SDLK_0 && e.key.keysym.sym <= SDLK_9) {
+            int b = e.key.keysym.sym - SDLK_0;
+            if (b < NUM_BUFFERS) {
+              activeBuffer = b;
+              std::cout << "Switched to buffer: " << activeBuffer << std::endl;
+            }
+          }
+        }
+      }
+
+      if (mouseDown) {
+        addSand(activeBuffer, srcIndex, mouseX, mouseY, 5);
+      }
+
+      copyAll(srcIndex, dstIndex);
+      recordAndSubmit(srcIndex, dstIndex);
+      waitForGPU();
+      render(activeBuffer, dstIndex);
+      std::swap(srcIndex, dstIndex);
+      SDL_Delay(16);
     }
-    ~VulkanSandSimMB(){ vkDeviceWaitIdle(device); vkDestroyFence(device,fence,nullptr); vkDestroyCommandPool(device,commandPool,nullptr); vkDestroyDescriptorPool(device,descriptorPool,nullptr); vkDestroyPipeline(device,pipeline,nullptr); vkDestroyPipelineLayout(device,pipelineLayout,nullptr); vkDestroyDescriptorSetLayout(device,descriptorSetLayout,nullptr); vkDestroyShaderModule(device,computeShaderModule,nullptr); vkDestroyBuffer(device,storageBuffer,nullptr); vkFreeMemory(device,storageMemory,nullptr); vkDestroyDevice(device,nullptr); vkDestroyInstance(instance,nullptr); SDL_DestroyTexture(texture); SDL_DestroyRenderer(renderer); SDL_DestroyWindow(window); SDL_Quit(); }
-    void run(){ bool quit=false; SDL_Event e; bool mouseDown=false; int mouseX=0,mouseY=0; int srcIndex=0,dstIndex=1; int activeBuffer=0; std::memset(mappedPtr,0,bufferBytes);
-        while(!quit){ while(SDL_PollEvent(&e)){ if(e.type==SDL_QUIT) quit=true; else if(e.type==SDL_MOUSEBUTTONDOWN) mouseDown=true; else if(e.type==SDL_MOUSEBUTTONUP) mouseDown=false; else if(e.type==SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX,&mouseY); else if(e.type==SDL_KEYDOWN){ if(e.key.keysym.sym==SDLK_c) std::memset(mappedPtr,0,bufferBytes); else if(e.key.keysym.sym==SDLK_r) randomizeAll(); else if(e.key.keysym.sym==SDLK_SPACE){ activeBuffer=(activeBuffer+1)%NUM_BUFFERS; std::cout<<"Switched to buffer: "<<activeBuffer<<std::endl; } else if(e.key.keysym.sym>=SDLK_0 && e.key.keysym.sym<=SDLK_9){ int b=e.key.keysym.sym-SDLK_0; if(b<NUM_BUFFERS){ activeBuffer=b; std::cout<<"Switched to buffer: "<<activeBuffer<<std::endl; } } } }
-            if(mouseDown) addSand(activeBuffer, srcIndex, mouseX, mouseY, 5);
-            copyAll(srcIndex, dstIndex);
-            recordAndSubmit(srcIndex, dstIndex); waitForGPU(); render(activeBuffer, dstIndex); std::swap(srcIndex,dstIndex); SDL_Delay(16); }
-    }
+  }
+
 private:
-    SDL_Window* window=nullptr; SDL_Renderer* renderer=nullptr; SDL_Texture* texture=nullptr; std::vector<uint32_t> pixelBuffer;
-    VkInstance instance=VK_NULL_HANDLE; VkPhysicalDevice phys=VK_NULL_HANDLE; VkDevice device=VK_NULL_HANDLE; uint32_t computeQueueFamily=0; VkQueue computeQueue=VK_NULL_HANDLE;
-    VkBuffer storageBuffer=VK_NULL_HANDLE; VkDeviceMemory storageMemory=VK_NULL_HANDLE; void* mappedPtr=nullptr; VkDescriptorSetLayout descriptorSetLayout=VK_NULL_HANDLE; VkPipelineLayout pipelineLayout=VK_NULL_HANDLE; VkPipeline pipeline=VK_NULL_HANDLE; VkShaderModule computeShaderModule=VK_NULL_HANDLE; VkDescriptorPool descriptorPool=VK_NULL_HANDLE; VkDescriptorSet descriptorSet=VK_NULL_HANDLE; VkCommandPool commandPool=VK_NULL_HANDLE; VkCommandBuffer commandBuffer=VK_NULL_HANDLE; VkFence fence=VK_NULL_HANDLE;
-    int width; int height; int renderWidth; int renderHeight; std::mt19937 rng; VkDeviceSize bufferBytes=0;
-    struct PushConsts{ int32_t width,height,srcIndex,dstIndex,numBuffers; };
-    void initSDL(){ SDL_Init(SDL_INIT_VIDEO); window=SDL_CreateWindow("Vulkan Sand Simulation MB (Compute)", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderWidth, renderHeight, 0); renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED); texture=SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, renderWidth, renderHeight); pixelBuffer.resize(renderWidth*renderHeight,0); }
-    void initVulkan(){ VkApplicationInfo app{ }; app.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO; app.pApplicationName="sandsim_vulkan_compute_mb"; app.apiVersion=VK_API_VERSION_1_1; VkInstanceCreateInfo ici{ }; ici.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; ici.pApplicationInfo=&app; vkCheck(vkCreateInstance(&ici,nullptr,&instance),"vkCreateInstance failed"); uint32_t physCount=0; vkEnumeratePhysicalDevices(instance,&physCount,nullptr); if(!physCount) throw std::runtime_error("No Vulkan physical devices found"); std::vector<VkPhysicalDevice> physList(physCount); vkEnumeratePhysicalDevices(instance,&physCount,physList.data()); phys=physList[0]; uint32_t qCount=0; vkGetPhysicalDeviceQueueFamilyProperties(phys,&qCount,nullptr); std::vector<VkQueueFamilyProperties> qProps(qCount); vkGetPhysicalDeviceQueueFamilyProperties(phys,&qCount,qProps.data()); bool found=false; for(uint32_t i=0;i<qCount;++i){ if(qProps[i].queueFlags & VK_QUEUE_COMPUTE_BIT){ computeQueueFamily=i; found=true; break; } } if(!found) throw std::runtime_error("No compute queue family found"); float pr=1.0f; VkDeviceQueueCreateInfo dq{ }; dq.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO; dq.queueFamilyIndex=computeQueueFamily; dq.queueCount=1; dq.pQueuePriorities=&pr; VkDeviceCreateInfo dci{ }; dci.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO; dci.queueCreateInfoCount=1; dci.pQueueCreateInfos=&dq; vkCheck(vkCreateDevice(phys,&dci,nullptr,&device),"vkCreateDevice failed"); vkGetDeviceQueue(device,computeQueueFamily,0,&computeQueue); }
-    uint32_t findMemoryType(uint32_t typeBits, VkMemoryPropertyFlags props){ VkPhysicalDeviceMemoryProperties mp; vkGetPhysicalDeviceMemoryProperties(phys,&mp); for(uint32_t i=0;i<mp.memoryTypeCount;++i) if((typeBits&(1u<<i)) && (mp.memoryTypes[i].propertyFlags & props)==props) return i; throw std::runtime_error("No suitable memory type"); }
-    void createBuffers(){ bufferBytes = static_cast<VkDeviceSize>(width)*static_cast<VkDeviceSize>(height)*static_cast<VkDeviceSize>(NUM_BUFFERS)*2ull*sizeof(uint32_t); VkBufferCreateInfo b{ }; b.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO; b.size=bufferBytes; b.usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; b.sharingMode=VK_SHARING_MODE_EXCLUSIVE; vkCheck(vkCreateBuffer(device,&b,nullptr,&storageBuffer),"vkCreateBuffer failed"); VkMemoryRequirements req; vkGetBufferMemoryRequirements(device,storageBuffer,&req); VkMemoryAllocateInfo a{ }; a.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; a.allocationSize=req.size; a.memoryTypeIndex=findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT); vkCheck(vkAllocateMemory(device,&a,nullptr,&storageMemory),"vkAllocateMemory failed"); vkCheck(vkBindBufferMemory(device,storageBuffer,storageMemory,0),"vkBindBufferMemory failed"); vkCheck(vkMapMemory(device,storageMemory,0,bufferBytes,0,&mappedPtr),"vkMapMemory failed"); }
-    void createDescriptorSetLayout(){ VkDescriptorSetLayoutBinding b{ }; b.binding=0; b.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; b.descriptorCount=1; b.stageFlags=VK_SHADER_STAGE_COMPUTE_BIT; VkDescriptorSetLayoutCreateInfo ci{ }; ci.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO; ci.bindingCount=1; ci.pBindings=&b; vkCheck(vkCreateDescriptorSetLayout(device,&ci,nullptr,&descriptorSetLayout),"vkCreateDescriptorSetLayout failed"); }
-    void createPipeline(){ auto code=readFile("shaders/sand_mb.comp.spv"); VkShaderModuleCreateInfo sm{ }; sm.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO; sm.codeSize=code.size(); sm.pCode=reinterpret_cast<const uint32_t*>(code.data()); vkCheck(vkCreateShaderModule(device,&sm,nullptr,&computeShaderModule),"vkCreateShaderModule failed"); VkPushConstantRange p{ }; p.stageFlags=VK_SHADER_STAGE_COMPUTE_BIT; p.offset=0; p.size=sizeof(PushConsts); VkPipelineLayoutCreateInfo pl{ }; pl.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO; pl.setLayoutCount=1; pl.pSetLayouts=&descriptorSetLayout; pl.pushConstantRangeCount=1; pl.pPushConstantRanges=&p; vkCheck(vkCreatePipelineLayout(device,&pl,nullptr,&pipelineLayout),"vkCreatePipelineLayout failed"); VkComputePipelineCreateInfo cp{ }; cp.sType=VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO; VkPipelineShaderStageCreateInfo st{ }; st.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; st.stage=VK_SHADER_STAGE_COMPUTE_BIT; st.module=computeShaderModule; st.pName="main"; cp.stage=st; cp.layout=pipelineLayout; vkCheck(vkCreateComputePipelines(device,VK_NULL_HANDLE,1,&cp,nullptr,&pipeline),"vkCreateComputePipelines failed"); }
-    void createDescriptorPoolAndSet(){ VkDescriptorPoolSize ps{ }; ps.type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; ps.descriptorCount=1; VkDescriptorPoolCreateInfo pci{ }; pci.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO; pci.poolSizeCount=1; pci.pPoolSizes=&ps; pci.maxSets=1; vkCheck(vkCreateDescriptorPool(device,&pci,nullptr,&descriptorPool),"vkCreateDescriptorPool failed"); VkDescriptorSetAllocateInfo ai{ }; ai.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO; ai.descriptorPool=descriptorPool; ai.descriptorSetCount=1; ai.pSetLayouts=&descriptorSetLayout; vkCheck(vkAllocateDescriptorSets(device,&ai,&descriptorSet),"vkAllocateDescriptorSets failed"); VkDescriptorBufferInfo bi{ }; bi.buffer=storageBuffer; bi.offset=0; bi.range=bufferBytes; VkWriteDescriptorSet w{ }; w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; w.dstSet=descriptorSet; w.dstBinding=0; w.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; w.descriptorCount=1; w.pBufferInfo=&bi; vkUpdateDescriptorSets(device,1,&w,0,nullptr); }
-    void createCommandPoolAndBuffer(){ VkCommandPoolCreateInfo ci{ }; ci.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO; ci.queueFamilyIndex=computeQueueFamily; ci.flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; vkCheck(vkCreateCommandPool(device,&ci,nullptr,&commandPool),"vkCreateCommandPool failed"); VkCommandBufferAllocateInfo ai{ }; ai.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO; ai.commandPool=commandPool; ai.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY; ai.commandBufferCount=1; vkCheck(vkAllocateCommandBuffers(device,&ai,&commandBuffer),"vkAllocateCommandBuffers failed"); VkFenceCreateInfo fi{ }; fi.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO; vkCheck(vkCreateFence(device,&fi,nullptr,&fence),"vkCreateFence failed"); }
-    void recordAndSubmit(int srcIndex,int dstIndex){ vkCheck(vkResetFences(device,1,&fence),"vkResetFences failed"); vkCheck(vkResetCommandBuffer(commandBuffer,0),"vkResetCommandBuffer failed"); VkCommandBufferBeginInfo bi{ }; bi.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO; vkCheck(vkBeginCommandBuffer(commandBuffer,&bi),"vkBeginCommandBuffer failed"); vkCmdBindPipeline(commandBuffer,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline); vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_COMPUTE,pipelineLayout,0,1,&descriptorSet,0,nullptr); PushConsts pc{ width,height,srcIndex,dstIndex,NUM_BUFFERS }; vkCmdPushConstants(commandBuffer,pipelineLayout,VK_SHADER_STAGE_COMPUTE_BIT,0,sizeof(PushConsts),&pc); uint32_t gx=(width+15)/16, gy=(height+15)/16, gz=NUM_BUFFERS; vkCmdDispatch(commandBuffer,gx,gy,gz); vkCheck(vkEndCommandBuffer(commandBuffer),"vkEndCommandBuffer failed"); VkSubmitInfo si{ }; si.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO; si.commandBufferCount=1; si.pCommandBuffers=&commandBuffer; vkCheck(vkQueueSubmit(computeQueue,1,&si,fence),"vkQueueSubmit failed"); }
-    void waitForGPU(){ vkWaitForFences(device,1,&fence,VK_TRUE,UINT64_C(1'000'000'000)); }
-    void addSand(int bufferIndex,int srcHalf,int px,int py,int radius){ int x=px/PIXEL_SIZE,y=py/PIXEL_SIZE; uint32_t* u32=reinterpret_cast<uint32_t*>(mappedPtr); size_t stride=static_cast<size_t>(width)*static_cast<size_t>(height); size_t halfOff=(srcHalf==0?0:(NUM_BUFFERS*stride)); size_t base=halfOff+static_cast<size_t>(bufferIndex)*stride; for(int dy=-radius;dy<=radius;++dy) for(int dx=-radius;dx<=radius;++dx){ int nx=x+dx, ny=y+dy; if(nx>=0&&nx<width&&ny>=0&&ny<height) if(dx*dx+dy*dy<=radius*radius) u32[base+static_cast<size_t>(ny)*static_cast<size_t>(width)+static_cast<size_t>(nx)]=1u; } }
-    void randomizeAll(float density=0.3f){ std::uniform_real_distribution<float> dist(0.0f,1.0f); uint32_t* u32=reinterpret_cast<uint32_t*>(mappedPtr); size_t stride=static_cast<size_t>(width)*static_cast<size_t>(height); for(int half=0;half<2;++half){ size_t halfOff=(half==0?0:(NUM_BUFFERS*stride)); for(int b=0;b<NUM_BUFFERS;++b){ size_t base=halfOff+static_cast<size_t>(b)*stride; for(int y=0;y<height;++y) for(int x=0;x<width;++x) u32[base+static_cast<size_t>(y)*static_cast<size_t>(width)+static_cast<size_t>(x)]=(dist(rng)<density)?1u:0u; } } }
-    void copyAll(int srcHalf,int dstHalf){ uint32_t* u32=reinterpret_cast<uint32_t*>(mappedPtr); size_t stride=static_cast<size_t>(width)*static_cast<size_t>(height); size_t bytes=stride*sizeof(uint32_t); size_t srcOff=(srcHalf==0?0:(NUM_BUFFERS*stride)); size_t dstOff=(dstHalf==0?0:(NUM_BUFFERS*stride)); for(int b=0;b<NUM_BUFFERS;++b) std::memcpy(u32+dstOff+static_cast<size_t>(b)*stride, u32+srcOff+static_cast<size_t>(b)*stride, bytes); }
-    uint32_t readCellCPU(int half,int bufferIndex,int x,int y) const { if(x<0||x>=width||y<0||y>=height) return 0u; const uint32_t* u32=reinterpret_cast<const uint32_t*>(mappedPtr); size_t stride=static_cast<size_t>(width)*static_cast<size_t>(height); size_t halfOff=(half==0?0:(NUM_BUFFERS*stride)); size_t base=halfOff+static_cast<size_t>(bufferIndex)*stride; return u32[base+static_cast<size_t>(y)*static_cast<size_t>(width)+static_cast<size_t>(x)]; }
-    void render(int bufferIndex,int half){ for(int y=0;y<height;++y) for(int x=0;x<width;++x){ uint32_t v=readCellCPU(half,bufferIndex,x,y); uint32_t color=v?0xFFFFFF00u:0xFF000000u; for(int dy=0;dy<PIXEL_SIZE;++dy) for(int dx=0;dx<PIXEL_SIZE;++dx){ int rx=x*PIXEL_SIZE+dx, ry=y*PIXEL_SIZE+dy; pixelBuffer[static_cast<size_t>(ry)*static_cast<size_t>(renderWidth)+static_cast<size_t>(rx)]=color; } } SDL_UpdateTexture(texture,nullptr,pixelBuffer.data(),renderWidth*sizeof(uint32_t)); SDL_RenderClear(renderer); SDL_RenderCopy(renderer,texture,nullptr,nullptr); SDL_RenderPresent(renderer); }
+  SDL_Window *window = nullptr;
+  SDL_Renderer *renderer = nullptr;
+  SDL_Texture *texture = nullptr;
+  std::vector<uint32_t> pixelBuffer;
+
+  VkInstance instance = VK_NULL_HANDLE;
+  VkPhysicalDevice phys = VK_NULL_HANDLE;
+  VkDevice device = VK_NULL_HANDLE;
+  uint32_t computeQueueFamily = 0;
+  VkQueue computeQueue = VK_NULL_HANDLE;
+
+  VkBuffer storageBuffer = VK_NULL_HANDLE;
+  VkDeviceMemory storageMemory = VK_NULL_HANDLE;
+  void *mappedPtr = nullptr;
+  VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+  VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+  VkPipeline pipeline = VK_NULL_HANDLE;
+  VkShaderModule computeShaderModule = VK_NULL_HANDLE;
+  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+  VkCommandPool commandPool = VK_NULL_HANDLE;
+  VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+  VkFence fence = VK_NULL_HANDLE;
+
+  int width;
+  int height;
+  int renderWidth;
+  int renderHeight;
+  std::mt19937 rng;
+  VkDeviceSize bufferBytes = 0;
+
+  struct PushConsts {
+    int32_t width;
+    int32_t height;
+    int32_t srcIndex;
+    int32_t dstIndex;
+    int32_t numBuffers;
+  };
+
+  void initSDL() {
+    SDL_Init(SDL_INIT_VIDEO);
+    window = SDL_CreateWindow("Vulkan Sand Simulation MB (Compute)",
+                              SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                              renderWidth, renderHeight, 0);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                                SDL_TEXTUREACCESS_STREAMING, renderWidth,
+                                renderHeight);
+    pixelBuffer.resize(renderWidth * renderHeight, 0);
+  }
+
+  void initVulkan() {
+    VkApplicationInfo app{};
+    app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app.pApplicationName = "sandsim_vulkan_compute_mb";
+    app.apiVersion = VK_API_VERSION_1_1;
+
+    VkInstanceCreateInfo ici{};
+    ici.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    ici.pApplicationInfo = &app;
+    vkCheck(vkCreateInstance(&ici, nullptr, &instance),
+            "vkCreateInstance failed");
+
+    uint32_t physCount = 0;
+    vkEnumeratePhysicalDevices(instance, &physCount, nullptr);
+    if (!physCount) {
+      throw std::runtime_error("No Vulkan physical devices found");
+    }
+    std::vector<VkPhysicalDevice> physList(physCount);
+    vkEnumeratePhysicalDevices(instance, &physCount, physList.data());
+    phys = physList[0];
+
+    uint32_t qCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, &qCount, nullptr);
+    std::vector<VkQueueFamilyProperties> qProps(qCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, &qCount, qProps.data());
+    bool found = false;
+    for (uint32_t i = 0; i < qCount; ++i) {
+      if (qProps[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+        computeQueueFamily = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      throw std::runtime_error("No compute queue family found");
+    }
+
+    float pr = 1.0f;
+    VkDeviceQueueCreateInfo dq{};
+    dq.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    dq.queueFamilyIndex = computeQueueFamily;
+    dq.queueCount = 1;
+    dq.pQueuePriorities = &pr;
+
+    VkDeviceCreateInfo dci{};
+    dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    dci.queueCreateInfoCount = 1;
+    dci.pQueueCreateInfos = &dq;
+    vkCheck(vkCreateDevice(phys, &dci, nullptr, &device),
+            "vkCreateDevice failed");
+    vkGetDeviceQueue(device, computeQueueFamily, 0, &computeQueue);
+  }
+
+  uint32_t findMemoryType(uint32_t typeBits, VkMemoryPropertyFlags props) {
+    VkPhysicalDeviceMemoryProperties mp;
+    vkGetPhysicalDeviceMemoryProperties(phys, &mp);
+    for (uint32_t i = 0; i < mp.memoryTypeCount; ++i) {
+      if ((typeBits & (1u << i)) &&
+          (mp.memoryTypes[i].propertyFlags & props) == props) {
+        return i;
+      }
+    }
+    throw std::runtime_error("No suitable memory type");
+  }
+
+  void createBuffers() {
+    bufferBytes =
+        static_cast<VkDeviceSize>(width) * static_cast<VkDeviceSize>(height) *
+        static_cast<VkDeviceSize>(NUM_BUFFERS) * 2ull * sizeof(uint32_t);
+
+    VkBufferCreateInfo b{};
+    b.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    b.size = bufferBytes;
+    b.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    b.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vkCheck(vkCreateBuffer(device, &b, nullptr, &storageBuffer),
+            "vkCreateBuffer failed");
+
+    VkMemoryRequirements req;
+    vkGetBufferMemoryRequirements(device, storageBuffer, &req);
+    VkMemoryAllocateInfo a{};
+    a.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    a.allocationSize = req.size;
+    a.memoryTypeIndex = findMemoryType(
+        req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    vkCheck(vkAllocateMemory(device, &a, nullptr, &storageMemory),
+            "vkAllocateMemory failed");
+    vkCheck(vkBindBufferMemory(device, storageBuffer, storageMemory, 0),
+            "vkBindBufferMemory failed");
+    vkCheck(vkMapMemory(device, storageMemory, 0, bufferBytes, 0, &mappedPtr),
+            "vkMapMemory failed");
+  }
+
+  void createDescriptorSetLayout() {
+    VkDescriptorSetLayoutBinding b{};
+    b.binding = 0;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    b.descriptorCount = 1;
+    b.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    ci.bindingCount = 1;
+    ci.pBindings = &b;
+    vkCheck(
+        vkCreateDescriptorSetLayout(device, &ci, nullptr, &descriptorSetLayout),
+        "vkCreateDescriptorSetLayout failed");
+  }
+
+  void createPipeline() {
+    auto code = readFile("shaders/sand_mb.comp.spv");
+    VkShaderModuleCreateInfo sm{};
+    sm.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    sm.codeSize = code.size();
+    sm.pCode = reinterpret_cast<const uint32_t *>(code.data());
+    vkCheck(vkCreateShaderModule(device, &sm, nullptr, &computeShaderModule),
+            "vkCreateShaderModule failed");
+
+    VkPushConstantRange p{};
+    p.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    p.offset = 0;
+    p.size = sizeof(PushConsts);
+
+    VkPipelineLayoutCreateInfo pl{};
+    pl.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pl.setLayoutCount = 1;
+    pl.pSetLayouts = &descriptorSetLayout;
+    pl.pushConstantRangeCount = 1;
+    pl.pPushConstantRanges = &p;
+    vkCheck(vkCreatePipelineLayout(device, &pl, nullptr, &pipelineLayout),
+            "vkCreatePipelineLayout failed");
+
+    VkComputePipelineCreateInfo cp{};
+    cp.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    VkPipelineShaderStageCreateInfo st{};
+    st.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    st.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    st.module = computeShaderModule;
+    st.pName = "main";
+    cp.stage = st;
+    cp.layout = pipelineLayout;
+    vkCheck(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cp, nullptr,
+                                     &pipeline),
+            "vkCreateComputePipelines failed");
+  }
+
+  void createDescriptorPoolAndSet() {
+    VkDescriptorPoolSize ps{};
+    ps.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    ps.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pci{};
+    pci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pci.poolSizeCount = 1;
+    pci.pPoolSizes = &ps;
+    pci.maxSets = 1;
+    vkCheck(vkCreateDescriptorPool(device, &pci, nullptr, &descriptorPool),
+            "vkCreateDescriptorPool failed");
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = descriptorPool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &descriptorSetLayout;
+    vkCheck(vkAllocateDescriptorSets(device, &ai, &descriptorSet),
+            "vkAllocateDescriptorSets failed");
+
+    VkDescriptorBufferInfo bi{};
+    bi.buffer = storageBuffer;
+    bi.offset = 0;
+    bi.range = bufferBytes;
+
+    VkWriteDescriptorSet w{};
+    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w.dstSet = descriptorSet;
+    w.dstBinding = 0;
+    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w.descriptorCount = 1;
+    w.pBufferInfo = &bi;
+    vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+  }
+
+  void createCommandPoolAndBuffer() {
+    VkCommandPoolCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    ci.queueFamilyIndex = computeQueueFamily;
+    ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    vkCheck(vkCreateCommandPool(device, &ci, nullptr, &commandPool),
+            "vkCreateCommandPool failed");
+
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = commandPool;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    vkCheck(vkAllocateCommandBuffers(device, &ai, &commandBuffer),
+            "vkAllocateCommandBuffers failed");
+
+    VkFenceCreateInfo fi{};
+    fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    vkCheck(vkCreateFence(device, &fi, nullptr, &fence),
+            "vkCreateFence failed");
+  }
+
+  void recordAndSubmit(int srcIndex, int dstIndex) {
+    vkCheck(vkResetFences(device, 1, &fence), "vkResetFences failed");
+    vkCheck(vkResetCommandBuffer(commandBuffer, 0),
+            "vkResetCommandBuffer failed");
+
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    vkCheck(vkBeginCommandBuffer(commandBuffer, &bi),
+            "vkBeginCommandBuffer failed");
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+    PushConsts pc{width, height, srcIndex, dstIndex, NUM_BUFFERS};
+    vkCmdPushConstants(commandBuffer, pipelineLayout,
+                       VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConsts), &pc);
+
+    uint32_t gx = (width + 15) / 16;
+    uint32_t gy = (height + 15) / 16;
+    uint32_t gz = NUM_BUFFERS;
+    vkCmdDispatch(commandBuffer, gx, gy, gz);
+
+    vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer failed");
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &commandBuffer;
+    vkCheck(vkQueueSubmit(computeQueue, 1, &si, fence), "vkQueueSubmit failed");
+  }
+
+  void waitForGPU() {
+    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_C(1'000'000'000));
+  }
+
+  void addSand(int bufferIndex, int srcHalf, int px, int py, int radius) {
+    int x = px / PIXEL_SIZE;
+    int y = py / PIXEL_SIZE;
+    uint32_t *u32 = reinterpret_cast<uint32_t *>(mappedPtr);
+    size_t stride = static_cast<size_t>(width) * static_cast<size_t>(height);
+    size_t halfOff = (srcHalf == 0 ? 0 : (NUM_BUFFERS * stride));
+    size_t base = halfOff + static_cast<size_t>(bufferIndex) * stride;
+    for (int dy = -radius; dy <= radius; ++dy) {
+      for (int dx = -radius; dx <= radius; ++dx) {
+        int nx = x + dx;
+        int ny = y + dy;
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          if (dx * dx + dy * dy <= radius * radius) {
+            u32[base + static_cast<size_t>(ny) * static_cast<size_t>(width) +
+                static_cast<size_t>(nx)] = 1u;
+          }
+        }
+      }
+    }
+  }
+
+  void randomizeAll(float density = 0.3f) {
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    uint32_t *u32 = reinterpret_cast<uint32_t *>(mappedPtr);
+    size_t stride = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (int half = 0; half < 2; ++half) {
+      size_t halfOff = (half == 0 ? 0 : (NUM_BUFFERS * stride));
+      for (int b = 0; b < NUM_BUFFERS; ++b) {
+        size_t base = halfOff + static_cast<size_t>(b) * stride;
+        for (int y = 0; y < height; ++y) {
+          for (int x = 0; x < width; ++x) {
+            u32[base + static_cast<size_t>(y) * static_cast<size_t>(width) +
+                static_cast<size_t>(x)] = (dist(rng) < density) ? 1u : 0u;
+          }
+        }
+      }
+    }
+  }
+
+  void copyAll(int srcHalf, int dstHalf) {
+    uint32_t *u32 = reinterpret_cast<uint32_t *>(mappedPtr);
+    size_t stride = static_cast<size_t>(width) * static_cast<size_t>(height);
+    size_t bytes = stride * sizeof(uint32_t);
+    size_t srcOff = (srcHalf == 0 ? 0 : (NUM_BUFFERS * stride));
+    size_t dstOff = (dstHalf == 0 ? 0 : (NUM_BUFFERS * stride));
+    for (int b = 0; b < NUM_BUFFERS; ++b) {
+      std::memcpy(u32 + dstOff + static_cast<size_t>(b) * stride,
+                  u32 + srcOff + static_cast<size_t>(b) * stride, bytes);
+    }
+  }
+
+  uint32_t readCellCPU(int half, int bufferIndex, int x, int y) const {
+    if (x < 0 || x >= width || y < 0 || y >= height) {
+      return 0u;
+    }
+    const uint32_t *u32 = reinterpret_cast<const uint32_t *>(mappedPtr);
+    size_t stride = static_cast<size_t>(width) * static_cast<size_t>(height);
+    size_t halfOff = (half == 0 ? 0 : (NUM_BUFFERS * stride));
+    size_t base = halfOff + static_cast<size_t>(bufferIndex) * stride;
+    return u32[base + static_cast<size_t>(y) * static_cast<size_t>(width) +
+               static_cast<size_t>(x)];
+  }
+
+  void render(int bufferIndex, int half) {
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        uint32_t v = readCellCPU(half, bufferIndex, x, y);
+        uint32_t color = v ? 0xFFFFFF00u : 0xFF000000u;
+        for (int dy = 0; dy < PIXEL_SIZE; ++dy) {
+          for (int dx = 0; dx < PIXEL_SIZE; ++dx) {
+            int rx = x * PIXEL_SIZE + dx;
+            int ry = y * PIXEL_SIZE + dy;
+            pixelBuffer[static_cast<size_t>(ry) *
+                            static_cast<size_t>(renderWidth) +
+                        static_cast<size_t>(rx)] = color;
+          }
+        }
+      }
+    }
+    SDL_UpdateTexture(texture, nullptr, pixelBuffer.data(),
+                      renderWidth * sizeof(uint32_t));
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+    SDL_RenderPresent(renderer);
+  }
 };
 
-int main(){ try{ VulkanSandSimMB sim(400,300); sim.run(); } catch(const std::exception& ex){ std::cerr<<"Error: "<<ex.what()<<std::endl; return 1; } return 0; }
-
-
+int main() {
+  try {
+    VulkanSandSimMB sim(400, 300);
+    sim.run();
+  } catch (const std::exception &ex) {
+    std::cerr << "Error: " << ex.what() << std::endl;
+    return 1;
+  }
+  return 0;
+}
