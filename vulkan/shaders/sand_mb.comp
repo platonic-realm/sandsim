@@ -1,0 +1,66 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Grid {
+    uint cells[];
+};
+
+layout(push_constant) uniform PushConsts {
+    int width;
+    int height;
+    int srcIndex;    // 0 or 1
+    int dstIndex;    // 0 or 1
+    int numBuffers;  // number of buffers simulated in parallel
+} pc;
+
+int idx2D(int x, int y) { return y * pc.width + x; }
+int stride() { return pc.width * pc.height; }
+bool inBounds(int x, int y) { return x >= 0 && x < pc.width && y >= 0 && y < pc.height; }
+
+uint readCell(int b, int x, int y, int halfIndex) {
+    if (!inBounds(x, y) || b < 0 || b >= pc.numBuffers) { return 1u; }
+    int halfOffset = (halfIndex == 0 ? 0 : (pc.numBuffers * stride()));
+    int base = halfOffset + b * stride();
+    return cells[base + idx2D(x, y)];
+}
+
+bool tryClaimDst(int b, int x, int y) {
+    if (!inBounds(x, y) || b < 0 || b >= pc.numBuffers) return false;
+    int halfOffset = (pc.dstIndex == 0 ? 0 : (pc.numBuffers * stride()));
+    int base = halfOffset + b * stride();
+    uint prev = atomicCompSwap(cells[base + idx2D(x, y)], 0u, 1u);
+    return (prev == 0u);
+}
+
+void writeDst(int b, int x, int y, uint value) {
+    if (!inBounds(x, y) || b < 0 || b >= pc.numBuffers) return;
+    int halfOffset = (pc.dstIndex == 0 ? 0 : (pc.numBuffers * stride()));
+    int base = halfOffset + b * stride();
+    cells[base + idx2D(x, y)] = value;
+}
+
+void main() {
+    int x = int(gl_GlobalInvocationID.x);
+    int y = int(gl_GlobalInvocationID.y);
+    int b = int(gl_GlobalInvocationID.z);
+    if (x >= pc.width || y >= pc.height || b < 0 || b >= pc.numBuffers) { return; }
+
+    uint srcC = readCell(b, x, y, pc.srcIndex);
+    if (srcC == 1u) {
+        if (readCell(b, x, y + 1, pc.srcIndex) == 0u) {
+            if (tryClaimDst(b, x, y + 1)) { writeDst(b, x, y, 0u); return; }
+        }
+        bool preferLeft = (((x + y + pc.srcIndex) & 1) == 0);
+        int dx1 = preferLeft ? -1 : 1;
+        int dx2 = -dx1;
+        if (readCell(b, x + dx1, y + 1, pc.srcIndex) == 0u) {
+            if (tryClaimDst(b, x + dx1, y + 1)) { writeDst(b, x, y, 0u); return; }
+        }
+        if (readCell(b, x + dx2, y + 1, pc.srcIndex) == 0u) {
+            if (tryClaimDst(b, x + dx2, y + 1)) { writeDst(b, x, y, 0u); return; }
+        }
+    }
+}
+
+

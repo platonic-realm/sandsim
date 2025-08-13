@@ -1,0 +1,60 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Grid {
+    uint cells[];
+};
+
+layout(push_constant) uniform PushConsts {
+    int width;
+    int height;
+    int srcIndex; // 0 or 1
+    int dstIndex; // 0 or 1
+} pc;
+
+int idx(int x, int y) { return y * pc.width + x; }
+bool inBounds(int x, int y) { return x >= 0 && x < pc.width && y >= 0 && y < pc.height; }
+
+uint readCell(int x, int y, int bufferIndex) {
+    if (!inBounds(x, y)) { return 1u; }
+    int base = (bufferIndex == 0 ? 0 : (pc.width * pc.height));
+    return cells[base + idx(x, y)];
+}
+
+bool tryClaimDst(int x, int y) {
+    if (!inBounds(x, y)) return false;
+    int baseDst = (pc.dstIndex == 0 ? 0 : (pc.width * pc.height));
+    uint prev = atomicCompSwap(cells[baseDst + idx(x, y)], 0u, 1u);
+    return (prev == 0u);
+}
+
+void writeDst(int x, int y, uint value) {
+    if (!inBounds(x, y)) return;
+    int baseDst = (pc.dstIndex == 0 ? 0 : (pc.width * pc.height));
+    cells[baseDst + idx(x, y)] = value;
+}
+
+void main() {
+    int x = int(gl_GlobalInvocationID.x);
+    int y = int(gl_GlobalInvocationID.y);
+    if (x >= pc.width || y >= pc.height) { return; }
+
+    uint srcC = readCell(x, y, pc.srcIndex);
+    if (srcC == 1u) {
+        if (readCell(x, y + 1, pc.srcIndex) == 0u) {
+            if (tryClaimDst(x, y + 1)) { writeDst(x, y, 0u); return; }
+        }
+        bool preferLeft = (((x + y + pc.srcIndex) & 1) == 0);
+        int dx1 = preferLeft ? -1 : 1;
+        int dx2 = -dx1;
+        if (readCell(x + dx1, y + 1, pc.srcIndex) == 0u) {
+            if (tryClaimDst(x + dx1, y + 1)) { writeDst(x, y, 0u); return; }
+        }
+        if (readCell(x + dx2, y + 1, pc.srcIndex) == 0u) {
+            if (tryClaimDst(x + dx2, y + 1)) { writeDst(x, y, 0u); return; }
+        }
+    }
+}
+
+

@@ -22,7 +22,7 @@ Target implementations:
 - Zig
 - Mojo
 - OpenGL (GPU acceleration)
-- Vulkan (GPU acceleration)
+- [Vulkan](vulkan/README.md) (GPU acceleration)
 - CUDA (GPU acceleration)
 - HIP (GPU acceleration)
 

@@ -1,6 +1,6 @@
 # SandSim C++ Implementation
 
-This directory contains the C++ implementation of the sandsim project, including scalar, SSE, and AVX versions of the sand falling simulation, in both single-buffer and multi-buffer variants.
+This directory contains the C++ implementation of the sandsim project, including scalar, SSE, and AVX versions of the sand falling simulation, in both single-buffer and multi-buffer variants. Vulkan implementations have moved to the root-level `vulkan/` directory with their own README and build instructions.
 
 ## Versions
 
