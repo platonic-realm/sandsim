@@ -89,16 +89,19 @@ __global__ void sandStep(uint32_t* cells, int width, int height, int src, int ds
         claimDst(cells, width, height, dst, x + dx2, y + 1)) { cells[self] = 0u; return; }
 }
 
-// One step: copy cur->other on the device, run the kernel src=cur dst=other.
-static void step(uint32_t* d_cells, int width, int height, int cur) {
+// One step on `stream`: copy cur->other on the device, run the kernel
+// src=cur dst=other. Both are enqueued asynchronously so a batch of steps runs
+// back-to-back without a host round-trip; the caller synchronizes once.
+static void step(uint32_t* d_cells, int width, int height, int cur, cudaStream_t stream) {
     int other = 1 - cur;
     size_t halfElems = (size_t)width * height;
-    CUDA_CHECK(cudaMemcpy(d_cells + (size_t)other * halfElems,
-                          d_cells + (size_t)cur * halfElems,
-                          halfElems * sizeof(uint32_t), cudaMemcpyDeviceToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(d_cells + (size_t)other * halfElems,
+                               d_cells + (size_t)cur * halfElems,
+                               halfElems * sizeof(uint32_t),
+                               cudaMemcpyDeviceToDevice, stream));
     dim3 block(16, 16);
     dim3 grid((width + 15) / 16, (height + 15) / 16);
-    sandStep<<<grid, block>>>(d_cells, width, height, cur, other);
+    sandStep<<<grid, block, 0, stream>>>(d_cells, width, height, cur, other);
     CUDA_CHECK(cudaGetLastError());
 }
 
@@ -116,12 +119,15 @@ static int runBench(int steps, int width, int height) {
     CUDA_CHECK(cudaMalloc(&d_cells, host.size() * sizeof(uint32_t)));
     CUDA_CHECK(cudaMemcpy(d_cells, host.data(), host.size() * sizeof(uint32_t), cudaMemcpyHostToDevice));
 
+    cudaStream_t stream;
+    CUDA_CHECK(cudaStreamCreate(&stream));
     int cur = 0;
     CUDA_CHECK(cudaDeviceSynchronize());
     auto start = std::chrono::steady_clock::now();
-    for (int s = 0; s < steps; ++s) { step(d_cells, width, height, cur); cur = 1 - cur; }
-    CUDA_CHECK(cudaDeviceSynchronize());
+    for (int s = 0; s < steps; ++s) { step(d_cells, width, height, cur, stream); cur = 1 - cur; }
+    CUDA_CHECK(cudaStreamSynchronize(stream));
     auto end = std::chrono::steady_clock::now();
+    CUDA_CHECK(cudaStreamDestroy(stream));
 
     std::vector<uint32_t> out(halfElems);
     CUDA_CHECK(cudaMemcpy(out.data(), d_cells + (size_t)cur * halfElems,
@@ -189,7 +195,7 @@ static int runInteractive(int width, int height) {
 
         CUDA_CHECK(cudaMemcpy(d_cells + (size_t)cur * halfElems, host.data(),
                               halfElems * sizeof(uint32_t), cudaMemcpyHostToDevice));
-        step(d_cells, width, height, cur);
+        step(d_cells, width, height, cur, /*stream=*/0);
         cur = 1 - cur;
         CUDA_CHECK(cudaMemcpy(host.data(), d_cells + (size_t)cur * halfElems,
                               halfElems * sizeof(uint32_t), cudaMemcpyDeviceToHost));

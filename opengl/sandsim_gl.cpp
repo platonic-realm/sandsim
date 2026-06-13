@@ -186,9 +186,17 @@ static GLuint makeGridBuffer(int width, int height) {
     return ssbo;
 }
 
+// Compute-shader uniform locations, queried once (never inside the step loop).
+struct ComputeLoc { GLint width, height, src, dst; };
+static ComputeLoc computeLoc(GLuint p) {
+    return {glGetUniformLocation(p, "uWidth"), glGetUniformLocation(p, "uHeight"),
+            glGetUniformLocation(p, "uSrc"), glGetUniformLocation(p, "uDst")};
+}
+
 // One simulation step. `cur` (0/1) names the half holding current state; on
 // return the new state lives in the other half (caller flips `cur`).
-static void step(GLuint compute, GLuint ssbo, int width, int height, int cur) {
+static void step(GLuint compute, GLuint ssbo, int width, int height, int cur,
+                 const ComputeLoc& loc) {
     int other = 1 - cur;
     size_t halfBytes = (size_t)width * height * sizeof(uint32_t);
     // copy cur -> other
@@ -199,10 +207,10 @@ static void step(GLuint compute, GLuint ssbo, int width, int height, int cur) {
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
 
     glUseProgram(compute);
-    glUniform1i(glGetUniformLocation(compute, "uWidth"), width);
-    glUniform1i(glGetUniformLocation(compute, "uHeight"), height);
-    glUniform1i(glGetUniformLocation(compute, "uSrc"), cur);
-    glUniform1i(glGetUniformLocation(compute, "uDst"), other);
+    glUniform1i(loc.width, width);
+    glUniform1i(loc.height, height);
+    glUniform1i(loc.src, cur);
+    glUniform1i(loc.dst, other);
     glDispatchCompute((width + 15) / 16, (height + 15) / 16, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
 }
@@ -217,10 +225,11 @@ static int runBench(int steps, int width, int height) {
     GLuint compute = linkProgram({compileShader(GL_COMPUTE_SHADER, kComputeSrc)});
     GLuint ssbo = makeGridBuffer(width, height);
 
+    ComputeLoc loc = computeLoc(compute);
     int cur = 0;
     glFinish();
     auto start = std::chrono::steady_clock::now();
-    for (int s = 0; s < steps; ++s) { step(compute, ssbo, width, height, cur); cur = 1 - cur; }
+    for (int s = 0; s < steps; ++s) { step(compute, ssbo, width, height, cur, loc); cur = 1 - cur; }
     glFinish();
     auto end = std::chrono::steady_clock::now();
 
@@ -271,6 +280,7 @@ static int runInteractive(int width, int height) {
     GLuint vao = 0;
     glGenVertexArrays(1, &vao);
 
+    ComputeLoc loc = computeLoc(compute);
     std::vector<uint32_t> host((size_t)width * height, 0);
     downloadHalf(ssbo, width, height, 0, host); // start from the seeded half
     int cur = 0;
@@ -301,7 +311,7 @@ static int runInteractive(int width, int height) {
         }
 
         uploadHalf(ssbo, width, height, cur, host);
-        step(compute, ssbo, width, height, cur);
+        step(compute, ssbo, width, height, cur, loc);
         cur = 1 - cur;
         downloadHalf(ssbo, width, height, cur, host);
 

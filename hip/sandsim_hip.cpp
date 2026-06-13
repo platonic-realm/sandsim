@@ -86,16 +86,19 @@ __global__ void sandStep(uint32_t* cells, int width, int height, int src, int ds
         claimDst(cells, width, height, dst, x + dx2, y + 1)) { cells[self] = 0u; return; }
 }
 
-// One step: copy cur->other on the device, run the kernel src=cur dst=other.
-static void step(uint32_t* d_cells, int width, int height, int cur) {
+// One step on `stream`: copy cur->other on the device, run the kernel
+// src=cur dst=other. Both are enqueued asynchronously so a batch of steps runs
+// back-to-back without a host round-trip; the caller synchronizes once.
+static void step(uint32_t* d_cells, int width, int height, int cur, hipStream_t stream) {
     int other = 1 - cur;
     size_t halfElems = (size_t)width * height;
-    HIP_CHECK(hipMemcpy(d_cells + (size_t)other * halfElems,
-                        d_cells + (size_t)cur * halfElems,
-                        halfElems * sizeof(uint32_t), hipMemcpyDeviceToDevice));
+    HIP_CHECK(hipMemcpyAsync(d_cells + (size_t)other * halfElems,
+                             d_cells + (size_t)cur * halfElems,
+                             halfElems * sizeof(uint32_t),
+                             hipMemcpyDeviceToDevice, stream));
     dim3 block(16, 16);
     dim3 grid((width + 15) / 16, (height + 15) / 16);
-    sandStep<<<grid, block, 0, 0>>>(d_cells, width, height, cur, other);
+    sandStep<<<grid, block, 0, stream>>>(d_cells, width, height, cur, other);
     HIP_CHECK(hipGetLastError());
 }
 
@@ -113,12 +116,15 @@ static int runBench(int steps, int width, int height) {
     HIP_CHECK(hipMalloc(&d_cells, host.size() * sizeof(uint32_t)));
     HIP_CHECK(hipMemcpy(d_cells, host.data(), host.size() * sizeof(uint32_t), hipMemcpyHostToDevice));
 
+    hipStream_t stream;
+    HIP_CHECK(hipStreamCreate(&stream));
     int cur = 0;
     HIP_CHECK(hipDeviceSynchronize());
     auto start = std::chrono::steady_clock::now();
-    for (int s = 0; s < steps; ++s) { step(d_cells, width, height, cur); cur = 1 - cur; }
-    HIP_CHECK(hipDeviceSynchronize());
+    for (int s = 0; s < steps; ++s) { step(d_cells, width, height, cur, stream); cur = 1 - cur; }
+    HIP_CHECK(hipStreamSynchronize(stream));
     auto end = std::chrono::steady_clock::now();
+    HIP_CHECK(hipStreamDestroy(stream));
 
     std::vector<uint32_t> out(halfElems);
     HIP_CHECK(hipMemcpy(out.data(), d_cells + (size_t)cur * halfElems,
@@ -187,7 +193,7 @@ static int runInteractive(int width, int height) {
         // Upload edits to the current half, simulate one step, read result back.
         HIP_CHECK(hipMemcpy(d_cells + (size_t)cur * halfElems, host.data(),
                             halfElems * sizeof(uint32_t), hipMemcpyHostToDevice));
-        step(d_cells, width, height, cur);
+        step(d_cells, width, height, cur, /*stream=*/0);
         cur = 1 - cur;
         HIP_CHECK(hipMemcpy(host.data(), d_cells + (size_t)cur * halfElems,
                             halfElems * sizeof(uint32_t), hipMemcpyDeviceToHost));
