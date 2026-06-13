@@ -41,3 +41,11 @@ The crate has a second binary, `sandsim_materials` (`src/materials.rs`), with th
 Noita-style multi-material engine (wall, sand, water, gas). `cargo build --release`
 builds it alongside `sandsim`; run `./target/release/sandsim_materials`. Number
 keys pick a material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
+
+
+## Streaming world variant
+
+The chunked, disk-streamed "big world" (Noita-style: only a few live boxes around
+a camera resident, the rest saved to disk) is in `src/world.rs (binary sandsim_world)`. Build it with `make world`
+from the repo root and cross-check all languages with `make bench-world`. See
+[WORLD.md](../WORLD.md).

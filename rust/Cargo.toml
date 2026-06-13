@@ -13,6 +13,10 @@ path = "src/main.rs"
 name = "sandsim_materials"
 path = "src/materials.rs"
 
+[[bin]]
+name = "sandsim_world"
+path = "src/world.rs"
+
 [profile.release]
 opt-level = 3
 lto = true
