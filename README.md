@@ -41,10 +41,12 @@ there are reactions, all order-independent and bit-identical on CPU and GPU:
   of it bores through a structure and then runs out.
 - `GLASS` is **made by melting `SAND` in `LAVA`** — drop sand into a lava pool and
   it sets into an inert, fireproof, acid-proof solid you can build with.
-- `ICE` is a solid that **melts back to `WATER`** wherever it touches `FIRE` or
-  `LAVA` (frame-hashed, so it thaws over a few frames) — the inverse of glassmaking.
-  Drop an ice block on lava and it melts, and that meltwater then quenches the lava
-  to stone: a little chain reaction.
+- `ICE` is a two-way **phase** solid: it **melts back to `WATER`** wherever it
+  touches `FIRE` or `LAVA`, and it also **freezes the `WATER` it touches** into
+  more ice — a slow cold front that creeps across a still pool. Both are
+  frame-hashed, and because melting is faster than freezing, heat and cold settle
+  into an equilibrium: a pond ices over, but a torch held to it melts a hole that
+  the meltwater fills, and ice dropped on lava melts and quenches it to stone.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava freezes to
   stone (`WALL`). The `STEAM` then rises and **condenses back to `WATER`**, a

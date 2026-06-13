@@ -63,9 +63,12 @@ GPU and produce a **bit-identical** world.
     the first rule that *creates* material rather than moving or transforming it.
   - **glassmaking** — `SAND` touching `LAVA` sets into `GLASS`, an inert solid
     (another mark/apply snapshot pair), so sand poured into a lava pool fuses.
-  - **melting** — `ICE` touching `FIRE`/`LAVA` thaws to `WATER` (frame-hashed,
-    same snapshot shape) — the inverse of glassmaking. The meltwater then feeds the
-    existing water rules, so ice dropped on lava melts and quenches it to stone.
+  - **melting & freezing** — `ICE` is a two-way phase solid: it thaws to `WATER`
+    next to `FIRE`/`LAVA`, and freezes the `WATER` it touches into more `ICE` (both
+    frame-hashed mark/apply pairs). Freezing is slower than melting, so a pond ices
+    over as a creeping cold front while heat melts holes back into it — the two
+    reach an equilibrium. The meltwater also feeds the existing water rules, so ice
+    dropped on lava melts and then quenches the lava to stone.
   - **corrosion** — `ACID` dissolves the solids it touches (`WALL`/`SAND`/`WOOD`/
     `PLANT` → `EMPTY`) and slowly evaporates; same two-pass snapshot shape.
 

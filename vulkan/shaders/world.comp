@@ -144,6 +144,21 @@ void main() {
         if (moved[i] == 1u) cells[i] = 3u;
         return;
     }
+    if (pc.type == 16) {                                  // freeze: mark water (3) touching ice (14)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 3u) {
+            bool ice = cells[i-1]==14u||cells[i+1]==14u||cells[i-pc.SW]==14u||cells[i+pc.SW]==14u;
+            uint h = (uint(x)*181u + uint(y)*67u + uint(pc.frame)*103u) & 0xFFu;
+            r = (ice && h < 4u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 17) {                                  // freeze: apply -> ice (14)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 14u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

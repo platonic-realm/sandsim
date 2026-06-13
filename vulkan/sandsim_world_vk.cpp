@@ -205,7 +205,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -420,7 +420,7 @@ private:
             }
             if (hasReactive) {                      // reactions (gated): see shader pass types
                 int decay = (int)(frame + (uint32_t)f);
-                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15}) {  // + glass, ice melt
+                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17}) {  // + glass, ice melt, water freeze
                     PushConsts pc{SW, X0, X1, Y0, Y1, t, 0, 0, 0, 0, decay};
                     vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
@@ -469,7 +469,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE) hasReactive = true;
                 stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = v;
             }
     }

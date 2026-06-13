@@ -70,6 +70,11 @@ inline bool iceMelts(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 127u + (uint32_t)y * 163u + frame * 41u) & 0xFFu;
     return h < ICE_MELT;
 }
+static constexpr uint32_t ICE_FREEZE = 4;      // of 256/frame -> water touching ice creeps to ice (slow front)
+inline bool iceFreezes(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 181u + (uint32_t)y * 67u + frame * 103u) & 0xFFu;
+    return h < ICE_FREEZE;
+}
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
 // every SIMD width and the GPU). FIRE burns out to EMPTY; STEAM condenses back to
@@ -218,5 +223,24 @@ inline void meltIce(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = WATER;
+        }
+}
+
+// Freezing: WATER touching ICE slowly turns to ICE (frame-hashed, so a cold front
+// creeps through a still pool). The counterpart to meltIce -- ice spreads through
+// water but retreats wherever fire/lava thaws it, so heat and cold reach a little
+// equilibrium. Two-pass snapshot through the scratch buffer -> order-independent,
+// GPU-identical.
+inline void freezeWater(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool ice = grid[i-1]==ICE || grid[i+1]==ICE || grid[i-SW]==ICE || grid[i+SW]==ICE;
+            scratch[i] = (grid[i] == WATER && ice && iceFreezes(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = ICE;
         }
 }

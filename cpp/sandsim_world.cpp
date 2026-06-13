@@ -129,12 +129,13 @@ public:
             dissolveAcid(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
             makeGlass(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
             meltIce(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
+            freezeWater(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
         }
         ++frame;
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE) hasReactive = true;
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
                 int nx = lx + dx, ny = ly + dy;
@@ -189,7 +190,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE) hasReactive = true;
                 grid[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }

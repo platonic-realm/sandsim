@@ -226,6 +226,21 @@ void main() {
         if (moved[i] == 1u) cells[i] = 3u;
         return;
     }
+    if (uType == 16) {                                    // freeze: mark water (3) touching ice (14)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 3u) {
+            bool ice = cells[i-1]==14u||cells[i+1]==14u||cells[i-uSW]==14u||cells[i+uSW]==14u;
+            uint h = (uint(x)*181u + uint(y)*67u + uint(uFrame)*103u) & 0xFFu;
+            r = (ice && h < 4u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 17) {                                    // freeze: apply -> ice (14)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 14u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -429,7 +444,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 15; ++t) {         // + glass (sand+lava), ice melt
+            for (int t = 3; t <= 17; ++t) {         // + glass, ice melt, water freeze
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -440,7 +455,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -510,7 +525,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
