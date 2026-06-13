@@ -21,25 +21,35 @@ inline uint32_t flicker(uint32_t argb, int lx, int ly, int tick) {
     return 0xFF000000u | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
 }
 
-// Palette geometry in render-pixel coordinates (top-left origin).
-struct Palette { int x0, y0, sw, gap, n; };
+// Palette geometry in render-pixel coordinates (top-left origin). The swatches wrap
+// into a grid of `cols` columns so the whole palette always fits the window, however
+// many materials there are.
+struct Palette { int x0, y0, sw, gap, n, cols; };
 
 inline Palette palette(int renderW, int n) {
-    int sw = renderW / 22;
-    if (sw < 22) sw = 22;
-    if (sw > 52) sw = 52;
+    int sw = renderW / 15;                // aim for a comfortably clickable swatch
+    if (sw < 20) sw = 20;
+    if (sw > 44) sw = 44;
+    int gap = sw / 6 + 2;
     int m = sw / 2;                       // outer margin
-    return Palette{ m, m, sw, sw / 6 + 2, n };
+    int avail = renderW - 2 * m;          // width for the swatch grid
+    int cols = (avail + gap) / (sw + gap);
+    if (cols < 1) cols = 1;
+    if (cols > n) cols = n;
+    return Palette{ m, m, sw, gap, n, cols };
 }
 
 // Swatch index under (mx,my) in render-pixel coords, or -1 if not on the palette.
 inline int hit(const Palette& p, int mx, int my) {
-    if (my < p.y0 || my >= p.y0 + p.sw) return -1;
-    for (int i = 0; i < p.n; ++i) {
-        int x = p.x0 + i * (p.sw + p.gap);
-        if (mx >= x && mx < x + p.sw) return i;
-    }
-    return -1;
+    int relx = mx - p.x0, rely = my - p.y0;
+    if (relx < 0 || rely < 0) return -1;
+    int stride = p.sw + p.gap;
+    int col = relx / stride, row = rely / stride;
+    if (col >= p.cols) return -1;                 // in the right-hand margin
+    if (relx - col * stride >= p.sw) return -1;   // in a horizontal gap
+    if (rely - row * stride >= p.sw) return -1;   // in a vertical gap
+    int idx = row * p.cols + col;
+    return (idx >= 0 && idx < p.n) ? idx : -1;
 }
 
 inline void fillRect(uint32_t* px, int W, int H, int x, int y, int w, int h, uint32_t c) {
@@ -62,13 +72,17 @@ inline void outline(uint32_t* px, int W, int H, int x, int y, int w, int h, int 
 // gets a white highlight ring.
 inline void draw(uint32_t* px, int W, int H, const Palette& p,
                  const uint32_t* swatchColors, int selected) {
-    int panelW = p.n * (p.sw + p.gap) + p.gap;
-    fillRect(px, W, H, p.x0 - p.gap, p.y0 - p.gap, panelW, p.sw + 2 * p.gap, 0xFF1A1A1Au);
+    int stride = p.sw + p.gap;
+    int rows = (p.n + p.cols - 1) / p.cols;
+    int panelW = p.cols * stride + p.gap;
+    int panelH = rows * stride + p.gap;
+    fillRect(px, W, H, p.x0 - p.gap, p.y0 - p.gap, panelW, panelH, 0xFF1A1A1Au);
     for (int i = 0; i < p.n; ++i) {
-        int x = p.x0 + i * (p.sw + p.gap);
-        fillRect(px, W, H, x, p.y0, p.sw, p.sw, swatchColors[i] | 0xFF000000u);
-        outline(px, W, H, x, p.y0, p.sw, p.sw, 1, 0xFF101010u);
-        if (i == selected) outline(px, W, H, x - 2, p.y0 - 2, p.sw + 4, p.sw + 4, 2, 0xFFFFFFFFu);
+        int x = p.x0 + (i % p.cols) * stride;
+        int y = p.y0 + (i / p.cols) * stride;
+        fillRect(px, W, H, x, y, p.sw, p.sw, swatchColors[i] | 0xFF000000u);
+        outline(px, W, H, x, y, p.sw, p.sw, 1, 0xFF101010u);
+        if (i == selected) outline(px, W, H, x - 2, y - 2, p.sw + 4, p.sw + 4, 2, 0xFFFFFFFFu);
     }
 }
 

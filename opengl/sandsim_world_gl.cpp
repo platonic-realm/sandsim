@@ -362,8 +362,9 @@ static const char* kPresentFrag = R"GLSL(
 #version 430
 layout(std430, binding = 0) buffer Cells { uint cells[]; };
 uniform int uSW, uX0, uY0, uLW, uLH, uRW, uRH, uTick;
+uniform int uViewX, uViewY;                                // viewport scroll offset, in cells
 uniform int uWinW, uWinH;                                  // window (logical) size
-uniform int uPalX0, uPalY0, uPalSW, uPalGap, uPalN, uPalSel;
+uniform int uPalX0, uPalY0, uPalSW, uPalGap, uPalN, uPalSel, uPalCols;
 out vec4 frag;
 vec3 matColor(uint m) {
     if (m == 1u) return vec3(0.502, 0.502, 0.502);
@@ -401,28 +402,31 @@ void main() {
     // SDL builds regardless of HiDPI framebuffer scaling.
     int wx = px * uWinW / uRW;
     int wy = py * uWinH / uRH;
+    int stride = uPalSW + uPalGap;
+    int rows = (uPalN + uPalCols - 1) / uPalCols;
     int panelX = uPalX0 - uPalGap, panelY = uPalY0 - uPalGap;
-    int panelW = uPalN * (uPalSW + uPalGap) + uPalGap, panelH = uPalSW + 2 * uPalGap;
+    int panelW = uPalCols * stride + uPalGap, panelH = rows * stride + uPalGap;
     if (wx >= panelX && wx < panelX + panelW && wy >= panelY && wy < panelY + panelH) {
         vec3 hud = vec3(0.102);
-        int ix = wx - uPalX0, rowy = wy - uPalY0;
-        if (rowy >= 0 && rowy < uPalSW && ix >= 0) {
-            int slot = ix / (uPalSW + uPalGap);
-            int inSlot = ix - slot * (uPalSW + uPalGap);
-            if (slot < uPalN && inSlot < uPalSW) hud = matColor(uint(slot));
+        int ix = wx - uPalX0, iy = wy - uPalY0;
+        if (ix >= 0 && iy >= 0) {
+            int col = ix / stride, row = iy / stride;
+            int slot = row * uPalCols + col;
+            if (col < uPalCols && slot < uPalN && ix - col * stride < uPalSW && iy - row * stride < uPalSW)
+                hud = matColor(uint(slot));
         }
         if (uPalSel >= 0) {
-            int sx = uPalX0 + uPalSel * (uPalSW + uPalGap);
-            bool inO = wx >= sx-2 && wx < sx+uPalSW+2 && wy >= uPalY0-2 && wy < uPalY0+uPalSW+2;
-            bool inI = wx >= sx && wx < sx+uPalSW && wy >= uPalY0 && wy < uPalY0+uPalSW;
+            int sx = uPalX0 + (uPalSel % uPalCols) * stride, sy = uPalY0 + (uPalSel / uPalCols) * stride;
+            bool inO = wx >= sx-2 && wx < sx+uPalSW+2 && wy >= sy-2 && wy < sy+uPalSW+2;
+            bool inI = wx >= sx && wx < sx+uPalSW && wy >= sy && wy < sy+uPalSW;
             if (inO && !inI) hud = vec3(1.0);
         }
         frag = vec4(hud, 1.0); return;
     }
-    int lx = px * uLW / uRW, ly = py * uLH / uRH;
-    uint m = cells[(uY0 + ly) * uSW + (uX0 + lx)] & 0xFFu;
+    int cx = uViewX + px * uLW / uRW, cy = uViewY + py * uLH / uRH;   // world cell under this pixel
+    uint m = cells[(uY0 + cy) * uSW + (uX0 + cx)] & 0xFFu;
     vec3 c = matColor(m);
-    if (m == 6u || m == 7u) c = clamp(c * flick(lx, ly, uTick), 0.0, 1.0);   // fire/lava shimmer
+    if (m == 6u || m == 7u) c = clamp(c * flick(cx, cy, uTick), 0.0, 1.0);   // fire/lava shimmer
     frag = vec4(c, 1.0);
 }
 )GLSL";
@@ -700,10 +704,11 @@ static int runBench(int steps, int wbox, int hbox) {
 
 static int runInteractive(ViewCfg cfg) {
     const int PIXEL = cfg.scale;
-    const int gw = std::max(1, (cfg.winW / PIXEL) / CHUNK);
-    const int gh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
-    const int WBOX = 2 * gw, HBOX = 2 * gh;
-    const int renderW = gw * CHUNK * PIXEL, renderH = gh * CHUNK * PIXEL;
+    const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK);   // viewport, in chunks
+    const int vh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
+    const int WBOX = 2 * vw, HBOX = 2 * vh;                   // the whole local world (2x the view each way)
+    const int LWv = vw * CHUNK, LHv = vh * CHUNK;            // viewport, in cells
+    const int renderW = LWv * PIXEL, renderH = LHv * PIXEL;
     GLFWwindow* win = initGL(true, renderW, renderH);
     if (!win) return 1;
     GLuint compute = linkProgram({compileShader(GL_COMPUTE_SHADER, kComputeSrc)});
@@ -713,10 +718,15 @@ static int runInteractive(ViewCfg cfg) {
 
     std::string dir = "/tmp/sandsim_world_gl_interactive";
     std::filesystem::remove_all(dir);
-    GpuWorld world(gw, gh, WBOX, HBOX, dir, compute);
+    // Resident window = the WHOLE local world, so all of it keeps simulating and the
+    // off-screen surroundings stay alive -- panning reveals a living world, not chunks
+    // frozen where you left them. (The disk-streamed huge world is what --bench shows.)
+    GpuWorld world(WBOX, HBOX, WBOX, HBOX, dir, compute);
     world.generateAllToDisk();
-    int camCx = 0, camCy = 0;
-    world.setWindow(camCx, camCy);
+    world.setWindow(0, 0);
+    const int worldW = world.cellsW(), worldH = world.cellsH();
+    int viewX = (worldW - LWv) / 2, viewY = (worldH - LHv) / 2;   // viewport scroll offset, in cells
+    const int PAN = CHUNK / 4;                                    // pan step per key press, in cells
     uint8_t current = SAND;
 
     // The actual framebuffer can differ from the requested window size under a
@@ -728,13 +738,14 @@ static int runInteractive(ViewCfg cfg) {
     glUniform1i(glGetUniformLocation(present, "uSW"), world.stride());
     glUniform1i(glGetUniformLocation(present, "uX0"), world.originX());
     glUniform1i(glGetUniformLocation(present, "uY0"), world.originY());
-    glUniform1i(glGetUniformLocation(present, "uLW"), world.cellsW());
-    glUniform1i(glGetUniformLocation(present, "uLH"), world.cellsH());
+    glUniform1i(glGetUniformLocation(present, "uLW"), LWv);   // viewport extent in cells
+    glUniform1i(glGetUniformLocation(present, "uLH"), LHv);
     GLint uRW = glGetUniformLocation(present, "uRW"), uRH = glGetUniformLocation(present, "uRH");
     glUniform1i(uRW, fbW); glUniform1i(uRH, fbH);
-    fprintf(stderr, "sandsim [opengl]: window %dx%d (framebuffer %dx%d), scale %d, "
-            "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
-            renderW, renderH, fbW, fbH, PIXEL, gw, gh, gw * CHUNK, gh * CHUNK, cfg.simHz);
+    GLint uViewX = glGetUniformLocation(present, "uViewX"), uViewY = glGetUniformLocation(present, "uViewY");
+    fprintf(stderr, "sandsim [opengl]: view %dx%d (framebuffer %dx%d), scale %d, "
+            "world %dx%d chunks = %dx%d cells (all simulated), %d steps/s\n",
+            renderW, renderH, fbW, fbH, PIXEL, WBOX, HBOX, worldW, worldH, cfg.simHz);
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
@@ -747,6 +758,7 @@ static int runInteractive(ViewCfg cfg) {
     glUniform1i(glGetUniformLocation(present, "uPalSW"), pal.sw);
     glUniform1i(glGetUniformLocation(present, "uPalGap"), pal.gap);
     glUniform1i(glGetUniformLocation(present, "uPalN"), pal.n);
+    glUniform1i(glGetUniformLocation(present, "uPalCols"), pal.cols);
     GLint uPalSel = glGetUniformLocation(present, "uPalSel");
     GLint uTick = glGetUniformLocation(present, "uTick");
     int tick = 0;
@@ -783,23 +795,20 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_X) == GLFW_PRESS) current = VOID;
         if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) current = MUD;
         if (glfwGetKey(win, GLFW_KEY_Z) == GLFW_PRESS) current = VIRUS;
-        static bool pL = false, pR = false, pU = false, pD = false;
-        bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
-        bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;
-        bool u = glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS;
-        bool d = glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS;
-        if (l && !pL && camCx > 0) camCx--;
-        if (r && !pR && camCx < WBOX - gw) camCx++;
-        if (u && !pU && camCy > 0) camCy--;
-        if (d && !pD && camCy < HBOX - gh) camCy++;
-        pL = l; pR = r; pU = u; pD = d;
+        // Hold an arrow to scroll the viewport over the living world (smoother than
+        // the old edge-triggered chunk step; the whole world is resident so it's free).
+        if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;
+        if (glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS) viewX += PAN;
+        if (glfwGetKey(win, GLFW_KEY_UP)    == GLFW_PRESS) viewY -= PAN;
+        if (glfwGetKey(win, GLFW_KEY_DOWN)  == GLFW_PRESS) viewY += PAN;
+        viewX = std::max(0, std::min(viewX, worldW - LWv));
+        viewY = std::max(0, std::min(viewY, worldH - LHv));
         bool lb = glfwGetKey(win, GLFW_KEY_LEFT_BRACKET) == GLFW_PRESS;
         bool rb = glfwGetKey(win, GLFW_KEY_RIGHT_BRACKET) == GLFW_PRESS;
         if (lb && !pLB && brushRadius > 0)  brushRadius--;
         if (rb && !pRB && brushRadius < 32) brushRadius++;
         pLB = lb; pRB = rb;
 
-        world.setWindow(camCx, camCy);
         bool mb = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
         double mx, my; glfwGetCursorPos(win, &mx, &my);
         if (mb && !pMb) {                                // press edge
@@ -809,7 +818,7 @@ static int runInteractive(ViewCfg cfg) {
         }
         if (!mb) painting = false;
         pMb = mb;
-        if (painting) world.paint((int)mx / PIXEL, (int)my / PIXEL, current, brushRadius);
+        if (painting) world.paint(viewX + (int)mx / PIXEL, viewY + (int)my / PIXEL, current, brushRadius);
         // Advance the simulation by however much real time elapsed, so physics
         // runs at cfg.simHz steps/s regardless of the render frame rate.
         auto nowT = std::chrono::steady_clock::now();
@@ -823,6 +832,7 @@ static int runInteractive(ViewCfg cfg) {
         if (cfbW != fbW || cfbH != fbH) { fbW = cfbW; fbH = cfbH; glUniform1i(uRW, fbW); glUniform1i(uRH, fbH); }
         glUniform1i(uPalSel, selectedIdx());
         glUniform1i(uTick, ++tick);
+        glUniform1i(uViewX, viewX); glUniform1i(uViewY, viewY);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, world.buffer());
         glViewport(0, 0, fbW, fbH);
         glBindVertexArray(vao);

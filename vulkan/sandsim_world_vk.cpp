@@ -535,17 +535,22 @@ static int runBench(int steps, int wbox, int hbox) {
 
 static int runInteractive(ViewCfg cfg) {
     const int PIXEL = cfg.scale;
-    const int gw = std::max(1, (cfg.winW / PIXEL) / CHUNK);
-    const int gh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
-    const int WBOX = 2 * gw, HBOX = 2 * gh;
-    const int LW = gw * CHUNK, LH = gh * CHUNK;
-    const int renderW = LW * PIXEL, renderH = LH * PIXEL;
+    const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK);   // viewport, in chunks
+    const int vh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
+    const int WBOX = 2 * vw, HBOX = 2 * vh;                   // the whole local world (2x the view each way)
+    const int LWv = vw * CHUNK, LHv = vh * CHUNK;            // viewport, in cells
+    const int renderW = LWv * PIXEL, renderH = LHv * PIXEL;
     std::string dir = "/tmp/sandsim_world_vk_interactive";
     std::filesystem::remove_all(dir);
-    VkWorld world(gw, gh, WBOX, HBOX, dir);
+    // Resident window = the WHOLE local world, so all of it keeps simulating and the
+    // off-screen surroundings stay alive -- panning reveals a living world, not chunks
+    // frozen where you left them. (The disk-streamed huge world is what --bench shows.)
+    VkWorld world(WBOX, HBOX, WBOX, HBOX, dir);
     world.generateAllToDisk();
-    int camCx = 0, camCy = 0;
-    world.setWindow(camCx, camCy);
+    world.setWindow(0, 0);
+    const int worldW = world.cellsW(), worldH = world.cellsH();
+    int viewX = (worldW - LWv) / 2, viewY = (worldH - LHv) / 2;   // viewport scroll offset, in cells
+    const int PAN = CHUNK / 4;                                    // pan step per key press, in cells
     uint8_t current = SAND;
 
     SDL_Init(SDL_INIT_VIDEO);
@@ -564,9 +569,9 @@ static int runInteractive(ViewCfg cfg) {
     SDL_Texture* tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
     SDL_RendererInfo ri{}; SDL_GetRendererInfo(ren, &ri);
     int outW = renderW, outH = renderH; SDL_GetRendererOutputSize(ren, &outW, &outH);
-    fprintf(stderr, "sandsim [vulkan]: window %dx%d (output %dx%d), renderer=%s, scale %d, "
-            "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
-            renderW, renderH, outW, outH, ri.name, PIXEL, gw, gh, LW, LH, cfg.simHz);
+    fprintf(stderr, "sandsim [vulkan]: view %dx%d (output %dx%d), renderer=%s, scale %d, "
+            "world %dx%d chunks = %dx%d cells (all simulated), %d steps/s\n",
+            renderW, renderH, outW, outH, ri.name, PIXEL, WBOX, HBOX, worldW, worldH, cfg.simHz);
 
     static const uint8_t kSwatch[22] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS};
     uint32_t swatchCol[22];
@@ -588,7 +593,7 @@ static int runInteractive(ViewCfg cfg) {
                 float flx, fly; SDL_RenderWindowToLogical(ren, e.button.x, e.button.y, &flx, &fly);
                 int h = ui::hit(pal, (int)flx, (int)fly);
                 if (h >= 0) current = kSwatch[h];     // clicked a palette swatch
-                else { painting = true; world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, brushRadius); }
+                else { painting = true; world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius); }
             }
             else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
             else if (e.type == SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX, &mouseY);
@@ -615,16 +620,15 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_z: current = VIRUS; break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
-                case SDLK_LEFT:  if (camCx > 0) camCx--; break;
-                case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
-                case SDLK_UP:    if (camCy > 0) camCy--; break;
-                case SDLK_DOWN:  if (camCy < HBOX - gh) camCy++; break;
+                case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
+                case SDLK_RIGHT: viewX += PAN; if (viewX > worldW - LWv) viewX = worldW - LWv; break;
+                case SDLK_UP:    viewY -= PAN; if (viewY < 0) viewY = 0; break;
+                case SDLK_DOWN:  viewY += PAN; if (viewY > worldH - LHv) viewY = worldH - LHv; break;
             }
         }
-        world.setWindow(camCx, camCy);
         if (painting) {
             float flx, fly; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &flx, &fly);
-            world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, brushRadius);
+            world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius);
         }
         // Advance the simulation by however much real time elapsed, so physics
         // runs at cfg.simHz steps/s regardless of the render frame rate.
@@ -637,11 +641,12 @@ static int runInteractive(ViewCfg cfg) {
         if (ran > 1) world.stepN(ran - 1);
         if (ran > 0) world.stepAndPresent();        // last step + readback in one submit
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
-        for (int y = 0; y < LH; ++y)
-            for (int x = 0; x < LW; ++x) {
-                uint8_t m = world.viewCell(x, y);
+        for (int y = 0; y < LHv; ++y)
+            for (int x = 0; x < LWv; ++x) {
+                int wxc = viewX + x, wyc = viewY + y;       // world cell under this viewport pixel
+                uint8_t m = world.viewCell(wxc, wyc);
                 uint32_t color = kColors[m];
-                if (m == FIRE || m == LAVA) color = ui::flicker(color, x, y, tick);
+                if (m == FIRE || m == LAVA) color = ui::flicker(color, wxc, wyc, tick);
                 for (int dy = 0; dy < PIXEL; ++dy)
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;

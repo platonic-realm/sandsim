@@ -96,9 +96,16 @@ CPU and GPU:
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
 on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus); `[` / `]` size the brush. The palette
-is the same on all three backends, and every rule — movement, the time-varying
-transforms, and the neighbour reactions — is bit-identical across CPU SIMD,
-OpenGL, and Vulkan.
+**wraps into a grid** so every material stays on-screen and clickable, and is the
+same on all three backends; every rule — movement, the time-varying transforms, and
+the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
+
+In the interactive view the **whole local world keeps simulating**, not just the
+part you can see: the arrows scroll a **viewport** over a world twice its size in
+each direction, all of which stays live, so panning reveals surroundings that have
+gone on bubbling, burning and growing while off-screen rather than chunks frozen
+where you left them. (The disk-streamed *world-larger-than-memory* is what `--bench`
+demonstrates; the interactive view trades unlimited size for a fully-alive sandbox.)
 
 The update rule is **order-independent**: each frame is a fixed sequence of
 sub-passes, and within a pass every move is between a disjoint pair of cells
@@ -120,7 +127,8 @@ make benchmark  # build all three, verify identical output, print a throughput t
 ```
 
 The interactive view renders each cell as a **virtual pixel** of `scale × scale`
-screen pixels, so the resident window is `winW/scale × winH/scale` cells. The
+screen pixels, so the viewport is `winW/scale × winH/scale` cells (the simulated
+world is twice that in each direction, and all of it runs). The
 **physics rate is decoupled from rendering** (a fixed-timestep accumulator keyed
 to real time), so the simulation runs at the same wall-clock speed on every
 backend, whatever the frame rate. All configurable the same way on all three —
