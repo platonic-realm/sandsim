@@ -21,7 +21,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
-`TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`. Movement is a density swap
+`TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`. Movement is a density swap
 — heaviest to lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`, with
 `STEAM`/`SMOKE` the lightest — so sand sinks through lava, acid sinks below water,
 oil floats on water, and gas/fire/steam/smoke rise. `ASH` falls and piles like
@@ -82,6 +82,11 @@ CPU and GPU:
   expanding wave that leaves wasteland behind. `WALL` contains it and `FIRE`/`LAVA`
   **cauterise** it — so you fight a plague with a firebreak. Dab one cell into a lush
   cavern and watch it eat the place, then collapse.
+- `SPARK` is **electricity**: drop one into `WATER` and a bright charge **arcs
+  through the whole pool** in a single pulse, flashing the water to `STEAM` (a rising
+  cloud the water cycle later rains back) and **igniting any `GAS` or `OIL`** it
+  reaches — so electrocuting a flooded gas cavern sets the whole thing off. The pulse
+  boils away its own conductor, so it sweeps once and dies rather than lingering.
 - `TNT` is an **explosive**: touch it with `FIRE` or `LAVA` and it detonates,
   bursting into a ball of `FIRE` that consumes the soft stuff around it (sand, oil,
   wood, plant, gas) and **chain-detonates neighbouring `TNT`** — so a packed block
@@ -95,7 +100,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark); `[` / `]` size the brush. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.

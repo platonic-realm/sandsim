@@ -262,6 +262,22 @@ void main() {
         if (m == 1u) cells[i] = 21u; else if (m == 2u) cells[i] = 0u;
         return;
     }
+    if (pc.type == 30) {                                  // spark: mark conduct(1)/water(2)/fizzle(3)/ignite(4)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        bool nw = cells[i-1]==3u||cells[i+1]==3u||cells[i-pc.SW]==3u||cells[i+pc.SW]==3u;
+        bool ns = cells[i-1]==22u||cells[i+1]==22u||cells[i-pc.SW]==22u||cells[i+pc.SW]==22u;
+        if (c == 22u) r = nw ? 2u : 3u;
+        else if (c == 3u) { if (ns) r = 1u; }
+        else if (c == 4u || c == 5u) { if (ns) r = 4u; }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 31) {                                  // spark: apply (1->spark 22, 2->steam 8, 3->empty, 4->fire 6)
+        int i = y * pc.SW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 22u; else if (m == 2u) cells[i] = 8u;
+        else if (m == 3u) cells[i] = 0u; else if (m == 4u) cells[i] = 6u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

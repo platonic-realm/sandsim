@@ -28,11 +28,13 @@
 // wet/dry cycle that muddies shores. VIRUS is a self-propagating infection: it
 // converts the cells it touches into more VIRUS, burns itself out to EMPTY over
 // time (so it spreads as a wave), and is cauterised by FIRE/LAVA -- WALL contains it.
+// SPARK is electricity: it arcs through WATER as a one-shot pulse and ignites the
+// GAS/OIL it passes.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
-    MATERIAL_COUNT = 22
+    SPARK = 22, MATERIAL_COUNT = 23
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -411,6 +413,37 @@ inline void spreadVirus(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = VIRUS;
             else if (scratch[i] == 2) grid[i] = EMPTY;
+        }
+}
+
+// Spark: electricity arcing through water. Every WATER cell next to a SPARK flashes
+// to SPARK; every SPARK then boils off to STEAM (or fizzles to EMPTY if it has no
+// water around it), so a bright pulse sweeps a connected pool once -- converting it
+// to a rising cloud of steam -- and dies when the water runs out. The GAS and OIL it
+// touches are ignited to FIRE. One combined two-pass snapshot (mark 1=conduct,
+// 2=boil to steam, 3=fizzle, 4=ignite; then apply), order-independent and
+// GPU-identical. Boiling (not returning to water) is what makes it terminate instead
+// of oscillating forever.
+inline void arcSpark(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            bool nWater = grid[i-1]==WATER || grid[i+1]==WATER || grid[i-SW]==WATER || grid[i+SW]==WATER;
+            bool nSpark = grid[i-1]==SPARK || grid[i+1]==SPARK || grid[i-SW]==SPARK || grid[i+SW]==SPARK;
+            if (c == SPARK)      r = nWater ? 2 : 3;
+            else if (c == WATER) { if (nSpark) r = 1; }
+            else if (c == GAS || c == OIL) { if (nSpark) r = 4; }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t v = scratch[i];
+            if (v == 1) grid[i] = SPARK;
+            else if (v == 2) grid[i] = STEAM;
+            else if (v == 3) grid[i] = EMPTY;
+            else if (v == 4) grid[i] = FIRE;
         }
 }
 

@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -99,6 +99,13 @@ GPU and produce a **bit-identical** world.
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then
     applies. Because spread outpaces decay it expands as a wave that leaves emptiness
     behind, contained by `WALL`. Paint-only, verified by seeding it into `worldgen.h`.
+  - **electricity** — `SPARK` conducts through `WATER`: one combined mark/apply pass
+    marks each cell `1` (water next to a spark → spark), `2` (a spark next to water →
+    `STEAM`, boiling off), `3` (an isolated spark → `EMPTY`) or `4` (`GAS`/`OIL` next
+    to a spark → `FIRE`). Boiling the water it passes — rather than handing it back —
+    is what makes the pulse sweep a pool once and terminate instead of oscillating
+    spark↔water forever. Paint-only, verified by a static unit test plus a walled
+    `worldgen.h` chamber where it agrees bit-for-bit and ignites ~1900 gas cells.
 
   All reaction passes are gated by a per-world flag set when a reactive material
   is present, so a world of only sand/water/rock pays nothing for them. The

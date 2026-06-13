@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, MATERIAL_COUNT = 22 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, MATERIAL_COUNT = 23 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -332,6 +332,22 @@ void main() {
         if (m == 1u) cells[i] = 21u; else if (m == 2u) cells[i] = 0u;
         return;
     }
+    if (uType == 30) {                                    // spark: mark conduct(1)/water(2)/fizzle(3)/ignite(4)
+        int i = y * uSW + x; uint c = cells[i]; uint r = 0u;
+        bool nw = cells[i-1]==3u||cells[i+1]==3u||cells[i-uSW]==3u||cells[i+uSW]==3u;
+        bool ns = cells[i-1]==22u||cells[i+1]==22u||cells[i-uSW]==22u||cells[i+uSW]==22u;
+        if (c == 22u) r = nw ? 2u : 3u;
+        else if (c == 3u) { if (ns) r = 1u; }
+        else if (c == 4u || c == 5u) { if (ns) r = 4u; }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 31) {                                    // spark: apply (1->spark 22, 2->steam 8, 3->empty, 4->fire 6)
+        int i = y * uSW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 22u; else if (m == 2u) cells[i] = 8u;
+        else if (m == 3u) cells[i] = 0u; else if (m == 4u) cells[i] = 6u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -388,6 +404,7 @@ vec3 matColor(uint m) {
     if (m == 19u) return vec3(0.235, 0.078, 0.322);
     if (m == 20u) return vec3(0.306, 0.231, 0.141);
     if (m == 21u) return vec3(0.847, 0.118, 0.608);
+    if (m == 22u) return vec3(0.980, 0.941, 0.502);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -546,7 +563,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 29; ++t) {         // + ... void, mud, virus
+            for (int t = 3; t <= 31; ++t) {         // + ... mud, virus, spark
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -557,7 +574,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -627,7 +644,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
@@ -749,8 +766,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[22] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS};
-    ui::Palette pal = ui::palette(renderW, 22);
+    static const uint8_t kSwatch[23] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK};
+    ui::Palette pal = ui::palette(renderW, 23);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -764,7 +781,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 22; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 23; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -795,6 +812,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_X) == GLFW_PRESS) current = VOID;
         if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) current = MUD;
         if (glfwGetKey(win, GLFW_KEY_Z) == GLFW_PRESS) current = VIRUS;
+        if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) current = SPARK;
         // Hold an arrow to scroll the viewport over the living world (smoother than
         // the old edge-triggered chunk step; the whole world is resident so it's free).
         if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;
