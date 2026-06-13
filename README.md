@@ -17,6 +17,10 @@ The reference for these rules is [`cpp/sandsim_scalar_sb.cpp`](cpp/sandsim_scala
 Every CPU implementation reproduces it exactly, which lets the benchmark harness
 verify that they all agree bit-for-bit (see [Benchmarking](#benchmarking)).
 
+There is also a **multi-material (Noita-style) track** that adds solids, powder,
+liquid, and gas with density-based interaction — see
+[Materials](#materials-noita-style) below and [MATERIALS.md](MATERIALS.md).
+
 ## Implementations
 
 | Implementation | Status | Notes |
@@ -85,6 +89,24 @@ Run the whole comparison with `make bench` (or `tools/bench.sh [steps] [w] [h]`)
 which builds what it can, runs every available implementation, prints a table
 sorted by throughput, and asserts that the scalar group agrees. See
 [BENCHMARKS.md](BENCHMARKS.md) for methodology and sample results.
+
+## Materials (Noita-style)
+
+Beyond the single-material sand simulation, sandsim includes a **multi-material
+engine** with solids (`WALL`), powder (`SAND`), liquid (`WATER`), and `GAS`.
+Movement is a swap, so materials are conserved, and density decides interaction:
+sand sinks through water, water sinks through gas, gas rises through air — giving
+a natural gas/water/sand stack.
+
+```sh
+make materials            # build the material-capable implementations
+cpp/sandsim_materials     # interactive: number keys pick a material, mouse paints
+make bench-materials      # cross-check all five language ports agree
+```
+
+It is implemented identically in C, C++, Python, Rust, and Zig, and the five
+agree on a bit-for-bit checksum and conserved per-material counts. See
+[MATERIALS.md](MATERIALS.md) for the rules, controls, and verification details.
 
 ## Getting Started
 
