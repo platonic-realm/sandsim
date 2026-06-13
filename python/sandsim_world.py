@@ -335,10 +335,14 @@ def run_interactive():
                 if event.key in keymap:
                     current = keymap[event.key]
                     pygame.display.set_caption(f"Streamed World - painting {NAMES[current]}")
-                elif event.key in (pygame.K_w, pygame.K_UP): camY -= 16
-                elif event.key in (pygame.K_s, pygame.K_DOWN): camY += 16
-                elif event.key in (pygame.K_a, pygame.K_LEFT): camX -= 16
-                elif event.key in (pygame.K_d, pygame.K_RIGHT): camX += 16
+
+        # Arrow keys or WASD pan the camera while held (smooth, continuous).
+        keys = pygame.key.get_pressed()
+        pan = 6
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: camX -= pan
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: camX += pan
+        if keys[pygame.K_UP] or keys[pygame.K_w]: camY -= pan
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]: camY += pan
 
         world.stream_around((camX + VIEW_W // 2) >> CHUNK_SHIFT, (camY + VIEW_H // 2) >> CHUNK_SHIFT, 3)
         if mouse_down:

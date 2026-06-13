@@ -19,6 +19,16 @@ pub const MOUSEBUTTONUP: u32 = 0x402;
 pub const KEY_C: i32 = 'c' as i32;
 pub const KEY_R: i32 = 'r' as i32;
 
+// SDL scancodes (indices into SDL_GetKeyboardState) for camera panning.
+pub const SCANCODE_A: usize = 4;
+pub const SCANCODE_D: usize = 7;
+pub const SCANCODE_S: usize = 22;
+pub const SCANCODE_W: usize = 26;
+pub const SCANCODE_RIGHT: usize = 79;
+pub const SCANCODE_LEFT: usize = 80;
+pub const SCANCODE_DOWN: usize = 81;
+pub const SCANCODE_UP: usize = 82;
+
 pub enum Window {}
 pub enum Renderer {}
 pub enum Texture {}
@@ -81,6 +91,7 @@ extern "C" {
     pub fn SDL_RenderPresent(r: *mut Renderer);
     pub fn SDL_PollEvent(e: *mut Event) -> c_int;
     pub fn SDL_GetMouseState(x: *mut c_int, y: *mut c_int) -> u32;
+    pub fn SDL_GetKeyboardState(numkeys: *mut c_int) -> *const u8;
     pub fn SDL_Delay(ms: u32);
     pub fn SDL_DestroyTexture(t: *mut Texture);
     pub fn SDL_DestroyRenderer(r: *mut Renderer);

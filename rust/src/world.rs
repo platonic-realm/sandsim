@@ -403,15 +403,20 @@ fn run_interactive() {
                         k if k == '2' as i32 => current = SAND,
                         k if k == '3' as i32 => current = WATER,
                         k if k == '4' as i32 => current = GAS,
-                        k if k == 'w' as i32 => cam_y -= 16,
-                        k if k == 's' as i32 => cam_y += 16,
-                        k if k == 'a' as i32 => cam_x -= 16,
-                        k if k == 'd' as i32 => cam_x += 16,
                         _ => {}
                     },
                     _ => {}
                 }
             }
+            // Arrow keys or WASD pan the camera while held (smooth, continuous).
+            let keys = sdl::SDL_GetKeyboardState(std::ptr::null_mut());
+            let down = |sc: usize| *keys.add(sc) != 0;
+            let pan = 6;
+            if down(sdl::SCANCODE_LEFT)  || down(sdl::SCANCODE_A) { cam_x -= pan; }
+            if down(sdl::SCANCODE_RIGHT) || down(sdl::SCANCODE_D) { cam_x += pan; }
+            if down(sdl::SCANCODE_UP)    || down(sdl::SCANCODE_W) { cam_y -= pan; }
+            if down(sdl::SCANCODE_DOWN)  || down(sdl::SCANCODE_S) { cam_y += pan; }
+
             world.stream_around((cam_x + VIEW_W / 2) >> CHUNK_SHIFT, (cam_y + VIEW_H / 2) >> CHUNK_SHIFT, 3);
             if mouse_down {
                 let (mut lx, mut ly) = (0f32, 0f32);

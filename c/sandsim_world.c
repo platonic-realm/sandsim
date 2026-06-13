@@ -352,13 +352,17 @@ static int run_interactive(void) {
                     case SDLK_2: current = SAND;  break;
                     case SDLK_3: current = WATER; break;
                     case SDLK_4: current = GAS;   break;
-                    case SDLK_w: case SDLK_UP:    camY -= 16; break;
-                    case SDLK_s: case SDLK_DOWN:  camY += 16; break;
-                    case SDLK_a: case SDLK_LEFT:  camX -= 16; break;
-                    case SDLK_d: case SDLK_RIGHT: camX += 16; break;
                 }
             }
         }
+        /* Arrow keys or WASD pan the camera while held (smooth, continuous). */
+        const Uint8 *keys = SDL_GetKeyboardState(NULL);
+        const int pan = 6;
+        if (keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A]) camX -= pan;
+        if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) camX += pan;
+        if (keys[SDL_SCANCODE_UP]    || keys[SDL_SCANCODE_W]) camY -= pan;
+        if (keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S]) camY += pan;
+
         stream_around(w, (camX + VIEW_W / 2) >> CHUNK_SHIFT, (camY + VIEW_H / 2) >> CHUNK_SHIFT, 3);
         if (mouse_down) {
             float lx, ly;

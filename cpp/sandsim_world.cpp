@@ -473,18 +473,22 @@ static int runInteractive() {
                     case SDLK_2: current = SAND;  break;
                     case SDLK_3: current = WATER; break;
                     case SDLK_4: current = GAS;   break;
-                    case SDLK_w: case SDLK_UP:    camY -= 16; break;
-                    case SDLK_s: case SDLK_DOWN:  camY += 16; break;
-                    case SDLK_a: case SDLK_LEFT:  camX -= 16; break;
-                    case SDLK_d: case SDLK_RIGHT: camX += 16; break;
                 }
-                char title[160];
-                snprintf(title, sizeof(title),
-                         "Streamed World - painting %s - camera (%d,%d) - resident chunks %d",
-                         materialName(current), camX, camY, world.residentCount());
-                SDL_SetWindowTitle(window, title);
             }
         }
+        // Arrow keys or WASD pan the camera while held (smooth, continuous).
+        const Uint8* keys = SDL_GetKeyboardState(nullptr);
+        const int pan = 6;
+        if (keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A]) camX -= pan;
+        if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) camX += pan;
+        if (keys[SDL_SCANCODE_UP]    || keys[SDL_SCANCODE_W]) camY -= pan;
+        if (keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S]) camY += pan;
+        char title[160];
+        snprintf(title, sizeof(title),
+                 "Streamed World - painting %s - camera (%d,%d) - resident chunks %d",
+                 materialName(current), camX, camY, world.residentCount());
+        SDL_SetWindowTitle(window, title);
+
         // keep chunks under the viewport (plus margin) resident
         int camCx = (camX + VIEW_W / 2) >> CHUNK_SHIFT;
         int camCy = (camY + VIEW_H / 2) >> CHUNK_SHIFT;

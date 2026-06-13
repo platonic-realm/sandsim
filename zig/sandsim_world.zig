@@ -411,15 +411,19 @@ fn runInteractive(alloc: std.mem.Allocator) !void {
                     '2' => current = SAND,
                     '3' => current = WATER,
                     '4' => current = GAS,
-                    'w' => camY -= 16,
-                    's' => camY += 16,
-                    'a' => camX -= 16,
-                    'd' => camX += 16,
                     else => {},
                 },
                 else => {},
             }
         }
+        // Arrow keys or WASD pan the camera while held (smooth, continuous).
+        const keys = c.SDL_GetKeyboardState(null);
+        const pan: i32 = 6;
+        if (keys[c.SDL_SCANCODE_LEFT] != 0 or keys[c.SDL_SCANCODE_A] != 0) camX -= pan;
+        if (keys[c.SDL_SCANCODE_RIGHT] != 0 or keys[c.SDL_SCANCODE_D] != 0) camX += pan;
+        if (keys[c.SDL_SCANCODE_UP] != 0 or keys[c.SDL_SCANCODE_W] != 0) camY -= pan;
+        if (keys[c.SDL_SCANCODE_DOWN] != 0 or keys[c.SDL_SCANCODE_S] != 0) camY += pan;
+
         try world.streamAround((camX + @divTrunc(VIEW_W, 2)) >> CHUNK_SHIFT, (camY + @divTrunc(VIEW_H, 2)) >> CHUNK_SHIFT, 3);
         if (mouse_down) {
             var lx: f32 = 0;
