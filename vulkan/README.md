@@ -7,12 +7,13 @@ OpenGL builds.
 Each frame is the same 16 disjoint sub-passes as [`cpp/simd_core.h`](../cpp/simd_core.h),
 one dispatch each (with a pipeline barrier between); a thread is the **source**
 of a move based purely on its `(x,y)` coordinates, so the in-place update is
-race-free and reproduces the CPU result exactly. The live `4×4`-chunk window is a
-**host-visible (mapped) storage buffer**, so the CPU streams chunks to/from disk
-directly into it — the chunk↔disk logic is identical to the C++ build, no staging
-copies. Consecutive frames between camera moves are recorded into one command
-buffer and submitted together (one fence wait), so huge worlds stream while the
-simulation runs on the GPU.
+race-free and reproduces the CPU result exactly. The live `4×4`-chunk window
+lives in a **device-local** storage buffer (fast VRAM, where the compute runs); a
+**host-visible staging buffer** is what the CPU streams chunks to/from disk into,
+copied to/from the device only at camera moves (and seed/summary). Consecutive
+frames between camera moves are recorded into one command buffer and submitted
+together (one fence wait), so huge worlds stream while the simulation runs on the
+GPU.
 
 ## Requirements
 
@@ -39,9 +40,11 @@ The SPIR-V is located next to the executable, so the binary runs from anywhere
 
 ## Notes
 
-The mapped buffer is `HOST_VISIBLE | HOST_COHERENT`, which is the simplest way to
-let the CPU stream straight into the simulated grid; on a discrete GPU that
-trades some compute bandwidth (cells are accessed over PCIe) for streaming
-simplicity. The `RESULT` checksum still matches the C++ and OpenGL builds
+Cells/moved are `DEVICE_LOCAL` (VRAM) so the compute hits VRAM, not system RAM
+over PCIe; the host-visible staging buffer is touched only when streaming. Note
+that the per-frame cost here is dominated by the 16 ordered passes (a pipeline
+barrier between each), not memory bandwidth — so on a GPU with resizable BAR the
+placement matters little, but on one without it the device-local buffer is the
+right call. The `RESULT` checksum still matches the C++ and OpenGL builds
 bit-for-bit — see [`../tools/benchmark.sh`](../tools/benchmark.sh) and
 [WORLD.md](../WORLD.md).

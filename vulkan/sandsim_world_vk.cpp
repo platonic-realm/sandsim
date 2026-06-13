@@ -103,7 +103,8 @@ public:
         createPipeline();
         createDescriptor();
         createCommands();
-        for (size_t i = 0; i < (size_t)SW * SH; ++i) cells()[i] = WALL;   // border stays WALL
+        for (size_t i = 0; i < (size_t)SW * SH; ++i) stagingPtr[i] = WALL;  // border stays WALL
+        uploadCells();   // seed the device-local grid (including its WALL border)
     }
     ~VkWorld() {
         vkDeviceWaitIdle(device);
@@ -114,13 +115,12 @@ public:
         vkDestroyPipelineLayout(device, pipeLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, descLayout, nullptr);
         vkDestroyShaderModule(device, shaderMod, nullptr);
-        vkDestroyBuffer(device, cellsBuf, nullptr); vkFreeMemory(device, cellsMem, nullptr);
-        vkDestroyBuffer(device, movedBuf, nullptr); vkFreeMemory(device, movedMem, nullptr);
+        vkDestroyBuffer(device, cellsBuf, nullptr);   vkFreeMemory(device, cellsMem, nullptr);
+        vkDestroyBuffer(device, movedBuf, nullptr);   vkFreeMemory(device, movedMem, nullptr);
+        vkDestroyBuffer(device, stagingBuf, nullptr); vkFreeMemory(device, stagingMem, nullptr);
         vkDestroyDevice(device, nullptr);
         vkDestroyInstance(instance, nullptr);
     }
-
-    uint32_t* cells() { return cellsPtr; }   // mapped live padded grid (== the CPU "grid")
 
     void generateAllToDisk() {
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
@@ -130,6 +130,7 @@ public:
 
     void setWindow(int camCx, int camCy) {
         if (windowValid && camCx == winCx && camCy == winCy) return;
+        syncDown();                                // pull the GPU's latest into staging
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         if (windowValid)
             for (int gy = 0; gy < GH; ++gy)
@@ -141,6 +142,7 @@ public:
             }
         winCx = camCx; winCy = camCy; windowValid = true;
         residentMax = GW * GH;
+        syncUp();                                  // push the new window to the GPU
     }
 
     void step() { stepN(1); }
@@ -153,27 +155,29 @@ public:
         const int kBatch = 128;
         while (n > 0) {
             int b = (n < kBatch) ? n : kBatch;
-            recordSteps(b);
-            vkCheck(vkResetFences(device, 1, &fence), "vkResetFences");
-            VkSubmitInfo si{}; si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            si.commandBufferCount = 1; si.pCommandBuffers = &cmd;
-            vkCheck(vkQueueSubmit(queue, 1, &si, fence), "vkQueueSubmit");
-            vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+            beginCmd(); recordFrames(b); endSubmitWait();
             n -= b;
         }
+        gpuAhead = true;                           // device grid is now ahead of staging
     }
 
+    // Make the live window available to the host (for rendering after a step).
+    void present() { syncDown(); }
+
     void paint(int lx, int ly, uint8_t material, int radius) {
+        syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
                 int nx = lx + dx, ny = ly + dy;
                 if (nx >= 0 && nx < LW && ny >= 0 && ny < LH && dx * dx + dy * dy <= radius * radius)
-                    cellsPtr[(size_t)(ny + Y0) * SW + (nx + X0)] = material;
+                    stagingPtr[(size_t)(ny + Y0) * SW + (nx + X0)] = material;
             }
+        syncUp();
     }
-    uint8_t viewCell(int lx, int ly) const { return (uint8_t)(cellsPtr[(size_t)(ly + Y0) * SW + (lx + X0)] & 0xFFu); }
+    uint8_t viewCell(int lx, int ly) const { return (uint8_t)(stagingPtr[(size_t)(ly + Y0) * SW + (lx + X0)] & 0xFFu); }
 
     void summary(uint64_t& checksum, uint64_t counts[MATERIAL_COUNT]) {
+        syncDown();
         for (int i = 0; i < MATERIAL_COUNT; ++i) counts[i] = 0;
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         uint64_t c = 14695981039346656037ull;
@@ -205,9 +209,10 @@ private:
     VkDevice device = VK_NULL_HANDLE;
     uint32_t qFamily = 0;
     VkQueue queue = VK_NULL_HANDLE;
-    VkBuffer cellsBuf = VK_NULL_HANDLE, movedBuf = VK_NULL_HANDLE;
-    VkDeviceMemory cellsMem = VK_NULL_HANDLE, movedMem = VK_NULL_HANDLE;
-    uint32_t* cellsPtr = nullptr;
+    VkBuffer cellsBuf = VK_NULL_HANDLE, movedBuf = VK_NULL_HANDLE, stagingBuf = VK_NULL_HANDLE;
+    VkDeviceMemory cellsMem = VK_NULL_HANDLE, movedMem = VK_NULL_HANDLE, stagingMem = VK_NULL_HANDLE;
+    uint32_t* stagingPtr = nullptr;      // mapped host staging shadow of the live grid
+    bool gpuAhead = false;               // device cellsBuf holds newer data than staging
     VkDescriptorSetLayout descLayout = VK_NULL_HANDLE;
     VkPipelineLayout pipeLayout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
@@ -246,22 +251,32 @@ private:
         vkCheck(vkCreateDevice(phys, &dci, nullptr, &device), "vkCreateDevice");
         vkGetDeviceQueue(device, qFamily, 0, &queue);
     }
-    void makeBuffer(VkDeviceSize bytes, VkBuffer& buf, VkDeviceMemory& mem, void** map) {
+    void makeBuffer(VkDeviceSize bytes, VkBufferUsageFlags usage, VkMemoryPropertyFlags props,
+                    VkBuffer& buf, VkDeviceMemory& mem, void** map) {
         VkBufferCreateInfo bci{}; bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bci.size = bytes; bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        bci.size = bytes; bci.usage = usage; bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         vkCheck(vkCreateBuffer(device, &bci, nullptr, &buf), "vkCreateBuffer");
         VkMemoryRequirements req; vkGetBufferMemoryRequirements(device, buf, &req);
         VkMemoryAllocateInfo mai{}; mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; mai.allocationSize = req.size;
-        mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, props);
         vkCheck(vkAllocateMemory(device, &mai, nullptr, &mem), "vkAllocateMemory");
         vkCheck(vkBindBufferMemory(device, buf, mem, 0), "vkBindBufferMemory");
         if (map) vkCheck(vkMapMemory(device, mem, 0, bytes, 0, map), "vkMapMemory");
     }
     void createBuffers() {
-        makeBuffer(gridBytes, cellsBuf, cellsMem, (void**)&cellsPtr);
-        makeBuffer(gridBytes, movedBuf, movedMem, nullptr);
+        // cells + moved live in fast DEVICE_LOCAL VRAM (the compute hot path);
+        // a HOST_VISIBLE staging buffer is what the CPU streams into, copied to/
+        // from the device only at camera moves / seed / summary.
+        makeBuffer(gridBytes,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, cellsBuf, cellsMem, nullptr);
+        makeBuffer(gridBytes,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, movedBuf, movedMem, nullptr);
+        makeBuffer(gridBytes,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, (void**)&stagingPtr);
     }
     void createPipeline() {
         auto code = readFile(shaderPath());
@@ -316,13 +331,28 @@ private:
         mb.srcAccessMask = src; mb.dstAccessMask = dst;
         vkCmdPipelineBarrier(cmd, ss, ds, 0, 1, &mb, 0, nullptr, 0, nullptr);
     }
-    // Record n frames into the command buffer. Each frame: clear moved, then the
-    // 16 passes (each followed by a barrier). A final barrier makes the last
-    // frame's writes visible to the host (host-coherent read of the mapped grid).
-    void recordSteps(int n) {
+    void beginCmd() {
         vkCheck(vkResetCommandBuffer(cmd, 0), "resetCmd");
         VkCommandBufferBeginInfo bg{}; bg.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         vkCheck(vkBeginCommandBuffer(cmd, &bg), "beginCmd");
+    }
+    void endSubmitWait() {
+        vkCheck(vkEndCommandBuffer(cmd), "endCmd");
+        vkCheck(vkResetFences(device, 1, &fence), "vkResetFences");
+        VkSubmitInfo si{}; si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.commandBufferCount = 1; si.pCommandBuffers = &cmd;
+        vkCheck(vkQueueSubmit(queue, 1, &si, fence), "vkQueueSubmit");
+        vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+    }
+
+    // Record n frames (operating on the DEVICE-LOCAL cells/moved buffers). Each
+    // frame: clear moved, then the 16 passes (each followed by a barrier). The
+    // leading barrier makes a prior upload copy / previous batch visible.
+    void recordFrames(int n) {
+        barrier(VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeLayout, 0, 1, &descSet, 0, nullptr);
         for (int f = 0; f < n; ++f) {
@@ -342,20 +372,42 @@ private:
                 barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
         }
-        barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
-        vkCheck(vkEndCommandBuffer(cmd), "endCmd");
     }
+
+    // device cellsBuf -> host stagingBuf (so the CPU can read/stream the window).
+    void downloadCells() {
+        beginCmd();
+        barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        VkBufferCopy region{0, 0, gridBytes};
+        vkCmdCopyBuffer(cmd, cellsBuf, stagingBuf, 1, &region);
+        barrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+        endSubmitWait();
+    }
+    // host stagingBuf -> device cellsBuf (push the seeded / streamed window).
+    void uploadCells() {
+        beginCmd();
+        barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        VkBufferCopy region{0, 0, gridBytes};
+        vkCmdCopyBuffer(cmd, stagingBuf, cellsBuf, 1, &region);
+        barrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        endSubmitWait();
+    }
+    void syncDown() { if (gpuAhead) { downloadCells(); gpuAhead = false; } }
+    void syncUp()   { uploadCells(); gpuAhead = false; }
 
     void extractChunk(int gx, int gy, std::vector<uint8_t>& out) const {
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx)
-                out[ly * CHUNK + lx] = (uint8_t)(cellsPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] & 0xFFu);
+                out[ly * CHUNK + lx] = (uint8_t)(stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] & 0xFFu);
     }
     void injectChunk(int gx, int gy, const std::vector<uint8_t>& in) {
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx)
-                cellsPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = in[ly * CHUNK + lx];
+                stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = in[ly * CHUNK + lx];
     }
     void genBox(int cx, int cy, std::vector<uint8_t>& buf) {
         for (int y = 0; y < CHUNK; ++y)
@@ -470,6 +522,7 @@ static int runInteractive() {
             world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, 4);
         }
         world.step();
+        world.present();                 // bring the GPU's latest frame back for rendering
         for (int y = 0; y < LH; ++y)
             for (int x = 0; x < LW; ++x) {
                 uint32_t color = kColors[world.viewCell(x, y)];
