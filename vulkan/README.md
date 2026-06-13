@@ -41,6 +41,13 @@ The SPIR-V is located next to the executable, so the binary runs from anywhere
 
 ## Notes
 
+The interactive view presents through SDL's **software** renderer on purpose: an
+accelerated (OpenGL) SDL renderer would fight the Vulkan compute for the same GPU
+every frame, and that context thrash shows up as severe slowdown and flicker. The
+compute + readback is ~0.5 ms/frame, so a CPU blit of one texture is plenty fast
+and fully decoupled from the compute device. Each frame's step and host readback
+are folded into a single command submission (one fence wait).
+
 Cells/moved are `DEVICE_LOCAL` (VRAM) so the compute hits VRAM, not system RAM
 over PCIe; the host-visible staging buffer is touched only when streaming. Note
 that the per-frame cost here is dominated by the 16 ordered passes (a pipeline

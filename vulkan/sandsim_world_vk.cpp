@@ -181,6 +181,21 @@ public:
     // Make the live window available to the host (for rendering after a step).
     void present() { syncDown(); }
 
+    // Interactive helper: advance one frame AND copy the result back to the host
+    // staging buffer in a single command submission (one fence wait, not two).
+    void stepAndPresent() {
+        beginCmd();
+        recordFrames(1);
+        barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        VkBufferCopy region{0, 0, gridBytes};
+        vkCmdCopyBuffer(cmd, cellsBuf, stagingBuf, 1, &region);
+        barrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+        endSubmitWait();
+        gpuAhead = false;          // staging now matches the device
+    }
+
     void paint(int lx, int ly, uint8_t material, int radius) {
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
@@ -525,7 +540,11 @@ static int runInteractive(ViewCfg cfg) {
     SDL_Window* win = SDL_CreateWindow(
         "Vulkan World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
-    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
+    // Software renderer on purpose: an accelerated (OpenGL) SDL renderer would
+    // fight the Vulkan compute for the same GPU every frame -- context thrash
+    // that shows up as severe slowdown and flicker. A CPU blit of one texture is
+    // cheap and fully decoupled from the compute device.
+    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
     SDL_RenderSetLogicalSize(ren, renderW, renderH);
     SDL_Texture* tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
@@ -551,8 +570,7 @@ static int runInteractive(ViewCfg cfg) {
             float flx, fly; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &flx, &fly);
             world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, 4);
         }
-        world.step();
-        world.present();                 // bring the GPU's latest frame back for rendering
+        world.stepAndPresent();          // one submit: advance + read back for rendering
         for (int y = 0; y < LH; ++y)
             for (int x = 0; x < LW; ++x) {
                 uint32_t color = kColors[world.viewCell(x, y)];
