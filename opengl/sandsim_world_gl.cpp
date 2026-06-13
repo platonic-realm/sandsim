@@ -33,7 +33,7 @@
 #include <fstream>
 #include <filesystem>
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, MATERIAL_COUNT = 5 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, MATERIAL_COUNT = 6 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -96,16 +96,17 @@ layout(std430, binding = 1) buffer Moved { uint moved[]; };
 uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp;
 bool canEnter(uint s, uint t) {
-    if (t == 1u) return false;                 // WALL
-    if (s == 2u) return t==0u||t==3u||t==4u;   // SAND  -> E,W,G
-    if (s == 3u) return t==0u||t==4u;          // WATER -> E,G
-    if (s == 4u) return t==0u;                 // GAS   -> E
+    if (t == 1u) return false;                       // WALL
+    if (s == 2u) return t==0u||t==3u||t==4u||t==5u;  // SAND  -> E,W,G,O
+    if (s == 3u) return t==0u||t==4u||t==5u;         // WATER -> E,G,O
+    if (s == 5u) return t==0u||t==4u;                // OIL   -> E,G  (floats on water)
+    if (s == 4u) return t==0u;                       // GAS   -> E
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==3u;        // DOWN: sand,water
-    if (uGrp == 1) return s==4u;               // GAS
-    return s==3u||s==4u;                        // HORIZ: water,gas
+    if (uGrp == 0) return s==2u||s==3u||s==5u;       // DOWN: sand,water,oil
+    if (uGrp == 1) return s==4u;                     // GAS
+    return s==3u||s==4u||s==5u;                       // HORIZ: water,oil,gas
 }
 void main() {
     int x = uX0 + int(gl_GlobalInvocationID.x);
@@ -153,6 +154,7 @@ void main() {
     else if (m == 2u) c = vec3(0.886, 0.784, 0.471);
     else if (m == 3u) c = vec3(0.267, 0.533, 1.000);
     else if (m == 4u) c = vec3(0.690, 0.769, 0.871);
+    else if (m == 5u) c = vec3(0.557, 0.267, 0.678);
     frag = vec4(c, 1.0);
 }
 )GLSL";
@@ -462,6 +464,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_2) == GLFW_PRESS) current = SAND;
         if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS) current = WATER;
         if (glfwGetKey(win, GLFW_KEY_4) == GLFW_PRESS) current = GAS;
+        if (glfwGetKey(win, GLFW_KEY_5) == GLFW_PRESS) current = OIL;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;

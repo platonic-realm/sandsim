@@ -14,16 +14,17 @@ layout(push_constant) uniform PC {
 } pc;
 
 bool canEnter(uint s, uint t) {
-    if (t == 1u) return false;                 // WALL
-    if (s == 2u) return t==0u||t==3u||t==4u;   // SAND  -> E,W,G
-    if (s == 3u) return t==0u||t==4u;          // WATER -> E,G
-    if (s == 4u) return t==0u;                 // GAS   -> E
+    if (t == 1u) return false;                       // WALL
+    if (s == 2u) return t==0u||t==3u||t==4u||t==5u;  // SAND  -> E,W,G,O
+    if (s == 3u) return t==0u||t==4u||t==5u;         // WATER -> E,G,O
+    if (s == 5u) return t==0u||t==4u;                // OIL   -> E,G  (floats on water)
+    if (s == 4u) return t==0u;                       // GAS   -> E
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==3u;      // DOWN: sand,water
-    if (pc.grp == 1) return s==4u;             // GAS
-    return s==3u||s==4u;                        // HORIZ: water,gas
+    if (pc.grp == 0) return s==2u||s==3u||s==5u;     // DOWN: sand,water,oil
+    if (pc.grp == 1) return s==4u;                   // GAS
+    return s==3u||s==4u||s==5u;                       // HORIZ: water,oil,gas
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);

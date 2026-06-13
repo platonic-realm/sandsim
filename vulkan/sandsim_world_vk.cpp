@@ -32,14 +32,14 @@
 #include <algorithm>
 #include <unistd.h>
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, MATERIAL_COUNT = 5 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, MATERIAL_COUNT = 6 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -543,7 +543,7 @@ static int runInteractive(ViewCfg cfg) {
 
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* win = SDL_CreateWindow(
-        "Vulkan World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
+        "Vulkan World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [5]Oil [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     // Software renderer on purpose: an accelerated (OpenGL) SDL renderer would
     // fight the Vulkan compute for the same GPU every frame -- context thrash
@@ -571,6 +571,7 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_0: current = EMPTY; break; case SDLK_1: current = WALL; break;
                 case SDLK_2: current = SAND;  break; case SDLK_3: current = WATER; break;
                 case SDLK_4: current = GAS;   break;
+                case SDLK_5: current = OIL;   break;
                 case SDLK_LEFT:  if (camCx > 0) camCx--; break;
                 case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
                 case SDLK_UP:    if (camCy > 0) camCy--; break;

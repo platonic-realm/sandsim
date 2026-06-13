@@ -37,7 +37,7 @@
 
 static StepFn g_step = nullptr;   // selected at startup (AVX2 or SSE)
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu,
 };
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
@@ -287,7 +287,7 @@ static int runInteractive(ViewCfg cfg) {
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
-        "Connected SIMD World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
+        "Connected SIMD World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [5]Oil [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_RenderSetLogicalSize(renderer, renderW, renderH);    // scales content to the actual output
@@ -316,6 +316,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_2: current = SAND;  break;
                     case SDLK_3: current = WATER; break;
                     case SDLK_4: current = GAS;   break;
+                    case SDLK_5: current = OIL;   break;
                     case SDLK_LEFT:  if (camCx > 0) camCx--; break;
                     case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
                     case SDLK_UP:    if (camCy > 0) camCy--; break;

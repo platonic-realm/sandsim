@@ -16,9 +16,11 @@ builds them, asserts the checksums match, and prints a throughput table.
 
 ## The simulation
 
-Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER` (liquid), `GAS`.
-Movement is a density swap (sand sinks through water, water sinks through gas,
-gas rises), so every material is conserved.
+Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER` (liquid), `GAS`,
+`OIL` (liquid). Movement is a density swap — heaviest to lightest is
+`SAND > WATER > OIL > air > GAS`, so sand sinks through water, oil floats on
+water, and gas rises — and every material is conserved. Paint with number keys
+(`1`-`5`) in the interactive view.
 
 The update rule is **order-independent**: each frame is a fixed sequence of
 sub-passes, and within a pass every move is between a disjoint pair of cells

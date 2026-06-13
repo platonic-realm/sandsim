@@ -43,6 +43,11 @@ Sources:
 The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
+- **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`. Movement is a
+  pure density swap (heavy→light: `SAND > WATER > OIL > air > GAS`), so oil floats
+  on water and gas rises; every material is conserved. New materials are additive
+  — they don't appear in the `--bench` seed, so the cross-backend reference
+  checksums are unchanged.
 - **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
   `wbox × hbox` chunks; chunks live on disk and are generated (from a
   deterministic seed) the first time they're needed.
