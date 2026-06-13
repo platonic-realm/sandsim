@@ -32,7 +32,7 @@ liquid, and gas with density-based interaction — see
 | [Rust](rust/)     | ✅ done        | `std`-only (SDL2 via FFI), headless `--bench` |
 | [Zig](zig/)       | ✅ done        | SDL2 via `@cImport`, headless `--bench` |
 | [OpenGL](opengl/) | ✅ done        | GL 4.3 compute shader, GPU; headless `--bench` |
-| [Vulkan](vulkan/) | ✅ done        | Compute, single- and multi-buffer; headless `--bench` (single-buffer) |
+| [Vulkan](vulkan/) | ✅ done        | Compute shader, GPU; headless `--bench` |
 | [HIP](hip/)       | ✅ done        | Compute kernel (ROCm / AMD, or CUDA backend); headless `--bench` |
 | [CUDA](cuda/)     | 📝 source-only | Mirrors the HIP kernel; build with `nvcc` on an NVIDIA host |
 | [Mojo](mojo/)     | 📝 source-only | Scalar rule + ASCII demo + `--bench`; build with the Mojo toolchain |

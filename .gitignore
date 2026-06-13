@@ -9,7 +9,6 @@
 /hip/sandsim_hip
 /cuda/sandsim_cuda
 /vulkan/sandsim_vulkan_compute
-/vulkan/sandsim_vulkan_compute_mb
 
 # C++ variant binaries (sources keep their .cpp extension)
 /cpp/sandsim_*
