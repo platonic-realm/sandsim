@@ -8,8 +8,11 @@ implementation per platform:
 | Platform | Status | Notes |
 |----------|--------|-------|
 | [C++ (SIMD)](cpp/) | ✅ | One binary that picks AVX2 (32-wide) or SSE4.1 (16-wide) at runtime. |
-| [OpenGL](opengl/)  | 🚧 migrating | GPU compute, disk-streamed. |
-| [Vulkan](vulkan/)  | 🚧 migrating | GPU compute, disk-streamed. |
+| [OpenGL](opengl/)  | ✅ | GPU compute (4.3), disk-streamed. Bit-identical to the C++ build. |
+| [Vulkan](vulkan/)  | ✅ | GPU compute, disk-streamed. Bit-identical to the C++ build. |
+
+All three produce the **same world from the same seed** — `make benchmark`
+builds them, asserts the checksums match, and prints a throughput table.
 
 ## The simulation
 

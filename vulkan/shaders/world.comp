@@ -1,0 +1,47 @@
+#version 450
+// sandsim - multi-material world step (one disjoint sub-pass per dispatch).
+// Identical rule to cpp/simd_core.h and the OpenGL compute shader: a thread is
+// the SOURCE of a swap based purely on its (x,y) coordinates (parity / boundary
+// pattern), never on cell content, so non-source threads touch nothing and the
+// in-place update is race-free and bit-identical to the CPU.
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std430, binding = 0) buffer Cells { uint cells[]; };
+layout(std430, binding = 1) buffer Moved { uint moved[]; };
+layout(push_constant) uniform PC {
+    int SW, X0, X1, Y0, Y1;
+    int type, dx, dy, parity, grp;   // type: 0 vert, 1 diag, 2 horiz
+} pc;
+
+bool canEnter(uint s, uint t) {
+    if (t == 1u) return false;                 // WALL
+    if (s == 2u) return t==0u||t==3u||t==4u;   // SAND  -> E,W,G
+    if (s == 3u) return t==0u||t==4u;          // WATER -> E,G
+    if (s == 4u) return t==0u;                 // GAS   -> E
+    return false;
+}
+bool eligible(uint s) {
+    if (pc.grp == 0) return s==2u||s==3u;      // DOWN: sand,water
+    if (pc.grp == 1) return s==4u;             // GAS
+    return s==3u||s==4u;                        // HORIZ: water,gas
+}
+void main() {
+    int x = pc.X0 + int(gl_GlobalInvocationID.x);
+    int y = pc.Y0 + int(gl_GlobalInvocationID.y);
+    if (x >= pc.X1 || y >= pc.Y1) return;
+    int cx = x - pc.X0;
+    bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
+                              : ((cx & 1) == pc.parity);            // diag/horiz: column parity
+    if (pc.type == 2) {                                            // horizontal boundary skip
+        if (pc.dx < 0 && pc.parity == 0 && (cx % 16) == 0)  src = false;
+        if (pc.dx > 0 && pc.parity == 1 && (cx % 16) == 15) src = false;
+    }
+    if (!src) return;
+    int si = y * pc.SW + x;
+    int ti = (y + pc.dy) * pc.SW + (x + pc.dx);
+    uint s = cells[si], t = cells[ti];
+    if (eligible(s) && canEnter(s, t) && moved[si] == 0u && moved[ti] == 0u) {
+        cells[ti] = s; cells[si] = t;
+        moved[si] = 1u; moved[ti] = 1u;
+    }
+}

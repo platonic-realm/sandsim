@@ -1,11 +1,12 @@
 # Big world: chunked streaming (Noita-style)
 
-The [materials engine](MATERIALS.md) simulates one screen-sized grid. To
+A single screen-sized grid of materials (sand, water, gas, walls) is easy. To
 simulate a world much larger than memory or the screen — the way
-[Noita](https://en.wikipedia.org/wiki/Noita_(video_game)) does — sandsim adds a
-**chunked, disk-streamed world**: only a few "live boxes" of the world are kept
+[Noita](https://en.wikipedia.org/wiki/Noita_(video_game)) does — sandsim uses a
+**chunked, disk-streamed world**: only a small "live window" of the world is kept
 in memory and simulated/rendered at a time, and the rest is saved to disk and
-reloaded on demand.
+reloaded on demand. The same engine runs on the CPU (SIMD) and the GPU
+(OpenGL/Vulkan compute), bit-for-bit identical.
 
 ## How Noita does it (research)
 
@@ -39,95 +40,89 @@ Sources:
 
 ## Our adaptation
 
-The same ideas, simplified so they can be implemented identically in several
-languages and verified deterministically.
+The same ideas, simplified so the **one** engine can run on the CPU and on the
+GPU and produce a **bit-identical** world.
 
-- **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids, plus a
-  **dirty rectangle** (the sub-box to simulate next frame) and an `awake` flag.
-  An asleep chunk (empty dirty rect) is skipped.
-- **World** = a sparse map of resident chunks keyed by chunk coordinate, plus a
-  **disk directory**. Cells are addressed in global coordinates; a read of an
-  unresident chunk returns `WALL` (so material never falls into the void).
-- **Camera / live region.** A box of chunks around the camera is kept resident
-  — the "live boxes." Each step:
-  - chunks that fall outside the live region (plus a margin) are **saved to
-    disk and evicted**;
-  - chunks that enter the live region are **loaded from disk**, or **generated**
-    from a deterministic function if they have never existed.
-- **Simulation.** Awake resident chunks are processed in a fixed order
-  (bottom chunks first; within a chunk, bottom-to-top) using the materials rule
-  via global cell access. A per-cell **moved flag** (reset each frame, spanning
-  chunk borders) stops any cell being stepped twice and makes the chunk
-  processing order safe. A move near a chunk edge **wakes** the neighbor.
-- **Sleeping.** After a frame, each chunk's next dirty rect is the bounding box
-  of cells that moved, grown by one cell. A chunk with no moves goes to sleep;
-  painting or an incoming particle wakes it again.
+- **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
+  `wbox × hbox` chunks; chunks live on disk and are generated (from a
+  deterministic seed) the first time they're needed.
+- **Live window.** A `GW × GH` box of chunks (`4 × 4` = 256×256 cells) around the
+  camera is kept resident in **one contiguous grid** with a `PAD`-cell `WALL`
+  border (the border keeps material from falling into the void and gives the
+  GPU/SIMD offset accesses a safe halo). As the camera moves, chunks that leave
+  the window are **saved to disk and evicted**; chunks that enter are **loaded
+  from disk**, or **generated** if never visited.
+- **Simulation.** The whole live window is stepped each frame by the
+  order-independent rule below. A per-cell **moved flag** (reset each frame) gives
+  one-move-per-frame priority.
 
-The dirty rect is kept at sub-chunk granularity (a bounding box within the
-chunk). True per-pixel dirty rects and multithreaded checkerboard passes are
-noted as further refinements.
+### The order-independent rule
 
-### What the SIMD variant does
-
-`cpp/sandsim_world_sse.cpp` (and its 32-wide twin `cpp/sandsim_world_avx.cpp`,
-sharing `cpp/simd_core.h`) keep the world **connected** while doing the
-parallelism entirely in SIMD — no scalar border pass. They use the **single-grid**
-SIMD technique of `cpp/sandsim_sse_sb.cpp`: the lanes are **16 adjacent cells of
-one contiguous grid**, not independent boxes, so material flows freely across the
-whole region. (The earlier multi-buffer approach packed independent boxes into
-the lanes, which can never connect — SIMD lanes don't communicate.)
-
-The trick that makes a multi-material **swap** rule conflict-free in SIMD: each
-directional move maps a source column `x` to a *distinct* target column `x+dx`,
-so a whole directional pass over a row updates 16 columns at once with no two
-lanes writing the same cell. The full rule (EMPTY/WALL/SAND/WATER/GAS) decomposes
-into per-direction SSE passes — swap with `_mm_blendv_epi8`, a per-cell `moved`
-mask for one-move-per-frame priority:
+The reason all three backends agree bit-for-bit is that the update is a **pure
+function of the previous frame**. A naive "scan and move" rule is
+order-dependent (a cell's result depends on whether its neighbor was already
+processed this frame) and so can't be reproduced by a massively parallel GPU.
+Instead each frame is a fixed sequence of **16 disjoint sub-passes**
+([`cpp/simd_core.h`](cpp/simd_core.h)), and within a pass every move is between a
+*disjoint* pair of cells, so no two moves touch the same cell:
 
 - **down / down-left / down-right** (sand, water) and **up / up-left / up-right**
-  (gas): source and target are in different rows / shifted columns, so they are
-  conflict-free and run full 16-wide.
-- **horizontal-left / -right** (water, gas): a same-row swap chains lane to lane
-  (lane *i*'s target is lane *i−1*'s source), so it is split into **even/odd
-  column phases** — even sources move into odd targets (disjoint), then odd into
-  even — which breaks the chain while staying all-SIMD.
+  (gas): vertical moves are split by **row parity**, diagonals by **column
+  parity**, so sources and targets never collide.
+- **horizontal-left / -right** (water, gas): a same-row swap chains neighbor to
+  neighbor, so it is split into **even/odd column phases** — even sources move
+  into odd targets, then odd into even.
 
-The live region is a contiguous `(GW·CHUNK)×(GH·CHUNK)` grid with a one-cell WALL
-border (padding lets the SIMD offset-loads run off the edge safely); it is a
-window into the larger disk-backed world that streams a chunk at a time as the
-camera moves. Sand piles, water finds its level across the whole connected
-region, and gas rises — all in SIMD, and verified to conserve every material.
+On the **CPU** this is SIMD: the lanes are 16 (SSE) or 32 (AVX2) **adjacent cells
+of one contiguous grid**, so material flows freely across the whole region (not
+independent boxes — SIMD lanes don't communicate). The width is chosen at
+runtime; both widths compute the same result. See
+[cpp/README.md](cpp/README.md).
+
+On the **GPU** (OpenGL / Vulkan) the same 16 passes are 16 compute dispatches.
+The key to making the in-place update race-free: a thread decides whether its
+cell is the **source** of a move purely from its `(x,y)` coordinates (the
+parity / boundary pattern), never from cell content — so non-source threads
+touch nothing and only one thread ever writes a given cell. The horizontal
+boundary skip that the SIMD cross-lane shift implies is replicated on the GPU
+(`cx % 16`), so the GPU and CPU agree exactly.
+
+### GPU streaming
+
+The GPU keeps the live window in a device buffer where the step runs, and
+streams chunks to/from disk just like the CPU so the world can be far larger
+than VRAM. OpenGL keeps a CPU shadow and syncs the buffer only on camera moves;
+Vulkan maps a host-visible buffer the CPU streams into directly. Either way the
+per-frame simulation stays on the GPU, and the same seed + same camera path
+gives the same world.
 
 ## Verifying it
 
-Each implementation has a headless `--bench` that builds a fixed, finite,
-wall-bordered world (a few chunks), then runs a deterministic camera sweep that
-forces most chunks out to disk and back while the simulation runs. It prints one
-`RESULT` line with a checksum over the **entire** world (resident + on-disk
-chunks, in chunk order) and the per-material counts.
+Every backend has a headless `--bench [steps] [wbox] [hbox]` that builds a
+fixed, finite, wall-bordered world, runs a deterministic camera sweep (forcing
+most chunks out to disk and back), and prints one `RESULT` line: a checksum over
+the **entire** world (resident + on-disk chunks, in chunk order), the
+per-material counts, and disk I/O.
 
 Two properties are checked:
 
-1. **Conservation.** Because the world is finite and wall-bordered, every
-   material count is invariant for the whole run — even as chunks are evicted to
-   disk and reloaded. This proves the streaming round-trip is lossless.
-2. **Cross-language agreement.** All ports use identical fixed-width integer
-   arithmetic, the same generation, the same camera path, and the same update
-   order, so they produce the **same checksum**. `make bench-world` runs them
-   all and asserts agreement.
+1. **Conservation.** The world is finite and wall-bordered, so every material
+   count is invariant for the whole run even as chunks are evicted and reloaded —
+   proving the streaming round-trip is lossless (`conserved=yes`).
+2. **Bit-identical backends.** C++ SIMD, OpenGL, and Vulkan use the same seed,
+   camera path, and order-independent rule, so they produce the **same
+   checksum**. `make benchmark` runs all three and fails loudly on any mismatch.
 
-Note that with streaming, chunks that are evicted while still active **freeze**
-until reloaded — the intended Noita-like behavior — so the streamed result is
-its own deterministic thing, not identical to simulating the whole world
-resident at once.
+A window of `GW × GH` chunks (`--bench N 4 4`) is fully resident — no eviction —
+which is the simplest bit-identical check; larger boxes exercise streaming.
 
 ## Running
 
 ```sh
-make world            # build the chunked-world implementations
-cpp/sandsim_world     # interactive: WASD/arrows pan the camera, number keys paint
-make bench-world      # deterministic cross-language streaming cross-check
+make                   # build cpp + opengl + vulkan
+cpp/sandsim_world      # interactive: arrows pan the camera, number keys paint
+make benchmark         # build all three, assert identical checksum, print a table
 
-# render the whole streamed world (resident + on-disk chunks) to an image:
-cpp/sandsim_world --ppm world.ppm 600 6 6 && magick world.ppm world.png
+# render a snapshot of the live window to an image:
+cpp/sandsim_world --ppm world.ppm 600 && magick world.ppm world.png
 ```

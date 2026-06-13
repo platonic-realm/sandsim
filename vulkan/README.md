@@ -1,46 +1,47 @@
-# SandSim Vulkan Implementation
+# sandsim — Vulkan (compute)
 
-GPU-accelerated falling-sand simulation using a Vulkan compute shader.
+The multi-material streaming world on the GPU via a **Vulkan compute shader**
+([`shaders/world.comp`](shaders/world.comp)), bit-identical to the C++ and
+OpenGL builds.
+
+Each frame is the same 16 disjoint sub-passes as [`cpp/simd_core.h`](../cpp/simd_core.h),
+one dispatch each (with a pipeline barrier between); a thread is the **source**
+of a move based purely on its `(x,y)` coordinates, so the in-place update is
+race-free and reproduces the CPU result exactly. The live `4×4`-chunk window is a
+**host-visible (mapped) storage buffer**, so the CPU streams chunks to/from disk
+directly into it — the chunk↔disk logic is identical to the C++ build, no staging
+copies. Consecutive frames between camera moves are recorded into one command
+buffer and submitted together (one fence wait), so huge worlds stream while the
+simulation runs on the GPU.
 
 ## Requirements
 
-- Vulkan SDK installed (for headers, loader, and `glslc`)
-- SDL2
+- The Vulkan SDK (headers, loader, and `glslc`)
+- SDL2 (interactive window)
 - A Vulkan-capable GPU and driver
 
-## Build
+## Build & run
 
-From this `vulkan` directory, `make` (compiles the shader to SPIR-V, then the
-app), or by hand:
-
-```
-glslc shaders/sand.comp -o shaders/sand.comp.spv
-g++ -std=c++17 -O2 sandsim_vulkan_compute.cpp -o sandsim_vulkan_compute -lvulkan -lSDL2
+```sh
+make                                  # glslc shaders/world.comp -> .spv, then the app
+./sandsim_world_vk                    # interactive: arrows pan, number keys paint
+./sandsim_world_vk --bench 600 6 6    # headless streaming benchmark (one RESULT line)
 ```
 
-## Run
-
-```
-./sandsim_vulkan_compute                  # interactive
-./sandsim_vulkan_compute --bench 1000 400 300   # headless benchmark
-```
+The SPIR-V is located next to the executable, so the binary runs from anywhere
+(e.g. the repo root via `tools/benchmark.sh`).
 
 ## Controls
 
-- Left mouse: add sand
-- C: clear
-- R: randomize
+- Arrows: pan the camera by a chunk
+- `1` Wall · `2` Sand · `3` Water · `4` Gas · `0` Eraser
+- Left mouse: paint
 
 ## Notes
 
-- The simulation uses a double-buffered grid in a single storage buffer
-  (src/dst halves). Each frame the host copies src→dst so particles "stay"
-  unless the shader atomically claims a destination and clears the source in dst.
-  Workgroup size is 16×16.
-- `--bench` records every step into a single command buffer (device-side copy +
-  pipeline barriers, one submit/fence), which is far faster than the naive
-  per-step fence wait the interactive loop uses.
-- A multi-buffer variant was removed: it simulated 16 independent grids at once
-  via the dispatch z-dimension, which makes sense for filling idle SIMD lanes on
-  a CPU but not on a GPU — a single grid already saturates the device, so it just
-  did ~16× the work. See `cpp/` for the (CPU) SIMD discussion.
+The mapped buffer is `HOST_VISIBLE | HOST_COHERENT`, which is the simplest way to
+let the CPU stream straight into the simulated grid; on a discrete GPU that
+trades some compute bandwidth (cells are accessed over PCIe) for streaming
+simplicity. The `RESULT` checksum still matches the C++ and OpenGL builds
+bit-for-bit — see [`../tools/benchmark.sh`](../tools/benchmark.sh) and
+[WORLD.md](../WORLD.md).

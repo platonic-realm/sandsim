@@ -1,47 +1,42 @@
-# sandsim OpenGL Implementation
+# sandsim — OpenGL (compute)
 
-A GPU falling-sand simulation using an **OpenGL 4.3 compute shader**. It follows
-the same double-buffered, atomic-claim model as the Vulkan version: one SSBO
-holds the grid twice (a src half and a dst half); each step the host copies
-src→dst on the device and the compute shader atomically claims destination cells
-(`atomicCompSwap`). Rendering is fully on the GPU — a fullscreen-triangle
-fragment shader reads the grid SSBO and colors the screen. Shaders are embedded
-in [`sandsim_gl.cpp`](sandsim_gl.cpp) as raw strings, so there are no external
-shader files to locate at runtime.
+The multi-material streaming world on the GPU via an **OpenGL 4.3 compute
+shader**, bit-identical to the C++ and Vulkan builds.
+
+Each frame is the same 16 disjoint sub-passes as [`cpp/simd_core.h`](../cpp/simd_core.h),
+one compute dispatch each, with a memory barrier between. A thread is the
+**source** of a move based purely on its `(x,y)` coordinates, so the in-place
+update is race-free and reproduces the CPU result exactly. The live `4×4`-chunk
+window lives in an SSBO where the step runs; a CPU shadow drives the identical
+chunk↔disk streaming, and the buffer is synced only when the camera moves — so
+huge worlds stream while the per-frame simulation stays on the GPU. Rendering is
+a fullscreen-triangle fragment shader that reads the grid SSBO directly (no
+readback). Shaders are embedded in
+[`sandsim_world_gl.cpp`](sandsim_world_gl.cpp) as strings.
 
 ## Requirements
 
 - A C++17 compiler
 - GLEW, GLFW, and an OpenGL 4.3-capable GPU/driver
 
-## Build
+## Build & run
 
 ```sh
-make            # g++ ... $(pkg-config --cflags --libs glew glfw3 gl)
+make
+./sandsim_world_gl                    # interactive: arrows pan, number keys paint
+./sandsim_world_gl --bench 600 6 6    # headless streaming benchmark (one RESULT line)
 ```
 
-## Run
-
-```sh
-./sandsim_gl                       # interactive window
-./sandsim_gl --bench 1000 400 300  # headless benchmark (creates a hidden context)
-```
-
-The headless `--bench` mode still needs a reachable GPU/display to create a GL
-context. GLEW resolves entry points through GLX, so the program prefers GLFW's
-X11 backend (which also works under XWayland) and tolerates the benign
-`NO_GLX_DISPLAY` notice on EGL-backed contexts.
+`--bench` creates a hidden context, so it still needs a reachable GPU. GLEW
+resolves entry points through GLX, so the program prefers GLFW's X11 backend
+(which also works under XWayland) and tolerates the benign `NO_GLX_DISPLAY`
+notice on EGL-backed contexts.
 
 ## Controls
 
-- Left mouse drag: add sand
-- `C`: clear
-- `R`: randomize (~30% density)
-- `Esc`: quit
+- Arrows: pan the camera by a chunk
+- `1` Wall · `2` Sand · `3` Water · `4` Gas · `0` Eraser
+- Left mouse: paint · `Esc`: quit
 
-## Benchmark
-
-This is part of the `gpu` rule group. Because the compute shader resolves cell
-contention by scheduling order, the reported `checksum` may vary run to run; the
-conserved `sand` count is the deterministic check. See
-[BENCHMARKS.md](../BENCHMARKS.md).
+The `RESULT` checksum matches the C++ and Vulkan builds bit-for-bit; see
+[`../tools/benchmark.sh`](../tools/benchmark.sh) and [WORLD.md](../WORLD.md).

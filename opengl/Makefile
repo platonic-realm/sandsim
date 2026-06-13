@@ -4,15 +4,15 @@ PKGS     := glew glfw3 gl
 CXXFLAGS += $(shell pkg-config --cflags $(PKGS) 2>/dev/null)
 LDLIBS   := $(shell pkg-config --libs $(PKGS) 2>/dev/null || echo -lGLEW -lglfw -lGL)
 
-sandsim_gl: sandsim_gl.cpp
-	$(CXX) $(CXXFLAGS) sandsim_gl.cpp -o sandsim_gl $(LDLIBS)
+sandsim_world_gl: sandsim_world_gl.cpp
+	$(CXX) $(CXXFLAGS) sandsim_world_gl.cpp -o sandsim_world_gl $(LDLIBS)
 
 .PHONY: run bench clean
-run: sandsim_gl
-	./sandsim_gl
+run: sandsim_world_gl
+	./sandsim_world_gl
 
-bench: sandsim_gl
-	./sandsim_gl --bench 1000 400 300
+bench: sandsim_world_gl
+	./sandsim_world_gl --bench 600 6 6
 
 clean:
-	rm -f sandsim_gl
+	rm -f sandsim_world_gl

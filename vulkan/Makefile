@@ -4,20 +4,23 @@ CXXFLAGS ?= -std=c++17 -O2
 CXXFLAGS += $(shell pkg-config --cflags sdl2 2>/dev/null)
 LDLIBS   := -lvulkan $(shell pkg-config --libs sdl2 2>/dev/null || echo -lSDL2)
 
-all: shaders/sand.comp.spv sandsim_vulkan_compute
+all: sandsim_world_vk
 
-# Compile the GLSL compute shader to SPIR-V (sand.comp -> sand.comp.spv).
-shaders/%.spv: shaders/%
+# Compile the GLSL compute shader to SPIR-V (world.comp -> world.comp.spv).
+shaders/world.comp.spv: shaders/world.comp
 	$(GLSLC) $< -o $@
 
-sandsim_vulkan_compute: sandsim_vulkan_compute.cpp shaders/sand.comp.spv
-	$(CXX) $(CXXFLAGS) sandsim_vulkan_compute.cpp -o $@ $(LDLIBS)
+sandsim_world_vk: sandsim_world_vk.cpp shaders/world.comp.spv
+	$(CXX) $(CXXFLAGS) sandsim_world_vk.cpp -o $@ $(LDLIBS)
 
-.PHONY: all shaders run clean
-shaders: shaders/sand.comp.spv
+.PHONY: all shaders run bench clean
+shaders: shaders/world.comp.spv
 
-run: sandsim_vulkan_compute
-	./sandsim_vulkan_compute
+run: sandsim_world_vk
+	./sandsim_world_vk
+
+bench: sandsim_world_vk
+	./sandsim_world_vk --bench 600 6 6
 
 clean:
-	rm -f sandsim_vulkan_compute shaders/sand.comp.spv
+	rm -f sandsim_world_vk shaders/world.comp.spv
