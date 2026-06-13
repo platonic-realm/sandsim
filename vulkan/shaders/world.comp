@@ -81,9 +81,9 @@ void main() {
         moved[i] = r;
         return;
     }
-    if (pc.type == 7) {                                   // apply: water->steam, acid->smoke, fire->empty, lava->stone
+    if (pc.type == 7) {                                   // apply: water->steam, acid->smoke, fire->empty, lava->obsidian
         int i = y * pc.SW + x;
-        if (moved[i] == 1u) { uint c = cells[i]; cells[i] = (c==3u) ? 8u : (c==11u) ? 12u : (c==6u) ? 0u : 1u; }
+        if (moved[i] == 1u) { uint c = cells[i]; cells[i] = (c==3u) ? 8u : (c==11u) ? 12u : (c==6u) ? 0u : 23u; }
         return;
     }
     if (pc.type == 8) {                                   // plant grow: mark empty next to plant+water

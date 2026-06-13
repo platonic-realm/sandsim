@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -53,7 +53,7 @@ GPU and produce a **bit-identical** world.
     `(x, y, frame)` (no neighbour reads), so the GPU computes the identical hash.
   - **ignition** (`FIRE`/`LAVA` igniting the `OIL`, `GAS` and `PLANT` it touches,
     and smouldering `WOOD`) and **things-meet-hot** (`WATER` → `STEAM`, `ACID` →
-    `SMOKE`, `FIRE` quenched, `LAVA` → stone) are neighbour-based, which is normally
+    `SMOKE`, `FIRE` quenched, `LAVA` → `OBSIDIAN`) are neighbour-based, which is normally
     order-*dependent* (CPU-sequential ≠ GPU-parallel). Each is made order-independent
     with **two snapshot passes through the `moved` scratch buffer** (free after the
     movement step): pass 1 reads the grid and marks the cells to transform, pass 2
@@ -73,7 +73,7 @@ GPU and produce a **bit-identical** world.
     frame-hashed mark/apply pairs). Freezing is slower than melting, so a pond ices
     over as a creeping cold front while heat melts holes back into it — the two
     reach an equilibrium. The meltwater also feeds the existing water rules, so ice
-    dropped on lava melts and then quenches the lava to stone.
+    dropped on lava melts and then quenches the lava to obsidian.
   - **corrosion** — `ACID` dissolves the solids it touches (`WALL`/`SAND`/`WOOD`/
     `PLANT` → `EMPTY`) and slowly evaporates; same two-pass snapshot shape.
   - **sourcing** — a `SPRING` solid wells `WATER`, and a `VOLCANO` solid wells

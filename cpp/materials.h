@@ -29,12 +29,13 @@
 // converts the cells it touches into more VIRUS, burns itself out to EMPTY over
 // time (so it spreads as a wave), and is cauterised by FIRE/LAVA -- WALL contains it.
 // SPARK is electricity: it arcs through WATER as a one-shot pulse and ignites the
-// GAS/OIL it passes.
+// GAS/OIL it passes. OBSIDIAN is the glassy black rock LAVA forges into when WATER
+// quenches it (instead of plain stone) -- an inert, fire/acid/blast-proof solid.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
-    SPARK = 22, MATERIAL_COUNT = 23
+    SPARK = 22, OBSIDIAN = 23, MATERIAL_COUNT = 24
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -201,8 +202,8 @@ inline void quench(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int 
             size_t i = (size_t)y * SW + x;
             if (!scratch[i]) continue;
             uint8_t c = grid[i];                                       // water->steam, acid->smoke,
-            grid[i] = (c == WATER) ? STEAM : (c == ACID) ? SMOKE       // fire->empty, lava->stone
-                    : (c == FIRE) ? EMPTY : WALL;
+            grid[i] = (c == WATER) ? STEAM : (c == ACID) ? SMOKE       // fire->empty, lava->obsidian
+                    : (c == FIRE) ? EMPTY : OBSIDIAN;
         }
 }
 
