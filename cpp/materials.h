@@ -14,11 +14,13 @@
 // SMOKE is the lightest gas: some of the flame that burns out becomes smoke,
 // which rises and fades away. GLASS is an inert solid -- it's made by melting
 // SAND in LAVA, and it resists fire and acid. ICE is a solid too, but it MELTS
-// back to WATER wherever it touches FIRE or LAVA -- the inverse of glassmaking.
+// back to WATER wherever it touches FIRE or LAVA, and FREEZES the WATER it touches
+// into more ICE -- a two-way phase. SPRING is an inert solid that never moves or
+// depletes but SOURCES WATER into the empty cells around it: an endless fountain.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    MATERIAL_COUNT = 15
+    SPRING = 15, MATERIAL_COUNT = 16
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -74,6 +76,11 @@ static constexpr uint32_t ICE_FREEZE = 4;      // of 256/frame -> water touching
 inline bool iceFreezes(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 181u + (uint32_t)y * 67u + frame * 103u) & 0xFFu;
     return h < ICE_FREEZE;
+}
+static constexpr uint32_t SPRING_FLOW = 20;    // of 256/frame -> empty cells by a spring well up with water
+inline bool springFlows(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 89u + (uint32_t)y * 223u + frame * 47u) & 0xFFu;
+    return h < SPRING_FLOW;
 }
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
@@ -242,5 +249,26 @@ inline void freezeWater(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = ICE;
+        }
+}
+
+// Spring (source): an EMPTY cell touching a SPRING wells up with WATER (frame-
+// hashed, so it bubbles out at a steady rate). The empty cell decides from a
+// snapshot and writes only itself -- like plant growth -- so it stays order-
+// independent and GPU-identical. The SPRING itself is a permanent solid: it never
+// moves and never depletes, so it is an endless fountain. This is the engine's
+// first rule that creates material from nothing (so it does not conserve mass --
+// only reachable when a spring is actually placed, never in the benchmark seed).
+inline void emitSpring(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool src = grid[i-1]==SPRING || grid[i+1]==SPRING || grid[i-SW]==SPRING || grid[i+SW]==SPRING;
+            scratch[i] = (grid[i] == EMPTY && src && springFlows(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = WATER;
         }
 }
