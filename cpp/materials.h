@@ -9,10 +9,11 @@
 // flashes to STEAM, which rises and condenses back to WATER -> a little water cycle.
 // WOOD is a flammable SOLID: it never moves (absent from every density group) and
 // blocks like WALL, but fire/lava set it alight (slowly). PLANT is a flammable
-// solid too, but it GROWS into empty space wherever it meets WATER.
+// solid too, but it GROWS into empty space wherever it meets WATER. ACID is a
+// heavy corrosive liquid that dissolves the solids it touches and evaporates.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
-    STEAM = 8, WOOD = 9, PLANT = 10, MATERIAL_COUNT = 11
+    STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, MATERIAL_COUNT = 12
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -40,6 +41,19 @@ inline bool plantGrows(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 113u + (uint32_t)y * 191u + frame * 71u) & 0xFFu;
     return h < PLANT_GROW;
 }
+static constexpr uint32_t ACID_EVAP = 3;       // of 256/frame -> acid slowly used up
+static constexpr uint32_t ACID_EAT  = 22;      // of 256/frame -> dissolves solids it touches
+inline bool acidEvaporates(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 211u + (uint32_t)y * 137u + frame * 59u) & 0xFFu;
+    return h < ACID_EVAP;
+}
+inline bool acidEats(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 53u + (uint32_t)y * 199u + frame * 89u) & 0xFFu;
+    return h < ACID_EAT;
+}
+inline bool acidDissolves(uint8_t m) {         // which solids acid corrodes (not air/fluids)
+    return m == WALL || m == SAND || m == WOOD || m == PLANT;
+}
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
 // every SIMD width and the GPU). FIRE burns out to EMPTY; STEAM condenses back to
@@ -52,6 +66,7 @@ inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uin
             uint8_t c = grid[i];
             if (c == FIRE && fireBurnsOut(x, y, frame)) grid[i] = EMPTY;
             else if (c == STEAM && steamCondenses(x, y, frame)) grid[i] = WATER;
+            else if (c == ACID && acidEvaporates(x, y, frame)) grid[i] = EMPTY;
         }
 }
 
@@ -128,5 +143,25 @@ inline void growPlant(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = PLANT;
+        }
+}
+
+// Acid corrosion: a dissolvable SOLID touching ACID is eaten away to EMPTY
+// (frame-hashed, so it bores through gradually). Two-pass snapshot via the
+// scratch buffer -> order-independent and GPU-identical. The interior-only sweep
+// never touches the padding border, so the WALL frame can't be eaten through.
+inline void dissolveAcid(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    auto nb = [&](size_t i, uint8_t m) {
+        return grid[i-1]==m || grid[i+1]==m || grid[i-SW]==m || grid[i+SW]==m;
+    };
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            scratch[i] = (acidDissolves(grid[i]) && nb(i, ACID) && acidEats(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = EMPTY;
         }
 }

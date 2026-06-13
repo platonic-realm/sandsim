@@ -16,19 +16,20 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u) return t==7u||t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;  // SAND  -> L,W,O,G,F,S,E
-    if (s == 7u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;         // LAVA  -> W,O,G,F,S,E
-    if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==0u;                // WATER -> O,G,F,S,E
-    if (s == 5u) return t==4u||t==6u||t==8u||t==0u;                       // OIL   -> G,F,S,E
-    if (s == 6u) return t==0u;                                           // FIRE  -> E
-    if (s == 8u) return t==0u;                                           // STEAM -> E (rises)
-    if (s == 4u) return t==0u;                                           // GAS   -> E
+    if (s == 2u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;  // SAND -> L,A,W,O,G,F,S,E
+    if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;         // LAVA -> A,W,O,G,F,S,E
+    if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;                // ACID -> W,O,G,F,S,E
+    if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==0u;                        // WATER -> O,G,F,S,E
+    if (s == 5u) return t==4u||t==6u||t==8u||t==0u;                               // OIL  -> G,F,S,E
+    if (s == 6u) return t==0u;                                                   // FIRE -> E
+    if (s == 8u) return t==0u;                                                   // STEAM -> E (rises)
+    if (s == 4u) return t==0u;                                                   // GAS  -> E
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==7u||s==3u||s==5u;              // DOWN: sand,lava,water,oil
+    if (pc.grp == 0) return s==2u||s==7u||s==11u||s==3u||s==5u;      // DOWN: sand,lava,acid,water,oil
     if (pc.grp == 1) return s==4u||s==6u||s==8u;                     // GAS/FIRE/STEAM rise
-    return s==7u||s==3u||s==5u||s==4u||s==6u||s==8u;                  // HORIZ: lava,water,oil,gas,fire,steam
+    return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u;          // HORIZ: lava,acid,water,oil,gas,fire,steam
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
@@ -42,6 +43,9 @@ void main() {
         } else if (cells[i] == 8u) {
             uint h = (uint(x) * 193u + uint(y) * 97u + uint(pc.frame) * 111u) & 0xFFu;
             if (h < 5u) cells[i] = 3u;                    // steam -> water
+        } else if (cells[i] == 11u) {
+            uint h = (uint(x) * 211u + uint(y) * 137u + uint(pc.frame) * 59u) & 0xFFu;
+            if (h < 3u) cells[i] = 0u;                    // acid evaporates
         }
         return;
     }
@@ -92,6 +96,20 @@ void main() {
     if (pc.type == 9) {                                   // plant grow: apply -> plant
         int i = y * pc.SW + x;
         if (moved[i] == 1u) cells[i] = 10u;
+        return;
+    }
+    if (pc.type == 10) {                                  // acid: mark dissolvable solid touching acid (11)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        bool solid = (c==1u||c==2u||c==9u||c==10u);
+        bool nA = cells[i-1]==11u||cells[i+1]==11u||cells[i-pc.SW]==11u||cells[i+pc.SW]==11u;
+        uint h = (uint(x)*53u + uint(y)*199u + uint(pc.frame)*89u) & 0xFFu;
+        r = (solid && nA && h < 22u) ? 1u : 0u;
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 11) {                                  // acid: apply -> dissolved (empty)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 0u;
         return;
     }
     int cx = x - pc.X0;

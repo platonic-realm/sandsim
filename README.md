@@ -17,11 +17,12 @@ builds them, asserts the checksums match, and prints a throughput table.
 ## The simulation
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
-`FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`. Movement is a density swap — heaviest to
-lightest is `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, with `STEAM` the
-lightest — so sand sinks through lava, oil floats on water, and gas/fire/steam
-rise. `WALL`, `WOOD`, and `PLANT` are solids that don't move. On top of movement
-there are reactions, all order-independent and bit-identical on CPU and GPU:
+`FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`. Movement is a density swap —
+heaviest to lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`,
+with `STEAM` the lightest — so sand sinks through lava, acid sinks below water,
+oil floats on water, and gas/fire/steam rise. `WALL`, `WOOD`, and `PLANT` are
+solids that don't move. On top of movement there are reactions, all
+order-independent and bit-identical on CPU and GPU:
 
 - `FIRE` rises like flame and **burns out over time** (a deterministic per-cell,
   frame-varying transform — the same hash on CPU and GPU).
@@ -34,6 +35,9 @@ there are reactions, all order-independent and bit-identical on CPU and GPU:
 - `PLANT` **grows**: an empty cell touching both `PLANT` and `WATER` sprouts more
   plant, so vines creep along waterlines from a seed. It burns fast like dry
   grass. (This is the engine's first material-*creating* rule.)
+- `ACID` is a heavy corrosive liquid that **dissolves** the solids it touches
+  (`WALL`, `SAND`, `WOOD`, `PLANT` → gone) and slowly **evaporates**, so a splash
+  of it bores through a structure and then runs out.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava freezes to
   stone (`WALL`). The `STEAM` then rises and **condenses back to `WATER`**, a
@@ -41,7 +45,7 @@ there are reactions, all order-independent and bit-identical on CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9` and `P` for plant); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid); `[` / `]` size the brush. The palette
 is the same on all three backends, and every rule — movement, the time-varying
 transforms, and the neighbour reactions — is bit-identical across CPU SIMD,
 OpenGL, and Vulkan.
