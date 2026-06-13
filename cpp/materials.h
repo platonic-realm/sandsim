@@ -18,11 +18,13 @@
 // into more ICE -- a two-way phase. SPRING is an inert solid that never moves or
 // depletes but SOURCES WATER into the empty cells around it: an endless fountain.
 // TNT is an explosive solid: FIRE/LAVA detonates it into a burst of FIRE that
-// blasts the soft cells around it and chain-detonates neighbouring TNT.
+// blasts the soft cells around it and chain-detonates neighbouring TNT. ASH is a
+// light-grey powder (it falls and piles like SAND) left behind as some FIRE burns
+// out -- the soot of a dying flame.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    SPRING = 15, TNT = 16, MATERIAL_COUNT = 17
+    SPRING = 15, TNT = 16, ASH = 17, MATERIAL_COUNT = 18
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -30,7 +32,8 @@ enum Material : uint8_t {
 // bit-identical on CPU SIMD and the GPU compute backends (which compute the same
 // hash). ~FIRE_DECAY/256 of the flame winks out each frame.
 static constexpr uint32_t FIRE_DECAY = 12;     // of 256 -> avg flame life ~21 frames
-static constexpr uint32_t SMOKE_FROM_FIRE = 4; // of those burn-outs, this many leave smoke
+static constexpr uint32_t SMOKE_FROM_FIRE = 4; // burn-outs with hash < this leave SMOKE
+static constexpr uint32_t ASH_FROM_FIRE = 6;   // burn-outs with hash in [SMOKE,this) leave ASH (soot)
 static constexpr uint32_t SMOKE_FADE = 16;     // of 256 -> smoke wisps last ~16 frames
 static constexpr uint32_t STEAM_CONDENSE = 5;  // of 256 -> steam lasts ~50 frames, rises first
 
@@ -96,7 +99,8 @@ inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uin
             uint8_t c = grid[i];
             if (c == FIRE) {
                 uint32_t h = fireHash(x, y, frame);
-                if (h < FIRE_DECAY) grid[i] = (h < SMOKE_FROM_FIRE) ? SMOKE : EMPTY;  // some flame -> smoke
+                if (h < FIRE_DECAY)                                       // flame -> smoke / ash / empty
+                    grid[i] = (h < SMOKE_FROM_FIRE) ? SMOKE : (h < ASH_FROM_FIRE) ? ASH : EMPTY;
             }
             else if (c == SMOKE && smokeFades(x, y, frame)) grid[i] = EMPTY;
             else if (c == STEAM && steamCondenses(x, y, frame)) grid[i] = WATER;

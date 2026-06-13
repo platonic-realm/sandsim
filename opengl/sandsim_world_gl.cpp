@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, MATERIAL_COUNT = 17 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, MATERIAL_COUNT = 18 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -86,7 +86,7 @@ uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND -> L,A,W,O,G,F,St,Sm,E
+    if (s == 2u || s == 17u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH -> L,A,W,O,G,F,St,Sm,E
     if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;         // LAVA -> A,W,O,G,F,St,Sm,E
     if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                // ACID -> W,O,G,F,St,Sm,E
     if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                        // WATER -> O,G,F,St,Sm,E
@@ -98,7 +98,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==7u||s==11u||s==3u||s==5u;        // DOWN: sand,lava,acid,water,oil
+    if (uGrp == 0) return s==2u||s==17u||s==7u||s==11u||s==3u||s==5u; // DOWN: sand,ash,lava,acid,water,oil
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u;               // GAS/FIRE/STEAM/SMOKE rise
     return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
 }
@@ -110,7 +110,7 @@ void main() {
         int i = y * uSW + x; uint c = cells[i];
         if (c == 6u) {
             uint h = (uint(x) * 167u + uint(y) * 101u + uint(uFrame) * 131u) & 0xFFu;
-            if (h < 12u) cells[i] = (h < 4u) ? 12u : 0u;  // fire -> smoke / empty
+            if (h < 12u) cells[i] = (h < 4u) ? 12u : (h < 6u) ? 17u : 0u;  // fire -> smoke / ash / empty
         } else if (c == 12u) {
             uint h = (uint(x) * 73u + uint(y) * 179u + uint(uFrame) * 149u) & 0xFFu;
             if (h < 16u) cells[i] = 0u;                   // smoke fades
@@ -313,6 +313,7 @@ vec3 matColor(uint m) {
     if (m == 14u) return vec3(0.804, 0.922, 1.0);
     if (m == 15u) return vec3(0.122, 0.710, 0.769);
     if (m == 16u) return vec3(0.800, 0.133, 0.133);
+    if (m == 17u) return vec3(0.420, 0.388, 0.345);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -664,8 +665,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[17] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT};
-    ui::Palette pal = ui::palette(renderW, 17);
+    static const uint8_t kSwatch[18] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH};
+    ui::Palette pal = ui::palette(renderW, 18);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -678,7 +679,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 17; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 18; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -704,6 +705,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_I) == GLFW_PRESS) current = ICE;
         if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) current = SPRING;
         if (glfwGetKey(win, GLFW_KEY_T) == GLFW_PRESS) current = TNT;
+        if (glfwGetKey(win, GLFW_KEY_H) == GLFW_PRESS) current = ASH;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;

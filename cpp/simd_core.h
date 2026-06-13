@@ -80,7 +80,7 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
     const int W = Ops::W;
     const V vE = Ops::zero(), vS = Ops::set1(SAND), vW = Ops::set1(WATER),
             vG = Ops::set1(GAS), vO = Ops::set1(OIL), vF = Ops::set1(FIRE), vL = Ops::set1(LAVA),
-            vSt = Ops::set1(STEAM), vA = Ops::set1(ACID), vSm = Ops::set1(SMOKE);
+            vSt = Ops::set1(STEAM), vA = Ops::set1(ACID), vSm = Ops::set1(SMOKE), vAsh = Ops::set1(ASH);
 
     // move mask: which lanes hold an eligible mover whose target is enterable and
     // where neither cell has already moved this frame. Density SAND>LAVA>ACID>
@@ -88,7 +88,8 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
     auto mask = [&](V cur, V tgt, V mc, V mt, int grp) -> V {
         V isS = Ops::eq(cur, vS), isW = Ops::eq(cur, vW), isG = Ops::eq(cur, vG),
           isO = Ops::eq(cur, vO), isF = Ops::eq(cur, vF), isL = Ops::eq(cur, vL),
-          isSt = Ops::eq(cur, vSt), isA = Ops::eq(cur, vA), isSm = Ops::eq(cur, vSm);
+          isSt = Ops::eq(cur, vSt), isA = Ops::eq(cur, vA), isSm = Ops::eq(cur, vSm),
+          isAsh = Ops::eq(cur, vAsh);
         V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG),
           tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF), tL = Ops::eq(tgt, vL),
           tSt = Ops::eq(tgt, vSt), tA = Ops::eq(tgt, vA), tSm = Ops::eq(tgt, vSm);
@@ -100,10 +101,10 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
         V belowOil   = lightGas;                                                            // G,F,STEAM,SMOKE,E
         V rise = Ops::Or(isG, Ops::Or(isF, Ops::Or(isSt, isSm)));                           // gas/fire/steam/smoke
         V can = Ops::Or(Ops::Or(
-            Ops::Or(Ops::And(isS, belowSand), Ops::And(isL, belowLava)),
+            Ops::Or(Ops::And(Ops::Or(isS, isAsh), belowSand), Ops::And(isL, belowLava)),  // SAND & ASH: heavy
             Ops::Or(Ops::And(isA, belowAcid), Ops::And(isW, belowWater))),
             Ops::Or(Ops::And(isO, belowOil), Ops::And(rise, tE)));
-        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(isS, isL), Ops::Or(isA, Ops::Or(isW, isO)))
+        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isL), Ops::Or(isA, Ops::Or(isW, isO)))
                : (grp == SG_GAS)  ? rise
                                   : Ops::Or(Ops::Or(isL, isA), Ops::Or(Ops::Or(isW, isO), rise));
         return Ops::And(Ops::And(elig, can),

@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -75,8 +75,8 @@ GPU and produce a **bit-identical** world.
   - **sourcing** — a `SPRING` solid wells `WATER` up into the empty cells around it
     (the empty cell decides from a snapshot, like plant growth). It never depletes,
     so it's an endless generator — the one rule that creates mass from nothing, which
-    keeps long-running worlds in motion instead of settling. Only reachable when a
-    spring is actually placed, so the conservation-checked benchmark is unaffected.
+    keeps long-running worlds in motion instead of settling. The generated world
+    buries a few, so the streaming benchmark's bit-identity check covers it too.
   - **detonation** — `TNT` touched by `FIRE`/`LAVA` bursts into `FIRE` across its
     8-neighbourhood and chain-detonates adjacent `TNT`. The two passes are unusual:
     pass 1 marks the *detonators* (TNT next to something hot) into the scratch

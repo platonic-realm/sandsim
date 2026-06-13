@@ -16,7 +16,7 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND -> +Sm
+    if (s == 2u || s == 17u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH -> +Sm
     if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;         // LAVA -> +Sm
     if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                // ACID -> +Sm
     if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                        // WATER -> +Sm
@@ -28,7 +28,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==7u||s==11u||s==3u||s==5u;      // DOWN: sand,lava,acid,water,oil
+    if (pc.grp == 0) return s==2u||s==17u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,lava,acid,water,oil
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u;             // GAS/FIRE/STEAM/SMOKE rise
     return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
 }
@@ -40,7 +40,7 @@ void main() {
         int i = y * pc.SW + x; uint c = cells[i];
         if (c == 6u) {
             uint h = (uint(x) * 167u + uint(y) * 101u + uint(pc.frame) * 131u) & 0xFFu;
-            if (h < 12u) cells[i] = (h < 4u) ? 12u : 0u;  // fire -> smoke / empty
+            if (h < 12u) cells[i] = (h < 4u) ? 12u : (h < 6u) ? 17u : 0u;  // fire -> smoke / ash / empty
         } else if (c == 12u) {
             uint h = (uint(x) * 73u + uint(y) * 179u + uint(pc.frame) * 149u) & 0xFFu;
             if (h < 16u) cells[i] = 0u;                   // smoke fades
