@@ -67,3 +67,10 @@ the `--bench` mode is pure Python and needs no pygame. See
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file in the root directory for details.
+
+## Streaming world variant
+
+The chunked, disk-streamed "big world" (Noita-style: only a few live boxes around
+a camera resident, the rest saved to disk) is in `sandsim_world.py`. Build it with `make world`
+from the repo root and cross-check all languages with `make bench-world`. See
+[WORLD.md](../WORLD.md).
