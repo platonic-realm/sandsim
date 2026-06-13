@@ -25,7 +25,6 @@ liquid, and gas with density-based interaction — see
 
 | Implementation | Status | Notes |
 |----------------|--------|-------|
-| [Bash](bash/)     | ✅ done        | Terminal ASCII, adapts to terminal size |
 | [C](c/)           | ✅ done        | Scalar, SDL2 window, headless `--bench` |
 | [C++](cpp/)       | ✅ done        | scalar / SSE / AVX2 × sand / materials / world; `--bench` on `scalar_sb` |
 | [Python](python/) | ✅ done        | Pygame window |
