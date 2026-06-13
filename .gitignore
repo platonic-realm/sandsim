@@ -23,3 +23,4 @@
 /rust/target/
 /zig/.zig-cache/
 /zig/zig-cache/
+__pycache__/
