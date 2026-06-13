@@ -8,6 +8,19 @@
 
 namespace ui {
 
+// Animated brightness flicker for "hot" materials (fire/lava), render-only -- it
+// modulates the drawn colour by ~±15% per cell per tick so flame and molten rock
+// shimmer instead of sitting flat. The OpenGL present shader uses the same hash.
+inline uint32_t flicker(uint32_t argb, int lx, int ly, int tick) {
+    uint32_t h = (uint32_t)lx * 374761393u + (uint32_t)ly * 668265263u + (uint32_t)tick * 2654435761u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    float f = 0.80f + (float)(h & 0xFFu) / 255.0f * 0.32f;   // 0.80 .. 1.12
+    int r = (int)(((argb >> 16) & 0xFF) * f); if (r > 255) r = 255;
+    int g = (int)(((argb >> 8)  & 0xFF) * f); if (g > 255) g = 255;
+    int b = (int)((argb         & 0xFF) * f); if (b > 255) b = 255;
+    return 0xFF000000u | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+}
+
 // Palette geometry in render-pixel coordinates (top-left origin).
 struct Palette { int x0, y0, sw, gap, n; };
 

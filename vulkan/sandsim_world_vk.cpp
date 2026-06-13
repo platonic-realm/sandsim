@@ -634,9 +634,12 @@ static int runInteractive(ViewCfg cfg) {
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
         if (ran > 1) world.stepN(ran - 1);
         if (ran > 0) world.stepAndPresent();        // last step + readback in one submit
+        static int tick = 0; ++tick;                // render clock for the flame/lava flicker
         for (int y = 0; y < LH; ++y)
             for (int x = 0; x < LW; ++x) {
-                uint32_t color = kColors[world.viewCell(x, y)];
+                uint8_t m = world.viewCell(x, y);
+                uint32_t color = kColors[m];
+                if (m == FIRE || m == LAVA) color = ui::flicker(color, x, y, tick);
                 for (int dy = 0; dy < PIXEL; ++dy)
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;

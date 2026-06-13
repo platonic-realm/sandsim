@@ -29,10 +29,12 @@ reactions, all order-independent and bit-identical on CPU and GPU:
   frame before burning away.
 - `LAVA` meeting `WATER` **freezes to stone** (`WALL`) at the interface.
 
-Paint with the mouse and pick a material from the on-screen palette (or number
-keys `0`-`7`); `[` / `]` size the brush. The palette is the same on all three
-backends, and every rule — movement, the time-varying burn-out, and the
-neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
+Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
+doesn't touch the simulation). Paint with the mouse and pick a material from the
+on-screen palette (or number keys `0`-`7`); `[` / `]` size the brush. The palette
+is the same on all three backends, and every rule — movement, the time-varying
+burn-out, and the neighbour reactions — is bit-identical across CPU SIMD, OpenGL,
+and Vulkan.
 
 The update rule is **order-independent**: each frame is a fixed sequence of
 sub-passes, and within a pass every move is between a disjoint pair of cells

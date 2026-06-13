@@ -176,7 +176,7 @@ void main() {
 static const char* kPresentFrag = R"GLSL(
 #version 430
 layout(std430, binding = 0) buffer Cells { uint cells[]; };
-uniform int uSW, uX0, uY0, uLW, uLH, uRW, uRH;
+uniform int uSW, uX0, uY0, uLW, uLH, uRW, uRH, uTick;
 uniform int uWinW, uWinH;                                  // window (logical) size
 uniform int uPalX0, uPalY0, uPalSW, uPalGap, uPalN, uPalSel;
 out vec4 frag;
@@ -189,6 +189,11 @@ vec3 matColor(uint m) {
     if (m == 6u) return vec3(1.000, 0.353, 0.118);
     if (m == 7u) return vec3(0.812, 0.106, 0.043);
     return vec3(0.0);
+}
+float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
+    uint h = uint(lx)*374761393u + uint(ly)*668265263u + uint(tick)*2654435761u;
+    h = (h ^ (h >> 13u)) * 1274126177u;
+    return 0.80 + float(h & 0xFFu) / 255.0 * 0.32;
 }
 void main() {
     int px = int(gl_FragCoord.x);
@@ -215,8 +220,11 @@ void main() {
         }
         frag = vec4(hud, 1.0); return;
     }
-    uint m = cells[(uY0 + py * uLH / uRH) * uSW + (uX0 + px * uLW / uRW)] & 0xFFu;
-    frag = vec4(matColor(m), 1.0);
+    int lx = px * uLW / uRW, ly = py * uLH / uRH;
+    uint m = cells[(uY0 + ly) * uSW + (uX0 + lx)] & 0xFFu;
+    vec3 c = matColor(m);
+    if (m == 6u || m == 7u) c = clamp(c * flick(lx, ly, uTick), 0.0, 1.0);   // fire/lava shimmer
+    frag = vec4(c, 1.0);
 }
 )GLSL";
 
@@ -541,6 +549,8 @@ static int runInteractive(ViewCfg cfg) {
     glUniform1i(glGetUniformLocation(present, "uPalGap"), pal.gap);
     glUniform1i(glGetUniformLocation(present, "uPalN"), pal.n);
     GLint uPalSel = glGetUniformLocation(present, "uPalSel");
+    GLint uTick = glGetUniformLocation(present, "uTick");
+    int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
     auto selectedIdx = [&]() { for (int i = 0; i < 8; ++i) if (kSwatch[i] == current) return i; return -1; };
@@ -599,6 +609,7 @@ static int runInteractive(ViewCfg cfg) {
         int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH);
         if (cfbW != fbW || cfbH != fbH) { fbW = cfbW; fbH = cfbH; glUniform1i(uRW, fbW); glUniform1i(uRH, fbH); }
         glUniform1i(uPalSel, selectedIdx());
+        glUniform1i(uTick, ++tick);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, world.buffer());
         glViewport(0, 0, fbW, fbH);
         glBindVertexArray(vao);
