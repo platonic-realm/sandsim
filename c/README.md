@@ -35,3 +35,9 @@ In `--bench` mode the program seeds the grid deterministically, times the update
 loop, and prints a `RESULT` line whose checksum matches every other scalar-rule
 implementation (`31128ca3d1fcadc6` at the default 1000 steps / 400×300). See
 [BENCHMARKS.md](../BENCHMARKS.md).
+
+## Materials variant
+
+`sandsim_materials.c` adds the Noita-style multi-material engine (wall, sand,
+water, gas). Build with `make sandsim_materials` and run `./sandsim_materials`;
+number keys pick a material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
