@@ -2,6 +2,9 @@
 #include <vector>
 #include <random>
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <chrono>
 #include <SDL2/SDL.h>
 
 class ScalarSandSimulation {
@@ -114,7 +117,6 @@ public:
     void run() {
         bool quit = false;
         SDL_Event event;
-        int activeBuffer = 0;
         bool mouseDown = false;
         int mouseX, mouseY;
 
@@ -149,7 +151,77 @@ public:
     }
 };
 
+// ---------------------------------------------------------------------------
+// Headless benchmark mode. This is the golden reference for the "scalar" rule
+// group: every CPU port (C, Rust, Zig, Mojo) must reproduce these exact numbers
+// from the same deterministic seed. The update rule below is identical to
+// ScalarSandSimulation::update() above. Nothing here touches SDL.
+// ---------------------------------------------------------------------------
+
+// Deterministic per-cell seed (~30% sand). Pure u32 wraparound arithmetic so
+// every language produces bit-identical grids.
+static inline uint8_t seedCell(int x, int y) {
+    uint32_t h = static_cast<uint32_t>(x) * 374761393u +
+                 static_cast<uint32_t>(y) * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return (h % 100u) < 30u ? 1 : 0;
+}
+
+// FNV-1a over the grid in row-major order, u64 wraparound.
+static uint64_t checksum(const std::vector<uint8_t>& grid) {
+    uint64_t c = 14695981039346656037ull;
+    for (uint8_t cell : grid) {
+        c = (c ^ static_cast<uint64_t>(cell)) * 1099511628211ull;
+    }
+    return c;
+}
+
+static int runBench(int steps, int width, int height) {
+    std::vector<uint8_t> buffer(static_cast<size_t>(width) * height, 0);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+            buffer[y * width + x] = seedCell(x, y);
+
+    auto start = std::chrono::steady_clock::now();
+    for (int step = 0; step < steps; ++step) {
+        for (int y = height - 2; y >= 0; --y) {
+            for (int x = 0; x < width; ++x) {
+                if (buffer[y * width + x] == 1) {
+                    if (buffer[(y + 1) * width + x] == 0) {
+                        buffer[(y + 1) * width + x] = 1;
+                        buffer[y * width + x] = 0;
+                    } else if (x > 0 && buffer[(y + 1) * width + (x - 1)] == 0) {
+                        buffer[(y + 1) * width + (x - 1)] = 1;
+                        buffer[y * width + x] = 0;
+                    } else if (x < width - 1 && buffer[(y + 1) * width + (x + 1)] == 0) {
+                        buffer[(y + 1) * width + (x + 1)] = 1;
+                        buffer[y * width + x] = 0;
+                    }
+                }
+            }
+        }
+    }
+    auto end = std::chrono::steady_clock::now();
+
+    double elapsedMs = std::chrono::duration<double, std::milli>(end - start).count();
+    double cells = static_cast<double>(width) * height * steps;
+    double mcellsPerSec = (elapsedMs > 0.0) ? cells / (elapsedMs / 1000.0) / 1e6 : 0.0;
+
+    printf("RESULT impl=cpp_scalar_sb rule=scalar width=%d height=%d steps=%d "
+           "elapsed_ms=%.3f mcells_per_s=%.2f checksum=%016llx\n",
+           width, height, steps, elapsedMs, mcellsPerSec,
+           static_cast<unsigned long long>(checksum(buffer)));
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
+    if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) {
+        int steps  = (argc > 2) ? std::atoi(argv[2]) : 1000;
+        int width  = (argc > 3) ? std::atoi(argv[3]) : 400;
+        int height = (argc > 4) ? std::atoi(argv[4]) : 300;
+        return runBench(steps, width, height);
+    }
+
     ScalarSandSimulation sim(400, 300);
     sim.run();
     return 0;

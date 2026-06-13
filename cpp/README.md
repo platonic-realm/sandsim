@@ -20,7 +20,18 @@ This directory contains the C++ implementation of the sandsim project, including
 
 ## Compiling the Project
 
-You can compile the project using either GCC or Clang. Here are the commands for each version:
+The quickest path is the Makefile, which builds every x86 variant
+(`scalar`/`sse`/`avx`, single- and multi-buffer):
+
+```
+make           # all x86 variants
+make neon      # NEON multi-buffer (ARM only)
+make bench     # build scalar_sb and run its headless benchmark
+make clean
+```
+
+Or compile individual versions with GCC or Clang. Here are the commands for each
+version:
 
 ### Scalar Single Buffer Version
 
@@ -85,6 +96,19 @@ After compiling, you can run each version by executing the corresponding binary:
 - 'R' key: Randomize the sand distribution
 - Space bar: Cycle through buffers (multi-buffer versions only)
 - Number keys 0-9: Switch to a specific buffer (multi-buffer versions only)
+
+## Benchmark
+
+`sandsim_scalar_sb` is the project's golden reference for the cross-language
+benchmark. Run it headless:
+
+```
+./sandsim_scalar_sb --bench 1000 400 300
+```
+
+It prints a single `RESULT` line whose checksum (`31128ca3d1fcadc6` at the
+default 1000 steps / 400×300) every other scalar-rule implementation must match.
+See [BENCHMARKS.md](../BENCHMARKS.md).
 
 ## Implementation Details
 
