@@ -43,3 +43,15 @@ Zig's standard library moves quickly. This file targets 0.16: it takes a
 `std.process.Args.Iterator`, and times with libc `clock_gettime`. On a different
 Zig version these few touch points may need adjusting; the simulation logic does
 not.
+
+## Materials variant
+
+`sandsim_materials.zig` adds the Noita-style multi-material engine (wall, sand,
+water, gas). Build it with:
+
+```sh
+zig build-exe sandsim_materials.zig -lSDL2 -lc -I/usr/include -O ReleaseFast -femit-bin=sandsim_materials
+```
+
+(or `make materials` from the repo root). Run `./sandsim_materials`; number keys
+pick a material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
