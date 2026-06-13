@@ -117,6 +117,14 @@ multi-material engine (wall, sand, water, gas with density interaction). Build i
 with `make sandsim_materials` and run `./sandsim_materials`; number keys pick a
 material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
 
+## Streaming world variant
+
+`sandsim_world.cpp` is the canonical chunked, disk-streamed "big world"
+(Noita-style: live boxes around a camera, the rest saved to disk).
+`sandsim_world_simd.cpp` advances 16 live boxes per SSE instruction using the
+multi-buffer technique. Build with `make sandsim_world sandsim_world_simd` (or
+`make world` from the repo root). See [WORLD.md](../WORLD.md).
+
 ## Implementation Details
 
 - The scalar versions use basic loop-based updates, with the multi-buffer version managing multiple simulations.
