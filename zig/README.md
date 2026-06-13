@@ -55,3 +55,11 @@ zig build-exe sandsim_materials.zig -lSDL2 -lc -I/usr/include -O ReleaseFast -fe
 
 (or `make materials` from the repo root). Run `./sandsim_materials`; number keys
 pick a material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
+
+
+## Streaming world variant
+
+The chunked, disk-streamed "big world" (Noita-style: only a few live boxes around
+a camera resident, the rest saved to disk) is in `sandsim_world.zig`. Build it with `make world`
+from the repo root and cross-check all languages with `make bench-world`. See
+[WORLD.md](../WORLD.md).
