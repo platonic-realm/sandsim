@@ -9,6 +9,10 @@ license = "MIT"
 name = "sandsim"
 path = "src/main.rs"
 
+[[bin]]
+name = "sandsim_materials"
+path = "src/materials.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

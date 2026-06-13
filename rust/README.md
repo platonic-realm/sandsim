@@ -34,3 +34,10 @@ cargo build --release          # add --offline to force no network access
 `--bench` seeds the grid deterministically, times the update loop, and prints a
 `RESULT` line whose checksum matches every other scalar-rule implementation
 (`31128ca3d1fcadc6` at 1000 steps / 400×300). See [BENCHMARKS.md](../BENCHMARKS.md).
+
+## Materials variant
+
+The crate has a second binary, `sandsim_materials` (`src/materials.rs`), with the
+Noita-style multi-material engine (wall, sand, water, gas). `cargo build --release`
+builds it alongside `sandsim`; run `./target/release/sandsim_materials`. Number
+keys pick a material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
