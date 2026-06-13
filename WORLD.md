@@ -69,21 +69,33 @@ noted as further refinements.
 
 ### What the SIMD variant does
 
-`cpp/sandsim_world_simd.cpp` reuses the **multi-buffer SIMD** technique from
-`cpp/sandsim_sse_mb.cpp` / `sandsim_avx_mb.cpp`: the interleaved layout
-`cells[(y*W + x)*LANES + lane]` lets a single vector load read the same cell
-across `LANES` boxes at once, so one SSE instruction advances `LANES = 16` live
-boxes in parallel. Here the lanes are **live boxes of the streamed world**, each
-an independent box with solid edges, and the boxes stream to/from disk as the
-camera moves.
+`cpp/sandsim_world_simd.cpp` keeps the world **connected** while doing the
+parallelism entirely in SIMD — no scalar border pass. It uses the **single-grid**
+SIMD technique of `cpp/sandsim_sse_sb.cpp`: the lanes are **16 adjacent cells of
+one contiguous grid**, not independent boxes, so material flows freely across the
+whole region. (The earlier multi-buffer approach packed independent boxes into
+the lanes, which can never connect — SIMD lanes don't communicate.)
 
-It runs the **full materials rule** (EMPTY/WALL/SAND/WATER/GAS), vectorised
-across the lanes: for each directional move attempt it computes — for all 16
-lanes at once — `canEnter(current, target)` and an "eligible movers" mask, then
-swaps the matching lanes with `_mm_blendv_epi8`. A per-cell `moved` mask gives
-the same one-move-per-frame semantics as the scalar engine, so each box behaves
-exactly like a small materials simulation. Sand piles, water finds its level,
-and gas rises — all in parallel SIMD lanes.
+The trick that makes a multi-material **swap** rule conflict-free in SIMD: each
+directional move maps a source column `x` to a *distinct* target column `x+dx`,
+so a whole directional pass over a row updates 16 columns at once with no two
+lanes writing the same cell. The full rule (EMPTY/WALL/SAND/WATER/GAS) decomposes
+into per-direction SSE passes — swap with `_mm_blendv_epi8`, a per-cell `moved`
+mask for one-move-per-frame priority:
+
+- **down / down-left / down-right** (sand, water) and **up / up-left / up-right**
+  (gas): source and target are in different rows / shifted columns, so they are
+  conflict-free and run full 16-wide.
+- **horizontal-left / -right** (water, gas): a same-row swap chains lane to lane
+  (lane *i*'s target is lane *i−1*'s source), so it is split into **even/odd
+  column phases** — even sources move into odd targets (disjoint), then odd into
+  even — which breaks the chain while staying all-SIMD.
+
+The live region is a contiguous `(GW·CHUNK)×(GH·CHUNK)` grid with a one-cell WALL
+border (padding lets the SIMD offset-loads run off the edge safely); it is a
+window into the larger disk-backed world that streams a chunk at a time as the
+camera moves. Sand piles, water finds its level across the whole connected
+region, and gas rises — all in SIMD, and verified to conserve every material.
 
 ## Verifying it
 
