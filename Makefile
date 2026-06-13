@@ -53,8 +53,8 @@ bench:
 	@bash tools/bench.sh
 
 # --- multi-material (Noita-style) -------------------------------------------
-# Builds the material-capable implementations (C, C++, Rust, Zig; Python needs
-# no build). The single-material benchmark above is unaffected.
+# Builds the material-capable implementations (C, C++, Rust, Zig).
+# The single-material benchmark above is unaffected.
 materials:
 	@if command -v cc    >/dev/null 2>&1; then $(MAKE) -C c sandsim_materials;     else echo "skip c    (no cc)";    fi
 	@if command -v g++   >/dev/null 2>&1; then $(MAKE) -C cpp sandsim_materials sandsim_materials_sse sandsim_materials_avx; else echo "skip cpp  (no g++)"; fi

@@ -27,7 +27,6 @@ liquid, and gas with density-based interaction — see
 |----------------|--------|-------|
 | [C](c/)           | ✅ done        | Scalar, SDL2 window, headless `--bench` |
 | [C++](cpp/)       | ✅ done        | scalar / SSE / AVX2 × sand / materials / world; `--bench` on `scalar_sb` |
-| [Python](python/) | ✅ done        | Pygame window |
 | [Rust](rust/)     | ✅ done        | `std`-only (SDL2 via FFI), headless `--bench` |
 | [Zig](zig/)       | ✅ done        | SDL2 via `@cImport`, headless `--bench` |
 | [OpenGL](opengl/) | ✅ done        | GL 4.3 compute shader, GPU; headless `--bench` |
@@ -95,10 +94,10 @@ a natural gas/water/sand stack.
 ```sh
 make materials            # build the material-capable implementations
 cpp/sandsim_materials     # interactive: number keys pick a material, mouse paints
-make bench-materials      # cross-check all five language ports agree
+make bench-materials      # cross-check all four language ports agree
 ```
 
-It is implemented identically in C, C++, Python, Rust, and Zig, and the five
+It is implemented identically in C, C++, Rust, and Zig, and the four
 agree on a bit-for-bit checksum and conserved per-material counts. See
 [MATERIALS.md](MATERIALS.md) for the rules, controls, and verification details.
 
@@ -116,7 +115,7 @@ cpp/sandsim_world     # interactive: WASD/arrows pan the camera, number keys pai
 make bench-world      # deterministic cross-language streaming cross-check
 ```
 
-It is implemented in C, C++, Python, Rust, and Zig (all five agree on a
+It is implemented in C, C++, Rust, and Zig (all four agree on a
 whole-world checksum and conserve every material across the streaming
 round-trip), plus **connected SIMD** variants
 (`cpp/sandsim_world_sse.cpp` and `_avx.cpp`) that simulate one contiguous grid

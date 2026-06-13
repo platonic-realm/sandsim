@@ -5,7 +5,7 @@
 # Runs every language port of the streamed world (--bench), prints a table, and
 # verifies they all agree on the whole-world checksum and conserved per-material
 # counts -- and that every run reports conserved=yes (the streaming round-trip
-# is lossless). Defaults to a small world so the pure-Python port finishes.
+# is lossless).
 #
 # Usage: tools/bench_world.sh [steps] [wch] [hch]   (default: 200 4 4)
 
@@ -40,7 +40,6 @@ collect cpp_world    cpp    ./sandsim_world
 collect c_world      c      ./sandsim_world
 collect rust_world   rust   ./target/release/sandsim_world
 collect zig_world    zig    ./sandsim_world
-command -v python3 >/dev/null 2>&1 && collect python_world python python3 sandsim_world.py
 
 if [ ! -s "$RESULTS_FILE" ]; then echo "No world implementations ran. Try: make world" >&2; exit 1; fi
 

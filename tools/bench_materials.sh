@@ -7,7 +7,7 @@
 # per-material counts -- a strict cross-language correctness check for the
 # Noita-style engine (EMPTY / WALL / SAND / WATER / GAS).
 #
-# Defaults to a small grid so the pure-Python port finishes quickly.
+#
 # Usage: tools/bench_materials.sh [steps] [width] [height]   (default: 200 120 90)
 
 set -uo pipefail
@@ -46,7 +46,6 @@ collect cpp_materials    cpp    ./sandsim_materials
 collect c_materials      c      ./sandsim_materials
 collect rust_materials   rust   ./target/release/sandsim_materials
 collect zig_materials    zig    ./sandsim_materials
-command -v python3 >/dev/null 2>&1 && collect python_materials python python3 sandsim_materials.py
 
 if [ ! -s "$RESULTS_FILE" ]; then
     echo "No material implementations ran. Try: make materials" >&2

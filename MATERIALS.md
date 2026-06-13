@@ -40,11 +40,10 @@ motion is unbiased yet reproducible.
 
 ## Implementations
 
-The engine is implemented identically in five languages:
+The engine is implemented identically in four languages:
 
 - [C](c/sandsim_materials.c)
 - [C++](cpp/sandsim_materials.cpp) — the canonical reference
-- [Python](python/sandsim_materials.py) — the readable reference
 - [Rust](rust/src/materials.rs)
 - [Zig](zig/sandsim_materials.zig)
 
@@ -64,12 +63,11 @@ The model above is the reference for porting them.
 Build them with `make materials`, then either run interactively or benchmark:
 
 ```sh
-# Interactive (SDL2 window; Python uses pygame)
+# Interactive (SDL2 window)
 cpp/sandsim_materials
-python3 python/sandsim_materials.py
 
 # Headless benchmark / cross-check
-make bench-materials                       # runs all five and verifies they agree
+make bench-materials                       # runs all four and verifies they agree
 cpp/sandsim_materials --bench 1000 400 300 # one implementation
 
 # Render a snapshot to an image (no display needed):
@@ -98,7 +96,7 @@ Two correctness properties are checked:
 
 1. **Conservation** — the `wall`/`sand`/`water`/`gas` counts are invariant for
    any number of steps (swaps never create or destroy material).
-2. **Cross-language agreement** — all five implementations use identical
+2. **Cross-language agreement** — all four implementations use identical
    fixed-width integer arithmetic, so they produce the **same checksum** for the
    same seed. `make bench-materials` asserts both and fails loudly otherwise.
 
