@@ -1,0 +1,21 @@
+# Compiled binaries (one per implementation directory)
+/c/sandsim
+/zig/sandsim
+/opengl/sandsim_gl
+/hip/sandsim_hip
+/cuda/sandsim_cuda
+/vulkan/sandsim_vulkan_compute
+/vulkan/sandsim_vulkan_compute_mb
+
+# C++ variant binaries (sources keep their .cpp extension)
+/cpp/sandsim_*
+!/cpp/sandsim_*.cpp
+
+# Compiled shaders and object files
+*.spv
+*.o
+
+# Language build caches
+/rust/target/
+/zig/.zig-cache/
+/zig/zig-cache/

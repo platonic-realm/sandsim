@@ -1,59 +1,124 @@
 # sandsim
 
-sandsim is a collection of sand falling simulations implemented in various programming languages and frameworks. It serves as a benchmark and learning tool for comparing different approaches to optimizing grid-based simulations.
+sandsim is a collection of sand falling simulations implemented in various
+programming languages and frameworks. It serves as a benchmark and learning
+tool for comparing different approaches to optimizing grid-based simulations.
 
 ## Overview
 
-The core simulation involves a 2D grid where sand particles fall due to gravity and interact with each other. The basic rules are:
+The core simulation involves a 2D grid where sand particles fall due to gravity
+and interact with each other. The basic rules are:
 
 1. Sand falls straight down if the cell below is empty.
 2. If blocked, sand tries to fall diagonally left or right.
 3. If all paths are blocked, the sand stays in place.
 
+The reference for these rules is [`cpp/sandsim_scalar_sb.cpp`](cpp/sandsim_scalar_sb.cpp).
+Every CPU implementation reproduces it exactly, which lets the benchmark harness
+verify that they all agree bit-for-bit (see [Benchmarking](#benchmarking)).
+
 ## Implementations
 
-Target implementations:
+| Implementation | Status | Notes |
+|----------------|--------|-------|
+| [Bash](bash/)     | ✅ done        | Terminal ASCII, adapts to terminal size |
+| [C](c/)           | ✅ done        | Scalar, SDL2 window, headless `--bench` |
+| [C++](cpp/)       | ✅ done        | Scalar / SSE / AVX2 / NEON, single- and multi-buffer; `--bench` on `scalar_sb` |
+| [Python](python/) | ✅ done        | Pygame window |
+| [Rust](rust/)     | ✅ done        | `std`-only (SDL2 via FFI), headless `--bench` |
+| [Zig](zig/)       | ✅ done        | SDL2 via `@cImport`, headless `--bench` |
+| [OpenGL](opengl/) | ✅ done        | GL 4.3 compute shader, GPU; headless `--bench` |
+| [Vulkan](vulkan/) | ✅ done        | Compute, single- and multi-buffer; headless `--bench` (single-buffer) |
+| [HIP](hip/)       | ✅ done        | Compute kernel (ROCm / AMD, or CUDA backend); headless `--bench` |
+| [CUDA](cuda/)     | 📝 source-only | Mirrors the HIP kernel; build with `nvcc` on an NVIDIA host |
+| [Mojo](mojo/)     | 📝 source-only | Scalar rule + ASCII demo + `--bench`; build with the Mojo toolchain |
 
-- [Bash](bash/README.md)
-- C
-- [C++](cpp/README.md)
-- [Python](python/README.md)
-- Rust
-- Zig
-- Mojo
-- OpenGL (GPU acceleration)
-- [Vulkan](vulkan/README.md) (GPU acceleration)
-- CUDA (GPU acceleration)
-- HIP (GPU acceleration)
+"source-only" means the code is provided and documented but was not compiled on
+the development host (no CUDA toolkit / no Mojo toolchain there).
 
-Each implementation is contained in its own directory and includes a README with specific instructions.
+The GPU implementations (OpenGL, Vulkan, HIP, CUDA) follow a shared model: a
+double-buffered grid in GPU memory where each step the source half is copied to
+the destination half and a compute shader/kernel atomically claims destination
+cells. They form a distinct "gpu" rule group from the CPU scalar rule.
+
+## Building
+
+Each directory builds on its own (see its README), or use the root Makefile:
+
+```sh
+make all      # build every implementation whose toolchain is installed
+make c        # build a single implementation (c rust zig cpp opengl hip cuda vulkan)
+make bench    # build the benchmarkable implementations and print a comparison table
+make clean    # remove all build artifacts
+```
+
+`make all` detects the available toolchains and skips any that are missing,
+printing a short note for each skip.
+
+Common dependencies: a C/C++ compiler, SDL2 (CPU/HIP/CUDA/Vulkan windows),
+GLEW + GLFW (OpenGL), the Vulkan SDK + `glslc` (Vulkan), `cargo` (Rust),
+`zig` (Zig), `hipcc` (HIP), `nvcc` (CUDA), and the Mojo toolchain (Mojo).
+
+## Benchmarking
+
+Every implementation accepts a headless benchmark mode:
+
+```sh
+./<binary> --bench [steps=1000] [width=400] [height=300]
+```
+
+which skips all window/display setup, seeds the grid deterministically, times
+only the update loop, and prints one machine-readable line:
+
+```
+RESULT impl=<name> rule=<scalar|gpu> width=W height=H steps=N \
+       elapsed_ms=<f> mcells_per_s=<f> checksum=<hex16> [sand=<n>]
+```
+
+The seed and 64-bit FNV-1a checksum use identical fixed-width integer
+arithmetic in every language, so all `rule=scalar` implementations produce the
+**same checksum** — a strict cross-language correctness check. GPU
+implementations resolve cell contention by scheduling order, so their checksum
+can vary run to run; they instead report a conserved `sand` count.
+
+Run the whole comparison with `make bench` (or `tools/bench.sh [steps] [w] [h]`),
+which builds what it can, runs every available implementation, prints a table
+sorted by throughput, and asserts that the scalar group agrees. See
+[BENCHMARKS.md](BENCHMARKS.md) for methodology and sample results.
 
 ## Getting Started
 
 1. Clone this repository:
-   ```
+
+   ```sh
    git clone https://github.com/yourusername/sandsim.git
    ```
 
-2. Navigate to the implementation you're interested in:
-   ```
-   cd sandsim/cpp
+2. Build everything available and run the benchmark:
+
+   ```sh
+   cd sandsim
+   make bench
    ```
 
-3. Follow the README instructions in that directory to build and run the simulation.
+3. Or follow the README in any implementation directory to build and run that
+   version interactively.
 
 ## Contributing
 
-Contributions are welcome! If you'd like to add an implementation in a new language or framework, please:
+Contributions are welcome! If you'd like to add an implementation in a new
+language or framework, please:
 
 1. Create a new directory for your implementation.
 2. Include a README with build and run instructions.
-3. Ensure your code is well-commented and follows the basic simulation rules.
+3. Follow the basic simulation rules and, ideally, implement the `--bench`
+   contract above so the new version joins the comparison harness.
 4. Submit a pull request with a description of your implementation.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
+for details.
 
 ## Acknowledgments
 
