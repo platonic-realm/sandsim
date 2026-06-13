@@ -12,10 +12,11 @@
 // solid too, but it GROWS into empty space wherever it meets WATER. ACID is a
 // heavy corrosive liquid that dissolves the solids it touches and evaporates.
 // SMOKE is the lightest gas: some of the flame that burns out becomes smoke,
-// which rises and fades away.
+// which rises and fades away. GLASS is an inert solid -- it's made by melting
+// SAND in LAVA, and it resists fire and acid.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
-    STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, MATERIAL_COUNT = 13
+    STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, MATERIAL_COUNT = 14
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -175,5 +176,21 @@ inline void dissolveAcid(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = EMPTY;
+        }
+}
+
+// Glassmaking: SAND touching LAVA melts to GLASS (an inert solid). One two-pass
+// snapshot through the scratch buffer -> order-independent, GPU-identical.
+inline void makeGlass(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            scratch[i] = (grid[i] == SAND &&
+                          (grid[i-1]==LAVA || grid[i+1]==LAVA || grid[i-SW]==LAVA || grid[i+SW]==LAVA)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = GLASS;
         }
 }

@@ -37,7 +37,7 @@ notice on EGL-backed contexts.
 
 - Arrows: pan the camera by a chunk
 - Click a swatch in the on-screen palette to pick a material (or keys `0`-`9`:
-  `0` Eraser · `1` Wall · `2` Sand · `3` Water · `4` Gas · `5` Oil · `6` Fire · `7` Lava · `8` Steam · `9` Wood · `P` Plant · `A` Acid · `M` Smoke)
+  `0` Eraser · `1` Wall · `2` Sand · `3` Water · `4` Gas · `5` Oil · `6` Fire · `7` Lava · `8` Steam · `9` Wood · `P` Plant · `A` Acid · `M` Smoke · `G` Glass)
 - Left mouse: paint · `[` / `]`: brush size · `Esc`: quit
 
 The `RESULT` checksum matches the C++ and Vulkan builds bit-for-bit; see

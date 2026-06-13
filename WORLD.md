@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -61,6 +61,10 @@ GPU and produce a **bit-identical** world.
   - **growth** — `PLANT` next to `WATER` sprouts into adjacent empty cells (a
     frame-hashed mark/apply pair where each empty cell decides from a snapshot),
     the first rule that *creates* material rather than moving or transforming it.
+  - **glassmaking** — `SAND` touching `LAVA` sets into `GLASS`, an inert solid
+    (another mark/apply snapshot pair), so sand poured into a lava pool fuses.
+  - **corrosion** — `ACID` dissolves the solids it touches (`WALL`/`SAND`/`WOOD`/
+    `PLANT` → `EMPTY`) and slowly evaporates; same two-pass snapshot shape.
 
   All reaction passes are gated by a per-world flag set when fire/lava enters, so
   fire-free worlds (like the `--bench` seed) skip them and the cross-backend
