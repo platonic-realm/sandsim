@@ -41,3 +41,11 @@ implementation (`31128ca3d1fcadc6` at the default 1000 steps / 400×300). See
 `sandsim_materials.c` adds the Noita-style multi-material engine (wall, sand,
 water, gas). Build with `make sandsim_materials` and run `./sandsim_materials`;
 number keys pick a material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
+
+
+## Streaming world variant
+
+The chunked, disk-streamed "big world" (Noita-style: only a few live boxes around
+a camera resident, the rest saved to disk) is in `sandsim_world.c`. Build it with `make world`
+from the repo root and cross-check all languages with `make bench-world`. See
+[WORLD.md](../WORLD.md).
