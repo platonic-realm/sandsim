@@ -8,14 +8,15 @@
  * so non-source threads touch nothing and the in-place update is race-free and
  * reproduces the CPU result exactly.
  *
- * Huge worlds stream like the CPU build: the live GW x GH window lives in a GPU
- * buffer; a CPU shadow drives the identical chunk<->disk logic. Buffer transfers
- * happen only when the camera moves (and at summary) -- the per-frame simulation
- * stays entirely on the GPU. Same seed + same camera path => same world, so the
- * whole-world checksum matches the C++ and Vulkan builds bit-for-bit.
+ * Huge worlds stream like the CPU build: the live window lives in a GPU buffer;
+ * a CPU shadow drives the identical chunk<->disk logic, synced only when the
+ * camera moves. The interactive view renders each cell as a SCALE x SCALE virtual
+ * pixel; window resolution and scale are configurable (--res WxH / --scale N, or
+ * SANDSIM_RES / SANDSIM_SCALE; default 1024x768, 2x2), and the resident window is
+ * sized to (winW/SCALE) x (winH/SCALE) cells.
  *
  * Modes:
- *   --bench [steps] [wch] [hch]   headless streaming benchmark (one RESULT line)
+ *   --bench [steps] [wch] [hch]   headless streaming benchmark (fixed 4x4 window)
  *   (default)                     interactive viewer (arrows pan, number keys paint)
  */
 
@@ -28,6 +29,7 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <algorithm>
 #include <fstream>
 #include <filesystem>
 
@@ -35,11 +37,22 @@ enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, MAT
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
-static constexpr int GW = 4, GH = 4;
-static constexpr int LW = GW * CHUNK, LH = GH * CHUNK;     // 256 x 256 live cells
 static constexpr int PAD = 16;
-static constexpr int SW = LW + 2 * PAD, SH = LH + 2 * PAD; // padded stride / height
-static constexpr int X0 = PAD, X1 = PAD + LW, Y0 = PAD, Y1 = PAD + LH;
+
+struct ViewCfg { int winW = 1024, winH = 768, scale = 2; };
+static ViewCfg parseView(int argc, char* argv[]) {
+    ViewCfg c;
+    if (const char* e = getenv("SANDSIM_RES"))   std::sscanf(e, "%dx%d", &c.winW, &c.winH);
+    if (const char* e = getenv("SANDSIM_SCALE")) c.scale = std::atoi(e);
+    for (int i = 1; i < argc; ++i) {
+        if (!std::strcmp(argv[i], "--res") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &c.winW, &c.winH);
+        else if (!std::strcmp(argv[i], "--scale") && i + 1 < argc) c.scale = std::atoi(argv[++i]);
+    }
+    if (c.scale < 1) c.scale = 1;
+    if (c.winW < CHUNK * c.scale) c.winW = CHUNK * c.scale;
+    if (c.winH < CHUNK * c.scale) c.winH = CHUNK * c.scale;
+    return c;
+}
 
 static inline uint32_t hashCoord(int gx, int gy) {
     uint32_t h = (uint32_t)gx * 374761393u + (uint32_t)gy * 668265263u;
@@ -181,8 +194,10 @@ static GLFWwindow* initGL(bool visible, int w, int h) {
 // (and summary) -- not per frame -- so the heavy loop stays on the GPU.
 class GpuWorld {
 public:
-    GpuWorld(int wbox, int hbox, std::string dir, GLuint computeProg)
-        : wbox(wbox), hbox(hbox), dir(std::move(dir)), prog(computeProg) {
+    GpuWorld(int gw, int gh, int wbox, int hbox, std::string dir, GLuint computeProg)
+        : gw(gw), gh(gh), LW(gw * CHUNK), LH(gh * CHUNK), SW(LW + 2 * PAD), SH(LH + 2 * PAD),
+          X0(PAD), X1(PAD + LW), Y0(PAD), Y1(PAD + LH),
+          wbox(wbox), hbox(hbox), dir(std::move(dir)), prog(computeProg) {
         std::filesystem::create_directories(this->dir);
         shadow.assign((size_t)SW * SH, WALL);
 
@@ -205,6 +220,13 @@ public:
     ~GpuWorld() { glDeleteBuffers(1, &cellsBuf); glDeleteBuffers(1, &movedBuf); }
 
     GLuint buffer() const { return cellsBuf; }
+    int winChunksW() const { return gw; }
+    int winChunksH() const { return gh; }
+    int cellsW() const { return LW; }
+    int cellsH() const { return LH; }
+    int stride() const { return SW; }
+    int originX() const { return X0; }
+    int originY() const { return Y0; }
 
     void generateAllToDisk() {
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
@@ -217,15 +239,15 @@ public:
         syncDown();                                // bring GPU state into the shadow
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         if (windowValid)
-            for (int gy = 0; gy < GH; ++gy)
-                for (int gx = 0; gx < GW; ++gx) { extractChunk(gx, gy, buf); writeBox(winCx + gx, winCy + gy, buf); }
-        for (int gy = 0; gy < GH; ++gy)
-            for (int gx = 0; gx < GW; ++gx) {
-                if (!readBox(camCx + gx, camCy + gy, buf)) genBox(camCx + gx, camCy + gy, buf);
-                injectChunk(gx, gy, buf);
+            for (int y = 0; y < gh; ++y)
+                for (int x = 0; x < gw; ++x) { extractChunk(x, y, buf); writeBox(winCx + x, winCy + y, buf); }
+        for (int y = 0; y < gh; ++y)
+            for (int x = 0; x < gw; ++x) {
+                if (!readBox(camCx + x, camCy + y, buf)) genBox(camCx + x, camCy + y, buf);
+                injectChunk(x, y, buf);
             }
         winCx = camCx; winCy = camCy; windowValid = true;
-        residentMax = GW * GH;
+        residentMax = gw * gh;
         syncUp();                                  // push the new window to the GPU
     }
 
@@ -262,7 +284,7 @@ public:
         uint64_t c = 14695981039346656037ull;
         for (int cy = 0; cy < hbox; ++cy)
             for (int cx = 0; cx < wbox; ++cx) {
-                bool inWin = windowValid && cx >= winCx && cx < winCx + GW && cy >= winCy && cy < winCy + GH;
+                bool inWin = windowValid && cx >= winCx && cx < winCx + gw && cy >= winCy && cy < winCy + gh;
                 const uint8_t* data;
                 if (inWin) { extractChunk(cx - winCx, cy - winCy, buf); data = buf.data(); }
                 else { readBox(cx, cy, buf); data = buf.data(); }
@@ -276,6 +298,10 @@ public:
     long long diskReads() const { return nReads; }
 
 private:
+    const int gw, gh;
+    const int LW, LH;
+    const int SW, SH;
+    const int X0, X1, Y0, Y1;
     int wbox, hbox;
     std::string dir;
     GLuint prog, cellsBuf = 0, movedBuf = 0;
@@ -299,15 +325,15 @@ private:
         gpuAhead = false;
     }
 
-    void extractChunk(int gx, int gy, std::vector<uint8_t>& out) const {
+    void extractChunk(int cgx, int cgy, std::vector<uint8_t>& out) const {
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx)
-                out[ly * CHUNK + lx] = (uint8_t)(shadow[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] & 0xFFu);
+                out[ly * CHUNK + lx] = (uint8_t)(shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] & 0xFFu);
     }
-    void injectChunk(int gx, int gy, const std::vector<uint8_t>& in) {
+    void injectChunk(int cgx, int cgy, const std::vector<uint8_t>& in) {
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx)
-                shadow[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = in[ly * CHUNK + lx];
+                shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = in[ly * CHUNK + lx];
     }
     void genBox(int cx, int cy, std::vector<uint8_t>& buf) {
         for (int y = 0; y < CHUNK; ++y)
@@ -331,8 +357,9 @@ private:
 
 // --------------------------------------------------------------------------- modes
 static int runBench(int steps, int wbox, int hbox) {
-    if (wbox < GW) wbox = GW;
-    if (hbox < GH) hbox = GH;
+    const int gw = 4, gh = 4;
+    if (wbox < gw) wbox = gw;
+    if (hbox < gh) hbox = gh;
     GLFWwindow* win = initGL(false, 64, 64);
     if (!win) return 1;
     GLuint prog = linkProgram({compileShader(GL_COMPUTE_SHADER, kComputeSrc)});
@@ -340,13 +367,13 @@ static int runBench(int steps, int wbox, int hbox) {
     std::string dir = "/tmp/sandsim_world_gl_" + std::to_string(steps) + "_" +
                       std::to_string(wbox) + "x" + std::to_string(hbox);
     std::filesystem::remove_all(dir);
-    GpuWorld world(wbox, hbox, dir, prog);
+    GpuWorld world(gw, gh, wbox, hbox, dir, prog);
     world.generateAllToDisk();
 
     uint64_t startCk, startCnt[MATERIAL_COUNT];
     world.summary(startCk, startCnt);
 
-    int nposX = wbox - GW + 1, nposY = hbox - GH + 1, nWin = nposX * nposY;
+    int nposX = wbox - gw + 1, nposY = hbox - gh + 1, nWin = nposX * nposY;
     (void)nposY;
     glFinish();
     auto start = std::chrono::steady_clock::now();
@@ -365,12 +392,12 @@ static int runBench(int steps, int wbox, int hbox) {
     bool conserved = true;
     for (int i = WALL; i <= GAS; ++i) if (cnt[i] != startCnt[i]) conserved = false;
     double ms = std::chrono::duration<double, std::milli>(end - start).count();
-    double mc = (ms > 0.0) ? (double)LW * LH * steps / (ms / 1000.0) / 1e6 : 0.0;
+    double mc = (ms > 0.0) ? (double)world.cellsW() * world.cellsH() * steps / (ms / 1000.0) / 1e6 : 0.0;
     printf("RESULT impl=opengl rule=world window=%dx%d wbox=%d hbox=%d steps=%d "
            "elapsed_ms=%.3f mcells_per_s=%.2f checksum=%016llx "
            "empty=%llu wall=%llu sand=%llu water=%llu gas=%llu "
            "resident_max=%d disk_writes=%lld disk_reads=%lld conserved=%s\n",
-           GW, GH, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
+           gw, gh, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
            (unsigned long long)cnt[EMPTY], (unsigned long long)cnt[WALL],
            (unsigned long long)cnt[SAND], (unsigned long long)cnt[WATER], (unsigned long long)cnt[GAS],
            world.residentMaxCount(), world.diskWrites(), world.diskReads(), conserved ? "yes" : "no");
@@ -379,9 +406,12 @@ static int runBench(int steps, int wbox, int hbox) {
     return conserved ? 0 : 2;
 }
 
-static int runInteractive() {
-    static const int PIXEL = 2, WBOX = 16, HBOX = 16;
-    int renderW = LW * PIXEL, renderH = LH * PIXEL;
+static int runInteractive(ViewCfg cfg) {
+    const int PIXEL = cfg.scale;
+    const int gw = std::max(1, (cfg.winW / PIXEL) / CHUNK);
+    const int gh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
+    const int WBOX = 2 * gw, HBOX = 2 * gh;
+    const int renderW = gw * CHUNK * PIXEL, renderH = gh * CHUNK * PIXEL;
     GLFWwindow* win = initGL(true, renderW, renderH);
     if (!win) return 1;
     GLuint compute = linkProgram({compileShader(GL_COMPUTE_SHADER, kComputeSrc)});
@@ -391,18 +421,18 @@ static int runInteractive() {
 
     std::string dir = "/tmp/sandsim_world_gl_interactive";
     std::filesystem::remove_all(dir);
-    GpuWorld world(WBOX, HBOX, dir, compute);
+    GpuWorld world(gw, gh, WBOX, HBOX, dir, compute);
     world.generateAllToDisk();
     int camCx = 0, camCy = 0;
     world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
     glUseProgram(present);
-    glUniform1i(glGetUniformLocation(present, "uSW"), SW);
-    glUniform1i(glGetUniformLocation(present, "uX0"), X0);
-    glUniform1i(glGetUniformLocation(present, "uY0"), Y0);
-    glUniform1i(glGetUniformLocation(present, "uLW"), LW);
-    glUniform1i(glGetUniformLocation(present, "uLH"), LH);
+    glUniform1i(glGetUniformLocation(present, "uSW"), world.stride());
+    glUniform1i(glGetUniformLocation(present, "uX0"), world.originX());
+    glUniform1i(glGetUniformLocation(present, "uY0"), world.originY());
+    glUniform1i(glGetUniformLocation(present, "uLW"), world.cellsW());
+    glUniform1i(glGetUniformLocation(present, "uLH"), world.cellsH());
     glUniform1i(glGetUniformLocation(present, "uRW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uRH"), renderH);
 
@@ -420,9 +450,9 @@ static int runInteractive() {
         bool u = glfwGetKey(win, GLFW_KEY_UP) == GLFW_PRESS;
         bool d = glfwGetKey(win, GLFW_KEY_DOWN) == GLFW_PRESS;
         if (l && !pL && camCx > 0) camCx--;
-        if (r && !pR && camCx < WBOX - GW) camCx++;
+        if (r && !pR && camCx < WBOX - gw) camCx++;
         if (u && !pU && camCy > 0) camCy--;
-        if (d && !pD && camCy < HBOX - GH) camCy++;
+        if (d && !pD && camCy < HBOX - gh) camCy++;
         pL = l; pR = r; pU = u; pD = d;
 
         world.setWindow(camCx, camCy);
@@ -451,5 +481,5 @@ int main(int argc, char* argv[]) {
         int hbox  = (argc > 4) ? std::atoi(argv[4]) : 6;
         return runBench(steps, wbox, hbox);
     }
-    return runInteractive();
+    return runInteractive(parseView(argc, argv));
 }

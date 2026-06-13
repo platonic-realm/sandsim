@@ -46,12 +46,15 @@ GPU and produce a **bit-identical** world.
 - **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
   `wbox × hbox` chunks; chunks live on disk and are generated (from a
   deterministic seed) the first time they're needed.
-- **Live window.** A `GW × GH` box of chunks (`4 × 4` = 256×256 cells) around the
-  camera is kept resident in **one contiguous grid** with a `PAD`-cell `WALL`
-  border (the border keeps material from falling into the void and gives the
-  GPU/SIMD offset accesses a safe halo). As the camera moves, chunks that leave
-  the window are **saved to disk and evicted**; chunks that enter are **loaded
-  from disk**, or **generated** if never visited.
+- **Live window.** A `gw × gh` box of chunks around the camera is kept resident in
+  **one contiguous grid** with a `PAD`-cell `WALL` border (the border keeps
+  material from falling into the void and gives the GPU/SIMD offset accesses a
+  safe halo). The window is sized at runtime — the interactive view derives it
+  from the display (`winW/scale × winH/scale` cells; default 1024×768 @ 2× →
+  `8 × 6` chunks), while `--bench` fixes it at `4 × 4` so its cross-backend
+  checksums are a stable reference. As the camera moves, chunks that leave the
+  window are **saved to disk and evicted**; chunks that enter are **loaded from
+  disk**, or **generated** if never visited.
 - **Simulation.** The whole live window is stepped each frame by the
   order-independent rule below. A per-cell **moved flag** (reset each frame) gives
   one-move-per-frame priority.
@@ -121,6 +124,7 @@ which is the simplest bit-identical check; larger boxes exercise streaming.
 ```sh
 make                   # build cpp + opengl + vulkan
 cpp/sandsim_world      # interactive: arrows pan the camera, number keys paint
+cpp/sandsim_world --res 1280x800 --scale 3   # window resolution + virtual-pixel size
 make benchmark         # build all three, assert identical checksum, print a table
 
 # render a snapshot of the live window to an image:

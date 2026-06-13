@@ -29,21 +29,34 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <unistd.h>
 
 enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, MATERIAL_COUNT = 5 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
-static constexpr int GW = 4, GH = 4;
-static constexpr int LW = GW * CHUNK, LH = GH * CHUNK;
 static constexpr int PAD = 16;
-static constexpr int SW = LW + 2 * PAD, SH = LH + 2 * PAD;
-static constexpr int X0 = PAD, X1 = PAD + LW, Y0 = PAD, Y1 = PAD + LH;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
     0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu,
 };
+
+// Window resolution + virtual-pixel scale for the interactive view.
+struct ViewCfg { int winW = 1024, winH = 768, scale = 2; };
+static ViewCfg parseView(int argc, char* argv[]) {
+    ViewCfg c;
+    if (const char* e = getenv("SANDSIM_RES"))   std::sscanf(e, "%dx%d", &c.winW, &c.winH);
+    if (const char* e = getenv("SANDSIM_SCALE")) c.scale = std::atoi(e);
+    for (int i = 1; i < argc; ++i) {
+        if (!std::strcmp(argv[i], "--res") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &c.winW, &c.winH);
+        else if (!std::strcmp(argv[i], "--scale") && i + 1 < argc) c.scale = std::atoi(argv[++i]);
+    }
+    if (c.scale < 1) c.scale = 1;
+    if (c.winW < CHUNK * c.scale) c.winW = CHUNK * c.scale;
+    if (c.winH < CHUNK * c.scale) c.winH = CHUNK * c.scale;
+    return c;
+}
 
 static inline uint32_t hashCoord(int gx, int gy) {
     uint32_t h = (uint32_t)gx * 374761393u + (uint32_t)gy * 668265263u;
@@ -96,7 +109,11 @@ static std::vector<char> readFile(const std::string& path) {
 // --------------------------------------------------------------------------- world
 class VkWorld {
 public:
-    VkWorld(int wbox, int hbox, std::string dir) : wbox(wbox), hbox(hbox), dir(std::move(dir)) {
+    VkWorld(int gw, int gh, int wbox, int hbox, std::string dir)
+        : gw(gw), gh(gh), LW(gw * CHUNK), LH(gh * CHUNK), SW(LW + 2 * PAD), SH(LH + 2 * PAD),
+          X0(PAD), X1(PAD + LW), Y0(PAD), Y1(PAD + LH),
+          gridBytes((VkDeviceSize)SW * SH * sizeof(uint32_t)),
+          wbox(wbox), hbox(hbox), dir(std::move(dir)) {
         std::filesystem::create_directories(this->dir);
         initVulkan();
         createBuffers();
@@ -133,15 +150,15 @@ public:
         syncDown();                                // pull the GPU's latest into staging
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         if (windowValid)
-            for (int gy = 0; gy < GH; ++gy)
-                for (int gx = 0; gx < GW; ++gx) { extractChunk(gx, gy, buf); writeBox(winCx + gx, winCy + gy, buf); }
-        for (int gy = 0; gy < GH; ++gy)
-            for (int gx = 0; gx < GW; ++gx) {
-                if (!readBox(camCx + gx, camCy + gy, buf)) genBox(camCx + gx, camCy + gy, buf);
-                injectChunk(gx, gy, buf);
+            for (int y = 0; y < gh; ++y)
+                for (int x = 0; x < gw; ++x) { extractChunk(x, y, buf); writeBox(winCx + x, winCy + y, buf); }
+        for (int y = 0; y < gh; ++y)
+            for (int x = 0; x < gw; ++x) {
+                if (!readBox(camCx + x, camCy + y, buf)) genBox(camCx + x, camCy + y, buf);
+                injectChunk(x, y, buf);
             }
         winCx = camCx; winCy = camCy; windowValid = true;
-        residentMax = GW * GH;
+        residentMax = gw * gh;
         syncUp();                                  // push the new window to the GPU
     }
 
@@ -183,7 +200,7 @@ public:
         uint64_t c = 14695981039346656037ull;
         for (int cy = 0; cy < hbox; ++cy)
             for (int cx = 0; cx < wbox; ++cx) {
-                bool inWin = windowValid && cx >= winCx && cx < winCx + GW && cy >= winCy && cy < winCy + GH;
+                bool inWin = windowValid && cx >= winCx && cx < winCx + gw && cy >= winCy && cy < winCy + gh;
                 const uint8_t* data;
                 if (inWin) { extractChunk(cx - winCx, cy - winCy, buf); data = buf.data(); }
                 else { readBox(cx, cy, buf); data = buf.data(); }
@@ -195,8 +212,17 @@ public:
     int residentMaxCount() const { return residentMax; }
     long long diskWrites() const { return nWrites; }
     long long diskReads() const { return nReads; }
+    int winChunksW() const { return gw; }
+    int winChunksH() const { return gh; }
+    int cellsW() const { return LW; }
+    int cellsH() const { return LH; }
 
 private:
+    const int gw, gh;                 // live window in chunks
+    const int LW, LH;                 // live window in cells
+    const int SW, SH;                 // padded stride / height
+    const int X0, X1, Y0, Y1;         // interior cell range
+    VkDeviceSize gridBytes;
     int wbox, hbox;
     std::string dir;
     int winCx = 0, winCy = 0;
@@ -222,7 +248,6 @@ private:
     VkCommandPool cmdPool = VK_NULL_HANDLE;
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
-    VkDeviceSize gridBytes = (VkDeviceSize)SW * SH * sizeof(uint32_t);
 
     uint32_t findMemoryType(uint32_t bits, VkMemoryPropertyFlags props) {
         VkPhysicalDeviceMemoryProperties mp; vkGetPhysicalDeviceMemoryProperties(phys, &mp);
@@ -431,18 +456,19 @@ private:
 
 // --------------------------------------------------------------------------- modes
 static int runBench(int steps, int wbox, int hbox) {
-    if (wbox < GW) wbox = GW;
-    if (hbox < GH) hbox = GH;
+    const int gw = 4, gh = 4;   // fixed live window for the bit-identical reference
+    if (wbox < gw) wbox = gw;
+    if (hbox < gh) hbox = gh;
     std::string dir = "/tmp/sandsim_world_vk_" + std::to_string(steps) + "_" +
                       std::to_string(wbox) + "x" + std::to_string(hbox);
     std::filesystem::remove_all(dir);
-    VkWorld world(wbox, hbox, dir);
+    VkWorld world(gw, gh, wbox, hbox, dir);
     world.generateAllToDisk();
 
     uint64_t startCk, startCnt[MATERIAL_COUNT];
     world.summary(startCk, startCnt);
 
-    int nposX = wbox - GW + 1, nposY = hbox - GH + 1, nWin = nposX * nposY;
+    int nposX = wbox - gw + 1, nposY = hbox - gh + 1, nWin = nposX * nposY;
     (void)nposY;
     auto camFor = [&](int s, int& cx, int& cy) {
         int visit = (int)((long long)s * nWin / steps);
@@ -467,12 +493,12 @@ static int runBench(int steps, int wbox, int hbox) {
     bool conserved = true;
     for (int i = WALL; i <= GAS; ++i) if (cnt[i] != startCnt[i]) conserved = false;
     double ms = std::chrono::duration<double, std::milli>(end - start).count();
-    double mc = (ms > 0.0) ? (double)LW * LH * steps / (ms / 1000.0) / 1e6 : 0.0;
+    double mc = (ms > 0.0) ? (double)world.cellsW() * world.cellsH() * steps / (ms / 1000.0) / 1e6 : 0.0;
     printf("RESULT impl=vulkan rule=world window=%dx%d wbox=%d hbox=%d steps=%d "
            "elapsed_ms=%.3f mcells_per_s=%.2f checksum=%016llx "
            "empty=%llu wall=%llu sand=%llu water=%llu gas=%llu "
            "resident_max=%d disk_writes=%lld disk_reads=%lld conserved=%s\n",
-           GW, GH, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
+           gw, gh, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
            (unsigned long long)cnt[EMPTY], (unsigned long long)cnt[WALL],
            (unsigned long long)cnt[SAND], (unsigned long long)cnt[WATER], (unsigned long long)cnt[GAS],
            world.residentMaxCount(), world.diskWrites(), world.diskReads(), conserved ? "yes" : "no");
@@ -480,12 +506,16 @@ static int runBench(int steps, int wbox, int hbox) {
     return conserved ? 0 : 2;
 }
 
-static int runInteractive() {
-    static const int PIXEL = 2, WBOX = 16, HBOX = 16;
-    int renderW = LW * PIXEL, renderH = LH * PIXEL;
+static int runInteractive(ViewCfg cfg) {
+    const int PIXEL = cfg.scale;
+    const int gw = std::max(1, (cfg.winW / PIXEL) / CHUNK);
+    const int gh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
+    const int WBOX = 2 * gw, HBOX = 2 * gh;
+    const int LW = gw * CHUNK, LH = gh * CHUNK;
+    const int renderW = LW * PIXEL, renderH = LH * PIXEL;
     std::string dir = "/tmp/sandsim_world_vk_interactive";
     std::filesystem::remove_all(dir);
-    VkWorld world(WBOX, HBOX, dir);
+    VkWorld world(gw, gh, WBOX, HBOX, dir);
     world.generateAllToDisk();
     int camCx = 0, camCy = 0;
     world.setWindow(camCx, camCy);
@@ -511,9 +541,9 @@ static int runInteractive() {
                 case SDLK_2: current = SAND;  break; case SDLK_3: current = WATER; break;
                 case SDLK_4: current = GAS;   break;
                 case SDLK_LEFT:  if (camCx > 0) camCx--; break;
-                case SDLK_RIGHT: if (camCx < WBOX - GW) camCx++; break;
+                case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
                 case SDLK_UP:    if (camCy > 0) camCy--; break;
-                case SDLK_DOWN:  if (camCy < HBOX - GH) camCy++; break;
+                case SDLK_DOWN:  if (camCy < HBOX - gh) camCy++; break;
             }
         }
         world.setWindow(camCx, camCy);
@@ -547,7 +577,7 @@ int main(int argc, char** argv) {
             int hbox  = (argc > 4) ? std::atoi(argv[4]) : 6;
             return runBench(steps, wbox, hbox);
         }
-        return runInteractive();
+        return runInteractive(parseView(argc, argv));
     } catch (const std::exception& ex) {
         fprintf(stderr, "Error: %s\n", ex.what());
         return 1;

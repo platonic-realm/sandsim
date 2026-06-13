@@ -8,12 +8,17 @@
  * backends. The SIMD width is chosen at runtime: AVX2 (32 lanes) if the CPU has
  * it, otherwise SSE4.1 (16 lanes) -- see world_step.h. Both give the same result.
  *
+ * The live window is sized at runtime: the interactive view renders each cell as
+ * a "virtual pixel" of SCALE x SCALE screen pixels, so the resident region is
+ * (winW/SCALE) x (winH/SCALE) cells. Window resolution and scale are configurable
+ * (--res WxH / --scale N, or SANDSIM_RES / SANDSIM_SCALE; default 1024x768, 2x2).
+ *
  * Modes:
  *   (default)                 SDL2 window; arrows pan the camera by a chunk,
  *                             number keys pick a material, left mouse paints.
- *   --bench [steps] [wch] [hch]   headless streaming benchmark (whole-world
- *                             checksum + conserved per-material counts).
- *   --ppm <file> [steps]      render a snapshot.
+ *   --bench [steps] [wch] [hch]   headless streaming benchmark (fixed 4x4 live
+ *                             window; whole-world checksum + conserved counts).
+ *   --ppm <file> [steps]      render a snapshot of one live window.
  */
 
 #include "materials.h"   // Material enum
@@ -25,6 +30,7 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <algorithm>
 #include <fstream>
 #include <filesystem>
 #include <SDL2/SDL.h>
@@ -34,14 +40,24 @@ static const uint32_t kColors[MATERIAL_COUNT] = {
     0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu,
 };
 
-static constexpr int CHUNK = 64;
-static constexpr int GW = 4, GH = 4;             // live window: 4x4 chunks
-static constexpr int LW = GW * CHUNK, LH = GH * CHUNK;   // 256 x 256 cells
-static constexpr int PAD = 16;                   // WALL border / SIMD halo
-static constexpr int SW = LW + 2 * PAD;          // padded stride
-static constexpr int SH = LH + 2 * PAD;          // padded height
-static constexpr int X0 = PAD, X1 = PAD + LW;    // interior column range
-static constexpr int Y0 = PAD, Y1 = PAD + LH;    // interior row range
+static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
+static constexpr int PAD = 16;     // WALL border / SIMD halo
+
+// Window resolution + virtual-pixel scale for the interactive view.
+struct ViewCfg { int winW = 1024, winH = 768, scale = 2; };
+static ViewCfg parseView(int argc, char* argv[]) {
+    ViewCfg c;
+    if (const char* e = getenv("SANDSIM_RES"))   std::sscanf(e, "%dx%d", &c.winW, &c.winH);
+    if (const char* e = getenv("SANDSIM_SCALE")) c.scale = std::atoi(e);
+    for (int i = 1; i < argc; ++i) {
+        if (!std::strcmp(argv[i], "--res") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &c.winW, &c.winH);
+        else if (!std::strcmp(argv[i], "--scale") && i + 1 < argc) c.scale = std::atoi(argv[++i]);
+    }
+    if (c.scale < 1) c.scale = 1;
+    if (c.winW < CHUNK * c.scale) c.winW = CHUNK * c.scale;
+    if (c.winH < CHUNK * c.scale) c.winH = CHUNK * c.scale;
+    return c;
+}
 
 static inline uint32_t hashCoord(int gx, int gy) {
     uint32_t h = (uint32_t)gx * 374761393u + (uint32_t)gy * 668265263u;
@@ -59,12 +75,20 @@ static inline uint8_t seedMat(int gx, int gy) {
 
 class SimdWorld {
 public:
-    SimdWorld(int wbox, int hbox, std::string dir)
-        : wbox(wbox), hbox(hbox), dir(std::move(dir)) {
+    // gw x gh chunks resident (the live window); the world is wbox x hbox chunks.
+    SimdWorld(int gw, int gh, int wbox, int hbox, std::string dir)
+        : gw(gw), gh(gh), LW(gw * CHUNK), LH(gh * CHUNK), SW(LW + 2 * PAD), SH(LH + 2 * PAD),
+          X0(PAD), X1(PAD + LW), Y0(PAD), Y1(PAD + LH),
+          wbox(wbox), hbox(hbox), dir(std::move(dir)) {
         std::filesystem::create_directories(this->dir);
         grid.assign((size_t)SW * SH, WALL);     // everything starts solid (border stays WALL)
         moved.assign((size_t)SW * SH, 0);
     }
+
+    int winChunksW() const { return gw; }
+    int winChunksH() const { return gh; }
+    int cellsW() const { return LW; }
+    int cellsH() const { return LH; }
 
     void generateAllToDisk() {
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
@@ -78,15 +102,15 @@ public:
         if (windowValid && camCx == winCx && camCy == winCy) return;
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         if (windowValid)
-            for (int gy = 0; gy < GH; ++gy)
-                for (int gx = 0; gx < GW; ++gx) { extractChunk(gx, gy, buf); writeBox(winCx + gx, winCy + gy, buf); }
-        for (int gy = 0; gy < GH; ++gy)
-            for (int gx = 0; gx < GW; ++gx) {
-                if (!readBox(camCx + gx, camCy + gy, buf)) genBox(camCx + gx, camCy + gy, buf);
-                injectChunk(gx, gy, buf);
+            for (int y = 0; y < gh; ++y)
+                for (int x = 0; x < gw; ++x) { extractChunk(x, y, buf); writeBox(winCx + x, winCy + y, buf); }
+        for (int y = 0; y < gh; ++y)
+            for (int x = 0; x < gw; ++x) {
+                if (!readBox(camCx + x, camCy + y, buf)) genBox(camCx + x, camCy + y, buf);
+                injectChunk(x, y, buf);
             }
         winCx = camCx; winCy = camCy; windowValid = true;
-        residentMax = GW * GH;
+        residentMax = gw * gh;
     }
 
     void step() {
@@ -110,7 +134,7 @@ public:
         uint64_t c = 14695981039346656037ull;
         for (int cy = 0; cy < hbox; ++cy)
             for (int cx = 0; cx < wbox; ++cx) {
-                bool inWin = windowValid && cx >= winCx && cx < winCx + GW && cy >= winCy && cy < winCy + GH;
+                bool inWin = windowValid && cx >= winCx && cx < winCx + gw && cy >= winCy && cy < winCy + gh;
                 const uint8_t* data;
                 if (inWin) { extractChunk(cx - winCx, cy - winCy, buf); data = buf.data(); }
                 else { readBox(cx, cy, buf); data = buf.data(); }
@@ -124,6 +148,10 @@ public:
     long long diskReads() const { return nReads; }
 
 private:
+    const int gw, gh;                 // live window in chunks
+    const int LW, LH;                 // live window in cells
+    const int SW, SH;                 // padded stride / height
+    const int X0, X1, Y0, Y1;         // interior cell range
     int wbox, hbox;
     std::string dir;
     std::vector<uint8_t> grid;   // padded contiguous live region
@@ -135,15 +163,15 @@ private:
     long long nWrites = 0, nReads = 0;
 
     // --- chunk <-> interior, disk -------------------------------------------
-    void extractChunk(int gx, int gy, std::vector<uint8_t>& out) const {
+    void extractChunk(int cgx, int cgy, std::vector<uint8_t>& out) const {
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx)
-                out[ly * CHUNK + lx] = grid[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)];
+                out[ly * CHUNK + lx] = grid[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)];
     }
-    void injectChunk(int gx, int gy, const std::vector<uint8_t>& in) {
+    void injectChunk(int cgx, int cgy, const std::vector<uint8_t>& in) {
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx)
-                grid[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = in[ly * CHUNK + lx];
+                grid[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = in[ly * CHUNK + lx];
     }
     void genBox(int cx, int cy, std::vector<uint8_t>& buf) {
         for (int y = 0; y < CHUNK; ++y)
@@ -168,18 +196,19 @@ private:
 
 // ---------------------------------------------------------------------------
 static int runBench(int steps, int wbox, int hbox) {
-    if (wbox < GW) wbox = GW;
-    if (hbox < GH) hbox = GH;
+    const int gw = 4, gh = 4;   // fixed live window for the bit-identical reference
+    if (wbox < gw) wbox = gw;
+    if (hbox < gh) hbox = gh;
     std::string dir = "/tmp/sandsim_world_simd_" + std::to_string(steps) + "_" +
                       std::to_string(wbox) + "x" + std::to_string(hbox);
     std::filesystem::remove_all(dir);
-    SimdWorld world(wbox, hbox, dir);
+    SimdWorld world(gw, gh, wbox, hbox, dir);
     world.generateAllToDisk();
 
     uint64_t startCk, startCnt[MATERIAL_COUNT];
     world.summary(startCk, startCnt);
 
-    int nposX = wbox - GW + 1, nposY = hbox - GH + 1, nWin = nposX * nposY;
+    int nposX = wbox - gw + 1, nposY = hbox - gh + 1, nWin = nposX * nposY;
     auto start = std::chrono::steady_clock::now();
     for (int s = 0; s < steps; ++s) {
         int visit = (int)((long long)s * nWin / steps);
@@ -195,13 +224,13 @@ static int runBench(int steps, int wbox, int hbox) {
     bool conserved = true;
     for (int i = WALL; i <= GAS; ++i) if (cnt[i] != startCnt[i]) conserved = false;
     double ms = std::chrono::duration<double, std::milli>(end - start).count();
-    double cells = (double)LW * LH * steps;
+    double cells = (double)world.cellsW() * world.cellsH() * steps;
     double mc = (ms > 0.0) ? cells / (ms / 1000.0) / 1e6 : 0.0;
     printf("RESULT impl=cpp_%s rule=world window=%dx%d wbox=%d hbox=%d steps=%d "
            "elapsed_ms=%.3f mcells_per_s=%.2f checksum=%016llx "
            "empty=%llu wall=%llu sand=%llu water=%llu gas=%llu "
            "resident_max=%d disk_writes=%lld disk_reads=%lld conserved=%s\n",
-           simdName(), GW, GH, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
+           simdName(), gw, gh, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
            (unsigned long long)cnt[EMPTY], (unsigned long long)cnt[WALL],
            (unsigned long long)cnt[SAND], (unsigned long long)cnt[WATER], (unsigned long long)cnt[GAS],
            world.residentMaxCount(), world.diskWrites(), world.diskReads(), conserved ? "yes" : "no");
@@ -210,12 +239,14 @@ static int runBench(int steps, int wbox, int hbox) {
 }
 
 static int runPPM(const char* pathOut, int steps) {
+    const int gw = 4, gh = 4;
     std::string dir = "/tmp/sandsim_world_simd_ppm";
     std::filesystem::remove_all(dir);
-    SimdWorld world(GW, GH, dir);           // world == one live window
+    SimdWorld world(gw, gh, gw, gh, dir);   // world == one live window
     world.generateAllToDisk();
     world.setWindow(0, 0);
     for (int s = 0; s < steps; ++s) world.step();
+    int LW = world.cellsW(), LH = world.cellsH();
     FILE* f = fopen(pathOut, "wb");
     if (!f) return 1;
     fprintf(f, "P6\n%d %d\n255\n", LW, LH);
@@ -233,13 +264,16 @@ static int runPPM(const char* pathOut, int steps) {
     return 0;
 }
 
-static int runInteractive() {
-    static const int PIXEL = 2;
-    static const int WBOX = 16, HBOX = 16;
-    int renderW = LW * PIXEL, renderH = LH * PIXEL;
-    std::string dir = "/tmp/sandsim_world_simd_interactive";
-    std::filesystem::remove_all(dir);
-    SimdWorld world(WBOX, HBOX, dir);
+static int runInteractive(ViewCfg cfg) {
+    const int PIXEL = cfg.scale;
+    const int gw = std::max(1, (cfg.winW / PIXEL) / CHUNK);
+    const int gh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
+    const int WBOX = 2 * gw, HBOX = 2 * gh;            // room to pan around the world
+    SimdWorld world(gw, gh, WBOX, HBOX, "/tmp/sandsim_world_simd_interactive");
+    const int LW = world.cellsW(), LH = world.cellsH();
+    const int renderW = LW * PIXEL, renderH = LH * PIXEL;
+    std::filesystem::remove_all("/tmp/sandsim_world_simd_interactive");
+    std::filesystem::create_directories("/tmp/sandsim_world_simd_interactive");
     world.generateAllToDisk();
     int camCx = 0, camCy = 0;
     world.setWindow(camCx, camCy);
@@ -271,9 +305,9 @@ static int runInteractive() {
                     case SDLK_3: current = WATER; break;
                     case SDLK_4: current = GAS;   break;
                     case SDLK_LEFT:  if (camCx > 0) camCx--; break;
-                    case SDLK_RIGHT: if (camCx < WBOX - GW) camCx++; break;
+                    case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
                     case SDLK_UP:    if (camCy > 0) camCy--; break;
-                    case SDLK_DOWN:  if (camCy < HBOX - GH) camCy++; break;
+                    case SDLK_DOWN:  if (camCy < HBOX - gh) camCy++; break;
                 }
             }
         }
@@ -301,7 +335,7 @@ static int runInteractive() {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
-    std::filesystem::remove_all(dir);
+    std::filesystem::remove_all("/tmp/sandsim_world_simd_interactive");
     return 0;
 }
 
@@ -317,5 +351,5 @@ int main(int argc, char* argv[]) {
         int steps = (argc > 3) ? std::atoi(argv[3]) : 400;
         return runPPM(argv[2], steps);
     }
-    return runInteractive();
+    return runInteractive(parseView(argc, argv));
 }

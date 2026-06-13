@@ -16,9 +16,14 @@ purely performance. Set `SANDSIM_SIMD=sse|avx` to force one.
 ```sh
 make
 ./sandsim_world                       # interactive (arrows pan, number keys paint)
+./sandsim_world --res 1280x800 --scale 3   # window resolution + virtual-pixel size (default 1024x768, 2x2)
 ./sandsim_world --bench 600 6 6       # headless: whole-world checksum + conserved counts
 ./sandsim_world --ppm out.ppm 500     # render a snapshot
 ```
+
+The interactive view renders each cell as a `scale × scale` virtual pixel; the
+resident window is `winW/scale × winH/scale` cells. `--res`/`--scale` (or
+`SANDSIM_RES`/`SANDSIM_SCALE`) work the same on all three backends.
 
 The same `simd_core.h` rule is implemented by the GPU compute shaders, so the
 C++, OpenGL, and Vulkan worlds produce a bit-identical world from the same seed.

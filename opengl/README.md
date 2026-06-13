@@ -23,8 +23,9 @@ readback). Shaders are embedded in
 
 ```sh
 make
-./sandsim_world_gl                    # interactive: arrows pan, number keys paint
-./sandsim_world_gl --bench 600 6 6    # headless streaming benchmark (one RESULT line)
+./sandsim_world_gl                          # interactive: arrows pan, number keys paint
+./sandsim_world_gl --res 1280x800 --scale 3 # window resolution + virtual-pixel size (default 1024x768, 2x2)
+./sandsim_world_gl --bench 600 6 6          # headless streaming benchmark (one RESULT line)
 ```
 
 `--bench` creates a hidden context, so it still needs a reachable GPU. GLEW

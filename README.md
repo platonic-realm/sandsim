@@ -33,10 +33,17 @@ massively-parallel GPU backends reproduce the CPU result **bit-for-bit**. See
 make            # build all platforms
 make cpp        # just the C++ SIMD world
 ./cpp/sandsim_world                       # interactive: arrows pan, number keys paint
+./cpp/sandsim_world --res 1280x800 --scale 3   # window resolution + virtual-pixel size
 ./cpp/sandsim_world --bench 600 6 6       # headless: whole-world checksum + conserved counts
 SANDSIM_SIMD=sse ./cpp/sandsim_world --bench 600 6 6   # force SSE (default: widest the CPU has)
 make benchmark  # build all three, verify identical output, print a throughput table
 ```
+
+The interactive view renders each cell as a **virtual pixel** of `scale × scale`
+screen pixels, so the resident window is `winW/scale × winH/scale` cells. Window
+resolution and scale are configurable the same way on all three backends —
+`--res WxH` / `--scale N`, or `SANDSIM_RES` / `SANDSIM_SCALE` (default
+**1024×768, 2×2**).
 
 Dependencies: a C++17 compiler + SDL2; GLEW + GLFW (OpenGL); the Vulkan SDK +
 `glslc` (Vulkan).
