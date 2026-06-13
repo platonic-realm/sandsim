@@ -16,34 +16,38 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;  // SAND -> L,A,W,O,G,F,S,E
-    if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;         // LAVA -> A,W,O,G,F,S,E
-    if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==0u;                // ACID -> W,O,G,F,S,E
-    if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==0u;                        // WATER -> O,G,F,S,E
-    if (s == 5u) return t==4u||t==6u||t==8u||t==0u;                               // OIL  -> G,F,S,E
-    if (s == 6u) return t==0u;                                                   // FIRE -> E
-    if (s == 8u) return t==0u;                                                   // STEAM -> E (rises)
-    if (s == 4u) return t==0u;                                                   // GAS  -> E
+    if (s == 2u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND -> +Sm
+    if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;         // LAVA -> +Sm
+    if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                // ACID -> +Sm
+    if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                        // WATER -> +Sm
+    if (s == 5u) return t==4u||t==6u||t==8u||t==12u||t==0u;                               // OIL  -> +Sm
+    if (s == 6u) return t==0u;                                                            // FIRE -> E
+    if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
+    if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
+    if (s == 4u) return t==0u;                                                            // GAS  -> E
     return false;
 }
 bool eligible(uint s) {
     if (pc.grp == 0) return s==2u||s==7u||s==11u||s==3u||s==5u;      // DOWN: sand,lava,acid,water,oil
-    if (pc.grp == 1) return s==4u||s==6u||s==8u;                     // GAS/FIRE/STEAM rise
-    return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u;          // HORIZ: lava,acid,water,oil,gas,fire,steam
+    if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u;             // GAS/FIRE/STEAM/SMOKE rise
+    return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
     int y = pc.Y0 + int(gl_GlobalInvocationID.y);
     if (x >= pc.X1 || y >= pc.Y1) return;
-    if (pc.type == 3) {                                    // fire burn-out (per-cell, time-varying)
-        int i = y * pc.SW + x;
-        if (cells[i] == 6u) {
+    if (pc.type == 3) {                                   // per-cell time-varying transforms
+        int i = y * pc.SW + x; uint c = cells[i];
+        if (c == 6u) {
             uint h = (uint(x) * 167u + uint(y) * 101u + uint(pc.frame) * 131u) & 0xFFu;
-            if (h < 12u) cells[i] = 0u;                   // fire -> empty
-        } else if (cells[i] == 8u) {
+            if (h < 12u) cells[i] = (h < 4u) ? 12u : 0u;  // fire -> smoke / empty
+        } else if (c == 12u) {
+            uint h = (uint(x) * 73u + uint(y) * 179u + uint(pc.frame) * 149u) & 0xFFu;
+            if (h < 16u) cells[i] = 0u;                   // smoke fades
+        } else if (c == 8u) {
             uint h = (uint(x) * 193u + uint(y) * 97u + uint(pc.frame) * 111u) & 0xFFu;
             if (h < 5u) cells[i] = 3u;                    // steam -> water
-        } else if (cells[i] == 11u) {
+        } else if (c == 11u) {
             uint h = (uint(x) * 211u + uint(y) * 137u + uint(pc.frame) * 59u) & 0xFFu;
             if (h < 3u) cells[i] = 0u;                    // acid evaporates
         }

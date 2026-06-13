@@ -11,9 +11,11 @@
 // blocks like WALL, but fire/lava set it alight (slowly). PLANT is a flammable
 // solid too, but it GROWS into empty space wherever it meets WATER. ACID is a
 // heavy corrosive liquid that dissolves the solids it touches and evaporates.
+// SMOKE is the lightest gas: some of the flame that burns out becomes smoke,
+// which rises and fades away.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
-    STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, MATERIAL_COUNT = 12
+    STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, MATERIAL_COUNT = 13
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -21,11 +23,17 @@ enum Material : uint8_t {
 // bit-identical on CPU SIMD and the GPU compute backends (which compute the same
 // hash). ~FIRE_DECAY/256 of the flame winks out each frame.
 static constexpr uint32_t FIRE_DECAY = 12;     // of 256 -> avg flame life ~21 frames
+static constexpr uint32_t SMOKE_FROM_FIRE = 4; // of those burn-outs, this many leave smoke
+static constexpr uint32_t SMOKE_FADE = 16;     // of 256 -> smoke wisps last ~16 frames
 static constexpr uint32_t STEAM_CONDENSE = 5;  // of 256 -> steam lasts ~50 frames, rises first
 
-inline bool fireBurnsOut(int x, int y, uint32_t frame) {
-    uint32_t h = ((uint32_t)x * 167u + (uint32_t)y * 101u + frame * 131u) & 0xFFu;
-    return h < FIRE_DECAY;
+inline uint32_t fireHash(int x, int y, uint32_t frame) {
+    return ((uint32_t)x * 167u + (uint32_t)y * 101u + frame * 131u) & 0xFFu;
+}
+inline bool fireBurnsOut(int x, int y, uint32_t frame) { return fireHash(x, y, frame) < FIRE_DECAY; }
+inline bool smokeFades(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 73u + (uint32_t)y * 179u + frame * 149u) & 0xFFu;
+    return h < SMOKE_FADE;
 }
 inline bool steamCondenses(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 193u + (uint32_t)y * 97u + frame * 111u) & 0xFFu;
@@ -64,7 +72,11 @@ inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uin
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
-            if (c == FIRE && fireBurnsOut(x, y, frame)) grid[i] = EMPTY;
+            if (c == FIRE) {
+                uint32_t h = fireHash(x, y, frame);
+                if (h < FIRE_DECAY) grid[i] = (h < SMOKE_FROM_FIRE) ? SMOKE : EMPTY;  // some flame -> smoke
+            }
+            else if (c == SMOKE && smokeFades(x, y, frame)) grid[i] = EMPTY;
             else if (c == STEAM && steamCondenses(x, y, frame)) grid[i] = WATER;
             else if (c == ACID && acidEvaporates(x, y, frame)) grid[i] = EMPTY;
         }

@@ -17,15 +17,16 @@ builds them, asserts the checksums match, and prints a throughput table.
 ## The simulation
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
-`FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`. Movement is a density swap —
-heaviest to lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`,
-with `STEAM` the lightest — so sand sinks through lava, acid sinks below water,
-oil floats on water, and gas/fire/steam rise. `WALL`, `WOOD`, and `PLANT` are
-solids that don't move. On top of movement there are reactions, all
-order-independent and bit-identical on CPU and GPU:
+`FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`. Movement is a density
+swap — heaviest to lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS >
+FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through lava, acid sinks
+below water, oil floats on water, and gas/fire/steam/smoke rise. `WALL`, `WOOD`,
+and `PLANT` are solids that don't move. On top of movement there are reactions,
+all order-independent and bit-identical on CPU and GPU:
 
 - `FIRE` rises like flame and **burns out over time** (a deterministic per-cell,
-  frame-varying transform — the same hash on CPU and GPU).
+  frame-varying transform — the same hash on CPU and GPU), some of it wisping into
+  `SMOKE` that rises and then fades, so fires billow.
 - `FIRE`/`LAVA` **ignite `OIL`** they touch: dab fire (or pour lava) into an oil
   pool and it combusts, the flame front creeping through the fuel one layer per
   frame before burning away.
@@ -45,7 +46,7 @@ order-independent and bit-identical on CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke); `[` / `]` size the brush. The palette
 is the same on all three backends, and every rule — movement, the time-varying
 transforms, and the neighbour reactions — is bit-identical across CPU SIMD,
 OpenGL, and Vulkan.
