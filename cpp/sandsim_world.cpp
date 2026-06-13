@@ -239,6 +239,33 @@ public:
         checksum = c;
     }
 
+    // Render the whole world (resident + on-disk chunks) as a PPM image.
+    void writePPM(const char* path) {
+        FILE* f = fopen(path, "wb");
+        if (!f) { fprintf(stderr, "cannot open %s\n", path); return; }
+        fprintf(f, "P6\n%d %d\n255\n", wcells, hcells);
+        std::vector<uint8_t> row((size_t)wcells * 3);
+        std::vector<uint8_t> buf(CHUNK * CHUNK);
+        for (int cy = 0; cy < hchunks; ++cy)
+            for (int ly = 0; ly < CHUNK; ++ly) {
+                for (int cx = 0; cx < wchunks; ++cx) {
+                    const uint8_t* cells;
+                    Chunk* res = residentAt(cx, cy);
+                    if (res) cells = res->cells.data();
+                    else { readChunkRaw(cx, cy, buf); cells = buf.data(); }
+                    for (int lx = 0; lx < CHUNK; ++lx) {
+                        uint32_t c = kColors[cells[ly * CHUNK + lx]];
+                        size_t px = (size_t)(cx * CHUNK + lx) * 3;
+                        row[px + 0] = (c >> 16) & 0xFF;
+                        row[px + 1] = (c >> 8) & 0xFF;
+                        row[px + 2] = c & 0xFF;
+                    }
+                }
+                fwrite(row.data(), 1, row.size(), f);
+            }
+        fclose(f);
+    }
+
     int residentCount() const { return (int)resident.size(); }
     int residentMaxCount() const { return residentMax; }
     long long diskWrites() const { return nDiskWrites; }
@@ -366,6 +393,28 @@ static int runBench(int steps, int wch, int hch) {
     return conserved ? 0 : 2;
 }
 
+// Run the deterministic streaming sim, then write the whole world as a PPM.
+static int runPPM(const char* path, int steps, int wch, int hch) {
+    std::string dir = "/tmp/sandsim_world_cpp_ppm";
+    std::filesystem::remove_all(dir);
+    World world(wch, hch, dir, /*finite=*/true);
+    world.generateAllToDisk();
+    int cells = wch * hch;
+    for (int s = 0; s < steps; ++s) {
+        int visit = (int)((long long)s * cells / steps);
+        if (visit >= cells) visit = cells - 1;
+        int row = visit / wch, col = visit % wch;
+        int camCx = (row % 2 == 0) ? col : (wch - 1 - col);
+        world.streamAround(camCx, row, 1);
+        world.step();
+    }
+    world.writePPM(path);
+    printf("wrote %s (%dx%d cells, %d steps, %dx%d chunks)\n",
+           path, wch * CHUNK, hch * CHUNK, steps, wch, hch);
+    std::filesystem::remove_all(dir);
+    return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Interactive: a large streamed world viewed through a moving camera.
 // ---------------------------------------------------------------------------
@@ -460,6 +509,12 @@ int main(int argc, char* argv[]) {
         int wch   = (argc > 3) ? std::atoi(argv[3]) : 6;
         int hch   = (argc > 4) ? std::atoi(argv[4]) : 6;
         return runBench(steps, wch, hch);
+    }
+    if (argc > 2 && std::strcmp(argv[1], "--ppm") == 0) {
+        int steps = (argc > 3) ? std::atoi(argv[3]) : 600;
+        int wch   = (argc > 4) ? std::atoi(argv[4]) : 6;
+        int hch   = (argc > 5) ? std::atoi(argv[5]) : 6;
+        return runPPM(argv[2], steps, wch, hch);
     }
     return runInteractive();
 }

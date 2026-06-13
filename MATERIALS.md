@@ -65,6 +65,9 @@ python3 python/sandsim_materials.py
 # Headless benchmark / cross-check
 make bench-materials                       # runs all five and verifies they agree
 cpp/sandsim_materials --bench 1000 400 300 # one implementation
+
+# Render a snapshot to an image (no display needed):
+cpp/sandsim_materials --ppm out.ppm 300 200 150 && magick out.ppm out.png
 ```
 
 ### Controls (interactive)

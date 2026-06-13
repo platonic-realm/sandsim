@@ -107,4 +107,7 @@ resident at once.
 make world            # build the chunked-world implementations
 cpp/sandsim_world     # interactive: WASD/arrows pan the camera, number keys paint
 make bench-world      # deterministic cross-language streaming cross-check
+
+# render the whole streamed world (resident + on-disk chunks) to an image:
+cpp/sandsim_world --ppm world.ppm 600 6 6 && magick world.ppm world.png
 ```

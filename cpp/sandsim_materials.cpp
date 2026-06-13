@@ -200,6 +200,34 @@ static int runBench(int steps, int width, int height) {
 }
 
 // ---------------------------------------------------------------------------
+// Headless image snapshot (PPM): run the deterministic scene and write one
+// pixel per cell, so the physics can be inspected without a display.
+// ---------------------------------------------------------------------------
+static void writePPM(const char* path, const std::vector<uint8_t>& grid, int w, int h) {
+    FILE* f = fopen(path, "wb");
+    if (!f) { fprintf(stderr, "cannot open %s\n", path); return; }
+    fprintf(f, "P6\n%d %d\n255\n", w, h);
+    std::vector<uint8_t> rgb((size_t)w * h * 3);
+    for (size_t i = 0; i < (size_t)w * h; ++i) {
+        uint32_t c = kColors[grid[i]];
+        rgb[i * 3 + 0] = (c >> 16) & 0xFF;
+        rgb[i * 3 + 1] = (c >> 8) & 0xFF;
+        rgb[i * 3 + 2] = c & 0xFF;
+    }
+    fwrite(rgb.data(), 1, rgb.size(), f);
+    fclose(f);
+}
+
+static int runPPM(const char* path, int steps, int width, int height) {
+    MaterialSim sim(width, height);
+    sim.seedBenchScene();
+    for (int s = 0; s < steps; ++s) sim.update((uint32_t)s);
+    writePPM(path, sim.cells(), width, height);
+    printf("wrote %s (%dx%d, %d steps)\n", path, width, height, steps);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Interactive mode.
 // ---------------------------------------------------------------------------
 static const char* materialName(uint8_t m) {
@@ -288,6 +316,12 @@ int main(int argc, char* argv[]) {
         int width  = (argc > 3) ? std::atoi(argv[3]) : 400;
         int height = (argc > 4) ? std::atoi(argv[4]) : 300;
         return runBench(steps, width, height);
+    }
+    if (argc > 2 && std::strcmp(argv[1], "--ppm") == 0) {
+        int steps  = (argc > 3) ? std::atoi(argv[3]) : 300;
+        int width  = (argc > 4) ? std::atoi(argv[4]) : 200;
+        int height = (argc > 5) ? std::atoi(argv[5]) : 150;
+        return runPPM(argv[2], steps, width, height);
     }
     return runInteractive(400, 300);
 }
