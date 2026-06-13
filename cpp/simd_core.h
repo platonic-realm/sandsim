@@ -79,25 +79,29 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
     using V = typename Ops::V;
     const int W = Ops::W;
     const V vE = Ops::zero(), vS = Ops::set1(SAND), vW = Ops::set1(WATER),
-            vG = Ops::set1(GAS), vO = Ops::set1(OIL), vF = Ops::set1(FIRE);
+            vG = Ops::set1(GAS), vO = Ops::set1(OIL), vF = Ops::set1(FIRE), vL = Ops::set1(LAVA);
 
     // move mask: which lanes hold an eligible mover whose target is enterable and
-    // where neither cell has already moved this frame.
-    //   SAND enters E,W,O,G,F   WATER enters E,O,G,F   OIL enters E,G,F
-    //   GAS enters E   FIRE enters E (rises like gas; sand/water/oil fall through it)
+    // where neither cell has already moved this frame. Density SAND>LAVA>WATER>
+    // OIL>air>GAS>FIRE: a mover can swap into anything strictly lighter.
+    //   SAND->L,W,O,G,F,E   LAVA->W,O,G,F,E   WATER->O,G,F,E   OIL->G,F,E
+    //   GAS->E   FIRE->E (gas/fire rise; the rest fall)
     auto mask = [&](V cur, V tgt, V mc, V mt, int grp) -> V {
         V isS = Ops::eq(cur, vS), isW = Ops::eq(cur, vW), isG = Ops::eq(cur, vG),
-          isO = Ops::eq(cur, vO), isF = Ops::eq(cur, vF);
+          isO = Ops::eq(cur, vO), isF = Ops::eq(cur, vF), isL = Ops::eq(cur, vL);
         V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG),
-          tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF);
+          tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF), tL = Ops::eq(tgt, vL);
+        V belowSand  = Ops::Or(Ops::Or(tL, tW), Ops::Or(tO, Ops::Or(tG, Ops::Or(tF, tE)))); // L,W,O,G,F,E
+        V belowLava  = Ops::Or(Ops::Or(tW, tO), Ops::Or(tG, Ops::Or(tF, tE)));              // W,O,G,F,E
+        V belowWater = Ops::Or(tO, Ops::Or(tG, Ops::Or(tF, tE)));                           // O,G,F,E
+        V belowOil   = Ops::Or(tG, Ops::Or(tF, tE));                                        // G,F,E
         V can = Ops::Or(
-            Ops::Or(Ops::And(isS, Ops::Or(Ops::Or(tE, tW), Ops::Or(tO, Ops::Or(tG, tF)))),
-                    Ops::And(isW, Ops::Or(tE, Ops::Or(tO, Ops::Or(tG, tF))))),
-            Ops::Or(Ops::And(isO, Ops::Or(tE, Ops::Or(tG, tF))),
+            Ops::Or(Ops::And(isS, belowSand), Ops::And(isL, belowLava)),
+            Ops::Or(Ops::Or(Ops::And(isW, belowWater), Ops::And(isO, belowOil)),
                     Ops::Or(Ops::And(isF, tE), Ops::And(isG, tE))));
-        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(isS, isW), isO)
+        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(isS, isL), Ops::Or(isW, isO))
                : (grp == SG_GAS)  ? Ops::Or(isG, isF)
-                                  : Ops::Or(Ops::Or(isW, isO), Ops::Or(isG, isF));
+                                  : Ops::Or(Ops::Or(isL, isW), Ops::Or(isO, Ops::Or(isG, isF)));
         return Ops::And(Ops::And(elig, can),
                         Ops::And(Ops::eq(mc, vE), Ops::eq(mt, vE)));
     };

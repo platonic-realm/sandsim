@@ -43,19 +43,23 @@ Sources:
 The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
-- **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`. Movement
-  is a pure density swap (heavy→light: `SAND > WATER > OIL > air > GAS > FIRE`), so
-  oil floats on water and gas/fire rise. `FIRE` also **burns out** via a separate
-  per-cell pass that is a pure function of `(x, y, frame)` — no neighbour reads —
-  so it stays order-independent and the GPU computes the identical hash. `FIRE`
-  **spreads through `OIL`**: a neighbour-based rule that would normally be
-  order-dependent (CPU-sequential ≠ GPU-parallel) is made order-independent by
-  doing it in **two snapshot passes through the `moved` scratch buffer** — pass 1
-  reads the grid and records which oil cells touch fire, pass 2 applies them — so
-  each pass reads one buffer and writes another. New materials/rules are additive:
-  they don't appear in the `--bench` seed, so the cross-backend reference
-  checksums are unchanged (fire + ignition were verified bit-identical by
-  temporarily seeding them across all three backends).
+- **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`.
+  Movement is a pure density swap (heavy→light:
+  `SAND > LAVA > WATER > OIL > air > GAS > FIRE`). On top of it sit three
+  reactions, each kept order-independent so the GPU reproduces them exactly:
+  - **burn-out** — `FIRE` vanishing is a per-cell pass that is a pure function of
+    `(x, y, frame)`, no neighbour reads, so the GPU computes the identical hash.
+  - **ignition** (`FIRE`/`LAVA` → `OIL`) and **lava+water → stone** are
+    neighbour-based, which is normally order-*dependent* (CPU-sequential ≠
+    GPU-parallel). Each is made order-independent with **two snapshot passes
+    through the `moved` scratch buffer** (free after the movement step): pass 1
+    reads the grid and marks the cells to transform, pass 2 applies the marks —
+    so every pass reads one buffer and writes another.
+
+  All reaction passes are gated by a per-world flag set when fire/lava enters, so
+  fire-free worlds (like the `--bench` seed) skip them and the cross-backend
+  reference checksums are unchanged. Each rule was verified bit-identical by
+  temporarily seeding the reactive materials across all three backends.
 - **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
   `wbox × hbox` chunks; chunks live on disk and are generated (from a
   deterministic seed) the first time they're needed.

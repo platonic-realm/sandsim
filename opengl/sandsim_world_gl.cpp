@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, MATERIAL_COUNT = 7 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, MATERIAL_COUNT = 8 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -97,18 +97,19 @@ layout(std430, binding = 1) buffer Moved { uint moved[]; };
 uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
-    if (t == 1u) return false;                              // WALL
-    if (s == 2u) return t==0u||t==3u||t==4u||t==5u||t==6u;  // SAND  -> E,W,G,O,F
-    if (s == 3u) return t==0u||t==4u||t==5u||t==6u;         // WATER -> E,G,O,F
-    if (s == 5u) return t==0u||t==4u||t==6u;                // OIL   -> E,G,F (floats on water)
-    if (s == 6u) return t==0u;                              // FIRE  -> E (rises like flame)
-    if (s == 4u) return t==0u;                              // GAS   -> E
+    if (t == 1u) return false;                                       // WALL
+    if (s == 2u) return t==7u||t==3u||t==5u||t==4u||t==6u||t==0u;     // SAND  -> L,W,O,G,F,E
+    if (s == 7u) return t==3u||t==5u||t==4u||t==6u||t==0u;            // LAVA  -> W,O,G,F,E
+    if (s == 3u) return t==5u||t==4u||t==6u||t==0u;                   // WATER -> O,G,F,E
+    if (s == 5u) return t==4u||t==6u||t==0u;                          // OIL   -> G,F,E
+    if (s == 6u) return t==0u;                                        // FIRE  -> E
+    if (s == 4u) return t==0u;                                        // GAS   -> E
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==3u||s==5u;              // DOWN: sand,water,oil
-    if (uGrp == 1) return s==4u||s==6u;                     // GAS/FIRE rise
-    return s==3u||s==4u||s==5u||s==6u;                       // HORIZ: water,oil,gas,fire
+    if (uGrp == 0) return s==2u||s==7u||s==3u||s==5u;                // DOWN: sand,lava,water,oil
+    if (uGrp == 1) return s==4u||s==6u;                              // GAS/FIRE rise
+    return s==7u||s==3u||s==5u||s==4u||s==6u;                         // HORIZ: lava,water,oil,gas,fire
 }
 void main() {
     int x = uX0 + int(gl_GlobalInvocationID.x);
@@ -122,15 +123,28 @@ void main() {
         }
         return;
     }
-    if (uType == 4) {                                      // ignite: mark oil (5) touching fire (6)
+    if (uType == 4) {                                      // ignite: mark oil (5) touching fire/lava (6/7)
         int i = y * uSW + x;
-        moved[i] = (cells[i] == 5u &&
-                    (cells[i-1]==6u || cells[i+1]==6u || cells[i-uSW]==6u || cells[i+uSW]==6u)) ? 1u : 0u;
+        bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
+                   cells[i-uSW]==6u||cells[i-uSW]==7u || cells[i+uSW]==6u||cells[i+uSW]==7u;
+        moved[i] = (cells[i] == 5u && hot) ? 1u : 0u;
         return;
     }
-    if (uType == 5) {                                      // ignite: apply marked cells
+    if (uType == 5) {                                      // ignite: apply marked cells -> fire
         int i = y * uSW + x;
         if (moved[i] == 1u) cells[i] = 6u;
+        return;
+    }
+    if (uType == 6) {                                      // lava+water: mark interface cells
+        int i = y * uSW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 7u) r = (cells[i-1]==3u||cells[i+1]==3u||cells[i-uSW]==3u||cells[i+uSW]==3u) ? 1u : 0u;
+        else if (c == 3u) r = (cells[i-1]==7u||cells[i+1]==7u||cells[i-uSW]==7u||cells[i+uSW]==7u) ? 1u : 0u;
+        moved[i] = r;
+        return;
+    }
+    if (uType == 7) {                                      // lava+water: apply -> stone (WALL)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 1u;
         return;
     }
     int cx = x - uX0;
@@ -173,6 +187,7 @@ vec3 matColor(uint m) {
     if (m == 4u) return vec3(0.690, 0.769, 0.871);
     if (m == 5u) return vec3(0.557, 0.267, 0.678);
     if (m == 6u) return vec3(1.000, 0.353, 0.118);
+    if (m == 7u) return vec3(0.812, 0.106, 0.043);
     return vec3(0.0);
 }
 void main() {
@@ -318,23 +333,20 @@ public:
             glDispatchCompute(LW / 16, LH / 16, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
-        if (hasFire) {                              // fire burn-out + spread (two-pass ignite)
-            glUniform1i(lType, 3); glUniform1i(lFrame, (int)frame);
-            glDispatchCompute(LW / 16, LH / 16, 1);
-            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-            glUniform1i(lType, 4);                  // mark oil touching fire (into moved)
-            glDispatchCompute(LW / 16, LH / 16, 1);
-            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-            glUniform1i(lType, 5);                  // apply marks -> fire
-            glDispatchCompute(LW / 16, LH / 16, 1);
-            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        if (hasReactive) {                          // burn-out, ignition, lava+water (gated)
+            glUniform1i(lFrame, (int)frame);
+            for (int t = 3; t <= 7; ++t) {          // 3 decay, 4/5 ignite, 6/7 lava->stone
+                glUniform1i(lType, t);
+                glDispatchCompute(LW / 16, LH / 16, 1);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            }
         }
         ++frame;
         gpuAhead = true;
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE) hasFire = true;
+        if (material == FIRE || material == LAVA) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -380,7 +392,7 @@ private:
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
     uint32_t frame = 0;
-    bool hasFire = false;                // gates the burn-out dispatch
+    bool hasReactive = false;            // gates the reaction dispatches (fire/lava)
     GLint lSW, lX0, lX1, lY0, lY1, lType, lDx, lDy, lPar, lGrp, lFrame;
 
     void syncDown() {
@@ -404,7 +416,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE) hasFire = true;
+                if (v == FIRE || v == LAVA) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
@@ -519,8 +531,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[7] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE};
-    ui::Palette pal = ui::palette(renderW, 7);
+    static const uint8_t kSwatch[8] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA};
+    ui::Palette pal = ui::palette(renderW, 8);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -531,7 +543,7 @@ static int runInteractive(ViewCfg cfg) {
     GLint uPalSel = glGetUniformLocation(present, "uPalSel");
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 7; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 8; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -547,6 +559,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_4) == GLFW_PRESS) current = GAS;
         if (glfwGetKey(win, GLFW_KEY_5) == GLFW_PRESS) current = OIL;
         if (glfwGetKey(win, GLFW_KEY_6) == GLFW_PRESS) current = FIRE;
+        if (glfwGetKey(win, GLFW_KEY_7) == GLFW_PRESS) current = LAVA;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;

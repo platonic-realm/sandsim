@@ -38,7 +38,7 @@
 
 static StepFn g_step = nullptr;   // selected at startup (AVX2 or SSE)
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu,
 };
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
@@ -121,15 +121,16 @@ public:
 
     void step() {
         g_step(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
-        if (hasFire) {
+        if (hasReactive) {                                              // moved = scratch buffer
             decayFire(grid.data(), SW, X0, X1, Y0, Y1, frame);
-            igniteFire(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);   // moved = scratch
+            igniteFire(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
+            lavaReact(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
         }
         ++frame;
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE) hasFire = true;
+        if (material == FIRE || material == LAVA) hasReactive = true;
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
                 int nx = lx + dx, ny = ly + dy;
@@ -172,7 +173,7 @@ private:
     uint32_t frame = 0;
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
-    bool hasFire = false;          // gates the burn-out pass; set when fire enters the grid
+    bool hasReactive = false;      // gates the reaction passes; set when fire/lava enters the grid
 
     // --- chunk <-> interior, disk -------------------------------------------
     void extractChunk(int cgx, int cgy, std::vector<uint8_t>& out) const {
@@ -184,7 +185,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE) hasFire = true;
+                if (v == FIRE || v == LAVA) hasReactive = true;
                 grid[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
@@ -294,13 +295,13 @@ static int runInteractive(ViewCfg cfg) {
     world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
-    static const uint8_t kSwatch[7] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE};
-    uint32_t swatchCol[7];
-    for (int i = 0; i < 7; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 7);
+    static const uint8_t kSwatch[8] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA};
+    uint32_t swatchCol[8];
+    for (int i = 0; i < 8; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 8);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 7; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 8; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
@@ -341,6 +342,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_4: current = GAS;   break;
                     case SDLK_5: current = OIL;   break;
                     case SDLK_6: current = FIRE;  break;
+                    case SDLK_7: current = LAVA;  break;
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_LEFT:  if (camCx > 0) camCx--; break;

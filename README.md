@@ -16,17 +16,23 @@ builds them, asserts the checksums match, and prints a throughput table.
 
 ## The simulation
 
-Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER` (liquid), `GAS`,
-`OIL` (liquid), `FIRE`. Movement is a density swap — heaviest to lightest is
-`SAND > WATER > OIL > air > GAS > FIRE` — so sand sinks through water, oil floats
-on water, gas rises, and fire licks upward. `FIRE` rises like flame, **burns out
-over time** (a deterministic per-cell, frame-varying transform — the same hash on
-CPU and GPU), and **spreads through `OIL`**: paint fire into an oil pool and it
-combusts, the flame front creeping through the fuel one layer per frame before
-burning away. Paint with the mouse and pick a material from the on-screen palette
-(or number keys `0`-`6`); `[` / `]` size the brush. The palette is the same on
-all three backends, and every rule — including the time-varying burn-out and the
-neighbour-based spread — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
+Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
+`FIRE`, `LAVA`. Movement is a density swap — heaviest to lightest is
+`SAND > LAVA > WATER > OIL > air > GAS > FIRE` — so sand sinks through lava, oil
+floats on water, gas rises, and fire licks upward. On top of movement there are
+reactions, all order-independent and bit-identical on CPU and GPU:
+
+- `FIRE` rises like flame and **burns out over time** (a deterministic per-cell,
+  frame-varying transform — the same hash on CPU and GPU).
+- `FIRE`/`LAVA` **ignite `OIL`** they touch: dab fire (or pour lava) into an oil
+  pool and it combusts, the flame front creeping through the fuel one layer per
+  frame before burning away.
+- `LAVA` meeting `WATER` **freezes to stone** (`WALL`) at the interface.
+
+Paint with the mouse and pick a material from the on-screen palette (or number
+keys `0`-`7`); `[` / `]` size the brush. The palette is the same on all three
+backends, and every rule — movement, the time-varying burn-out, and the
+neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
 
 The update rule is **order-independent**: each frame is a fixed sequence of
 sub-passes, and within a pass every move is between a disjoint pair of cells

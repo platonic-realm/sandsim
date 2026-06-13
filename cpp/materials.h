@@ -3,10 +3,11 @@
 #include <cstdint>
 #include <cstddef>
 
-// Density order (heavy -> light): SAND > WATER > OIL > air(EMPTY) > GAS > FIRE.
-// OIL floats on water; FIRE rises like flame and burns out over time.
+// Density order (heavy -> light): SAND > LAVA > WATER > OIL > air > GAS > FIRE.
+// OIL floats on water; FIRE rises and burns out; LAVA is a heavy molten liquid
+// that sets oil ablaze and freezes to WALL where it meets water.
 enum Material : uint8_t {
-    EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, MATERIAL_COUNT = 7
+    EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, MATERIAL_COUNT = 8
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -37,17 +38,41 @@ inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uin
 // a consistent snapshot of the grid and records intent; pass 2 applies it. Each
 // pass reads one buffer and writes another, so it is order-independent and the
 // GPU reproduces it bit-for-bit.
+inline bool isHot(uint8_t m) { return m == FIRE || m == LAVA; }   // ignites adjacent oil
+
 inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             scratch[i] = (grid[i] == OIL &&
-                          (grid[i - 1] == FIRE || grid[i + 1] == FIRE ||
-                           grid[i - SW] == FIRE || grid[i + SW] == FIRE)) ? 1 : 0;
+                          (isHot(grid[i - 1]) || isHot(grid[i + 1]) ||
+                           isHot(grid[i - SW]) || isHot(grid[i + SW]))) ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = FIRE;
+        }
+}
+
+// LAVA + WATER freeze to stone: any LAVA touching WATER (or vice-versa) becomes
+// WALL. Same two-pass snapshot as ignition so it's order-independent and the GPU
+// matches exactly.
+inline void lavaReact(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i];
+            bool react = false;
+            if (c == LAVA)
+                react = (grid[i-1]==WATER || grid[i+1]==WATER || grid[i-SW]==WATER || grid[i+SW]==WATER);
+            else if (c == WATER)
+                react = (grid[i-1]==LAVA || grid[i+1]==LAVA || grid[i-SW]==LAVA || grid[i+SW]==LAVA);
+            scratch[i] = react ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = WALL;
         }
 }

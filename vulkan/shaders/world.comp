@@ -15,18 +15,19 @@ layout(push_constant) uniform PC {
 } pc;
 
 bool canEnter(uint s, uint t) {
-    if (t == 1u) return false;                              // WALL
-    if (s == 2u) return t==0u||t==3u||t==4u||t==5u||t==6u;  // SAND  -> E,W,G,O,F
-    if (s == 3u) return t==0u||t==4u||t==5u||t==6u;         // WATER -> E,G,O,F
-    if (s == 5u) return t==0u||t==4u||t==6u;                // OIL   -> E,G,F (floats on water)
-    if (s == 6u) return t==0u;                              // FIRE  -> E (rises like flame)
-    if (s == 4u) return t==0u;                              // GAS   -> E
+    if (t == 1u) return false;                                       // WALL
+    if (s == 2u) return t==7u||t==3u||t==5u||t==4u||t==6u||t==0u;     // SAND  -> L,W,O,G,F,E
+    if (s == 7u) return t==3u||t==5u||t==4u||t==6u||t==0u;            // LAVA  -> W,O,G,F,E
+    if (s == 3u) return t==5u||t==4u||t==6u||t==0u;                   // WATER -> O,G,F,E
+    if (s == 5u) return t==4u||t==6u||t==0u;                          // OIL   -> G,F,E
+    if (s == 6u) return t==0u;                                        // FIRE  -> E
+    if (s == 4u) return t==0u;                                        // GAS   -> E
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==3u||s==5u;            // DOWN: sand,water,oil
-    if (pc.grp == 1) return s==4u||s==6u;                   // GAS/FIRE rise
-    return s==3u||s==4u||s==5u||s==6u;                       // HORIZ: water,oil,gas,fire
+    if (pc.grp == 0) return s==2u||s==7u||s==3u||s==5u;              // DOWN: sand,lava,water,oil
+    if (pc.grp == 1) return s==4u||s==6u;                            // GAS/FIRE rise
+    return s==7u||s==3u||s==5u||s==4u||s==6u;                         // HORIZ: lava,water,oil,gas,fire
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
@@ -40,15 +41,28 @@ void main() {
         }
         return;
     }
-    if (pc.type == 4) {                                   // ignite: mark oil (5) touching fire (6)
+    if (pc.type == 4) {                                   // ignite: mark oil (5) touching fire/lava (6/7)
         int i = y * pc.SW + x;
-        moved[i] = (cells[i] == 5u &&
-                    (cells[i-1]==6u || cells[i+1]==6u || cells[i-pc.SW]==6u || cells[i+pc.SW]==6u)) ? 1u : 0u;
+        bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
+                   cells[i-pc.SW]==6u||cells[i-pc.SW]==7u || cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+        moved[i] = (cells[i] == 5u && hot) ? 1u : 0u;
         return;
     }
-    if (pc.type == 5) {                                   // ignite: apply marked cells
+    if (pc.type == 5) {                                   // ignite: apply marked cells -> fire
         int i = y * pc.SW + x;
         if (moved[i] == 1u) cells[i] = 6u;
+        return;
+    }
+    if (pc.type == 6) {                                   // lava+water: mark interface cells
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 7u) r = (cells[i-1]==3u||cells[i+1]==3u||cells[i-pc.SW]==3u||cells[i+pc.SW]==3u) ? 1u : 0u;
+        else if (c == 3u) r = (cells[i-1]==7u||cells[i+1]==7u||cells[i-pc.SW]==7u||cells[i+pc.SW]==7u) ? 1u : 0u;
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 7) {                                   // lava+water: apply -> stone (WALL)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 1u;
         return;
     }
     int cx = x - pc.X0;
