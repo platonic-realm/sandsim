@@ -7,9 +7,11 @@
 // with STEAM the lightest (rises). OIL floats on water; FIRE rises and burns out;
 // LAVA is a heavy molten liquid that sets oil ablaze. Water meeting fire/lava
 // flashes to STEAM, which rises and condenses back to WATER -> a little water cycle.
+// WOOD is a flammable SOLID: it never moves (absent from every density group) and
+// blocks like WALL, but fire/lava set it alight (slowly).
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
-    STEAM = 8, MATERIAL_COUNT = 9
+    STEAM = 8, WOOD = 9, MATERIAL_COUNT = 10
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -26,6 +28,11 @@ inline bool fireBurnsOut(int x, int y, uint32_t frame) {
 inline bool steamCondenses(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 193u + (uint32_t)y * 97u + frame * 111u) & 0xFFu;
     return h < STEAM_CONDENSE;
+}
+static constexpr uint32_t WOOD_IGNITE = 28;    // of 256/frame -> wood smoulders, slower than oil
+inline bool woodCatches(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 149u + (uint32_t)y * 83u + frame * 157u) & 0xFFu;
+    return h < WOOD_IGNITE;
 }
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
@@ -48,15 +55,19 @@ inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uin
 // a consistent snapshot of the grid and records intent; pass 2 applies it. Each
 // pass reads one buffer and writes another, so it is order-independent and the
 // GPU reproduces it bit-for-bit.
-inline bool isHot(uint8_t m) { return m == FIRE || m == LAVA; }   // ignites adjacent oil
+inline bool isHot(uint8_t m) { return m == FIRE || m == LAVA; }   // ignites adjacent fuel
 
-inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+// OIL and WOOD catch fire from an adjacent FIRE/LAVA. OIL ignites instantly; WOOD
+// smoulders (a per-cell frame hash gates it, so it burns slower). Two-pass
+// snapshot via the scratch buffer keeps it order-independent / GPU-identical.
+inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
-            scratch[i] = (grid[i] == OIL &&
-                          (isHot(grid[i - 1]) || isHot(grid[i + 1]) ||
-                           isHot(grid[i - SW]) || isHot(grid[i + SW]))) ? 1 : 0;
+            uint8_t c = grid[i];
+            bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+            bool ign = (c == OIL && hot) || (c == WOOD && hot && woodCatches(x, y, frame));
+            scratch[i] = ign ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {

@@ -45,11 +45,17 @@ void main() {
         }
         return;
     }
-    if (pc.type == 4) {                                   // ignite: mark oil (5) touching fire/lava (6/7)
+    if (pc.type == 4) {                                   // ignite: oil (instant) / wood (slow) by fire/lava
         int i = y * pc.SW + x;
         bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
                    cells[i-pc.SW]==6u||cells[i-pc.SW]==7u || cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
-        moved[i] = (cells[i] == 5u && hot) ? 1u : 0u;
+        uint c = cells[i]; uint r = 0u;
+        if (c == 5u) r = hot ? 1u : 0u;
+        else if (c == 9u && hot) {
+            uint h = (uint(x)*149u + uint(y)*83u + uint(pc.frame)*157u) & 0xFFu;
+            r = (h < 28u) ? 1u : 0u;
+        }
+        moved[i] = r;
         return;
     }
     if (pc.type == 5) {                                   // ignite: apply marked cells -> fire
