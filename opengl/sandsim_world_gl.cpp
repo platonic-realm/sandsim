@@ -61,19 +61,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
     return c;
 }
 
-static inline uint32_t hashCoord(int gx, int gy) {
-    uint32_t h = (uint32_t)gx * 374761393u + (uint32_t)gy * 668265263u;
-    return (h ^ (h >> 13)) * 1274126177u;
-}
-static inline uint8_t seedMat(int gx, int gy) {
-    if (gy % 40 == 39 && (gx % 11 != 0)) return WALL;
-    uint32_t r = hashCoord(gx, gy) % 100u;
-    switch ((gy / 40) % 3) {
-        case 0:  return (r < 35u) ? SAND  : EMPTY;
-        case 1:  return (r < 30u) ? WATER : EMPTY;
-        default: return (r < 18u) ? GAS   : EMPTY;
-    }
-}
+#include "../worldgen.h"   // shared deterministic seedMat() (diverse world, all backends)
 
 // The 16 sub-passes, in the exact order of cpp/simd_core.h.
 struct Pass { int type, dx, dy, parity, grp; };   // type: 0 vert, 1 diag, 2 horiz
@@ -140,7 +128,7 @@ void main() {
         bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
                    cells[i-uSW]==6u||cells[i-uSW]==7u || cells[i+uSW]==6u||cells[i+uSW]==7u;
         uint c = cells[i]; uint r = 0u;
-        if (c == 5u || c == 10u) r = hot ? 1u : 0u;       // oil & plant: instant
+        if (c == 5u || c == 10u || c == 4u) r = hot ? 1u : 0u;  // oil, plant & gas: instant
         else if (c == 9u && hot) {                        // wood: smoulders
             uint h = (uint(x)*149u + uint(y)*83u + uint(uFrame)*157u) & 0xFFu;
             r = (h < 28u) ? 1u : 0u;
@@ -158,14 +146,14 @@ void main() {
         bool nW  = cells[i-1]==3u||cells[i+1]==3u||cells[i-uSW]==3u||cells[i+uSW]==3u;
         bool nFL = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u||
                    cells[i-uSW]==6u||cells[i-uSW]==7u||cells[i+uSW]==6u||cells[i+uSW]==7u;
-        if (c == 3u) r = nFL ? 1u : 0u;                   // water touching fire/lava
+        if (c == 3u || c == 11u) r = nFL ? 1u : 0u;       // water / acid touching fire/lava
         else if (c == 6u || c == 7u) r = nW ? 1u : 0u;    // fire/lava touching water
         moved[i] = r;
         return;
     }
-    if (uType == 7) {                                     // apply: water->steam, fire->empty, lava->stone
+    if (uType == 7) {                                     // apply: water->steam, acid->smoke, fire->empty, lava->stone
         int i = y * uSW + x;
-        if (moved[i] == 1u) { uint c = cells[i]; cells[i] = (c==3u) ? 8u : (c==6u) ? 0u : 1u; }
+        if (moved[i] == 1u) { uint c = cells[i]; cells[i] = (c==3u) ? 8u : (c==11u) ? 12u : (c==6u) ? 0u : 1u; }
         return;
     }
     if (uType == 8) {                                     // plant grow: mark empty next to plant+water

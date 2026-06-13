@@ -65,19 +65,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
     return c;
 }
 
-static inline uint32_t hashCoord(int gx, int gy) {
-    uint32_t h = (uint32_t)gx * 374761393u + (uint32_t)gy * 668265263u;
-    return (h ^ (h >> 13)) * 1274126177u;
-}
-static inline uint8_t seedMat(int gx, int gy) {
-    if (gy % 40 == 39 && (gx % 11 != 0)) return WALL;
-    uint32_t r = hashCoord(gx, gy) % 100u;
-    switch ((gy / 40) % 3) {
-        case 0:  return (r < 35u) ? SAND  : EMPTY;
-        case 1:  return (r < 30u) ? WATER : EMPTY;
-        default: return (r < 18u) ? GAS   : EMPTY;
-    }
-}
+#include "../worldgen.h"   // shared deterministic seedMat() (diverse world, all backends)
 
 class SimdWorld {
 public:

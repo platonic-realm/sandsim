@@ -1,9 +1,12 @@
 # sandsim
 
 A multi-material falling-sand **world**: a huge grid of materials (sand, water,
-gas, walls) that is chunked and streamed to/from disk around a camera, so the
-world can be far larger than memory. There is one engine, with a single
-implementation per platform:
+lava, oil, acid, gas, rock and more) that is chunked and streamed to/from disk
+around a camera, so the world can be far larger than memory. It generates as a
+varied landscape — an open sky over rolling ground, with underground caverns,
+clustered pools of every liquid and gas, lava welling up from the deep, and the
+odd buried spring or cache of TNT — and then comes alive as the materials react.
+There is one engine, with a single implementation per platform:
 
 | Platform | Status | Notes |
 |----------|--------|-------|
@@ -28,9 +31,10 @@ bit-identical on CPU and GPU:
 - `FIRE` rises like flame and **burns out over time** (a deterministic per-cell,
   frame-varying transform — the same hash on CPU and GPU), some of it wisping into
   `SMOKE` that rises and then fades, so fires billow.
-- `FIRE`/`LAVA` **ignite `OIL`** they touch: dab fire (or pour lava) into an oil
-  pool and it combusts, the flame front creeping through the fuel one layer per
-  frame before burning away.
+- `FIRE`/`LAVA` **ignite `OIL` and `GAS`** they touch: dab fire (or pour lava) into
+  an oil pool or a gas pocket and it combusts, the flame front racing through the
+  fuel one layer per frame before burning away — so an underground gas pocket lit by
+  a lava vein goes up in a sheet of flame.
 - `WOOD` is a **flammable solid** — build a structure and set it alight; it
   catches *slowly* (frame-hashed, so timber smoulders where oil whooshes) and
   burns down.
@@ -38,8 +42,10 @@ bit-identical on CPU and GPU:
   plant, so vines creep along waterlines from a seed. It burns fast like dry
   grass. (This is the engine's first material-*creating* rule.)
 - `ACID` is a heavy corrosive liquid that **dissolves** the solids it touches
-  (`WALL`, `SAND`, `WOOD`, `PLANT` → gone) and slowly **evaporates**, so a splash
-  of it bores through a structure and then runs out.
+  (`WALL`, `SAND`, `WOOD`, `PLANT` → gone) and slowly **evaporates** — and it
+  **flash-boils to `SMOKE`** the instant it meets `FIRE` or `LAVA` — so a splash of
+  it bores through a structure and then runs out, faster still if it hits something
+  hot.
 - `GLASS` is **made by melting `SAND` in `LAVA`** — drop sand into a lava pool and
   it sets into an inert, fireproof, acid-proof solid you can build with.
 - `ICE` is a two-way **phase** solid: it **melts back to `WATER`** wherever it
@@ -86,7 +92,7 @@ make            # build all platforms
 make cpp        # just the C++ SIMD world
 ./cpp/sandsim_world                       # interactive: arrows pan, number keys paint
 ./cpp/sandsim_world --res 1280x800 --scale 3   # window resolution + virtual-pixel size
-./cpp/sandsim_world --bench 600 6 6       # headless: whole-world checksum + conserved counts
+./cpp/sandsim_world --bench 600 6 6       # headless: whole-world checksum + material counts
 SANDSIM_SIMD=sse ./cpp/sandsim_world --bench 600 6 6   # force SSE (default: widest the CPU has)
 make benchmark  # build all three, verify identical output, print a throughput table
 ```

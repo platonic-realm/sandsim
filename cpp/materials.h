@@ -121,8 +121,8 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            bool ign = ((c == OIL || c == PLANT) && hot)      // oil & dry plant: instant
-                    || (c == WOOD && hot && woodCatches(x, y, frame));   // wood: slow
+            bool ign = ((c == OIL || c == PLANT || c == GAS) && hot)   // oil, plant & gas: instant
+                    || (c == WOOD && hot && woodCatches(x, y, frame)); // wood: slow
             scratch[i] = ign ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
@@ -132,10 +132,11 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
         }
 }
 
-// Water meets hot: when WATER touches FIRE or LAVA, the water flashes to STEAM,
-// fire is quenched to EMPTY, and lava freezes to WALL (stone). One two-pass
-// snapshot (the `moved` scratch): pass 1 marks every cell at such an interface,
-// pass 2 transforms each by its own type -- order-independent, GPU-identical.
+// Things meet hot: at an interface with FIRE or LAVA, WATER flashes to STEAM and
+// ACID boils off to SMOKE, while the FIRE is quenched to EMPTY and the LAVA freezes
+// to WALL (stone) wherever WATER touches it. One two-pass snapshot (the `moved`
+// scratch): pass 1 marks every reacting cell at such an interface, pass 2 transforms
+// each by its own type -- order-independent, GPU-identical.
 inline void quench(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
     auto nb = [&](size_t i, uint8_t m) {
         return grid[i-1]==m || grid[i+1]==m || grid[i-SW]==m || grid[i+SW]==m;
@@ -146,6 +147,7 @@ inline void quench(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int 
             uint8_t c = grid[i];
             bool react = false;
             if (c == WATER)      react = nb(i, FIRE) || nb(i, LAVA);
+            else if (c == ACID)  react = nb(i, FIRE) || nb(i, LAVA);   // acid boils off
             else if (c == FIRE)  react = nb(i, WATER);
             else if (c == LAVA)  react = nb(i, WATER);
             scratch[i] = react ? 1 : 0;
@@ -154,8 +156,9 @@ inline void quench(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int 
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (!scratch[i]) continue;
-            uint8_t c = grid[i];
-            grid[i] = (c == WATER) ? STEAM : (c == FIRE) ? EMPTY : WALL;   // lava -> stone
+            uint8_t c = grid[i];                                       // water->steam, acid->smoke,
+            grid[i] = (c == WATER) ? STEAM : (c == ACID) ? SMOKE       // fire->empty, lava->stone
+                    : (c == FIRE) ? EMPTY : WALL;
         }
 }
 

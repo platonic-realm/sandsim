@@ -51,13 +51,14 @@ GPU and produce a **bit-identical** world.
   - **time-varying transforms** — `FIRE` burning out to `EMPTY` and `STEAM`
     condensing back to `WATER` are per-cell passes that are pure functions of
     `(x, y, frame)` (no neighbour reads), so the GPU computes the identical hash.
-  - **ignition** (`FIRE`/`LAVA` → `OIL`) and **water-meets-hot** (`WATER` →
-    `STEAM`, `FIRE` quenched, `LAVA` → stone) are neighbour-based, which is
-    normally order-*dependent* (CPU-sequential ≠ GPU-parallel). Each is made
-    order-independent with **two snapshot passes through the `moved` scratch
-    buffer** (free after the movement step): pass 1 reads the grid and marks the
-    cells to transform, pass 2 applies the marks — so every pass reads one buffer
-    and writes another. Steam thus completes a boil → rise → condense water cycle.
+  - **ignition** (`FIRE`/`LAVA` igniting the `OIL`, `GAS` and `PLANT` it touches,
+    and smouldering `WOOD`) and **things-meet-hot** (`WATER` → `STEAM`, `ACID` →
+    `SMOKE`, `FIRE` quenched, `LAVA` → stone) are neighbour-based, which is normally
+    order-*dependent* (CPU-sequential ≠ GPU-parallel). Each is made order-independent
+    with **two snapshot passes through the `moved` scratch buffer** (free after the
+    movement step): pass 1 reads the grid and marks the cells to transform, pass 2
+    applies the marks — so every pass reads one buffer and writes another. Steam thus
+    completes a boil → rise → condense water cycle.
   - **growth** — `PLANT` next to `WATER` sprouts into adjacent empty cells (a
     frame-hashed mark/apply pair where each empty cell decides from a snapshot),
     the first rule that *creates* material rather than moving or transforming it.
@@ -85,13 +86,18 @@ GPU and produce a **bit-identical** world.
     independent and GPU-identical even though the blast reaches a full ring outward,
     and the wave then advances one ring per frame as the new fire reaches more TNT.
 
-  All reaction passes are gated by a per-world flag set when fire/lava enters, so
-  fire-free worlds (like the `--bench` seed) skip them and the cross-backend
-  reference checksums are unchanged. Each rule was verified bit-identical by
-  temporarily seeding the reactive materials across all three backends.
+  All reaction passes are gated by a per-world flag set when a reactive material
+  is present, so a world of only sand/water/rock pays nothing for them. The
+  generated world *is* full of lava, oil, acid, plant and the rest, so the
+  streaming `--bench` run exercises the entire reaction set every step — which
+  turns the benchmark's checksum-equality assertion into a continuous proof that
+  all of it stays bit-identical across CPU SIMD, OpenGL and Vulkan (it does).
 - **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
-  `wbox × hbox` chunks; chunks live on disk and are generated (from a
-  deterministic seed) the first time they're needed.
+  `wbox × hbox` chunks; chunks live on disk and are generated the first time
+  they're needed from a single deterministic, hash-based seed shared by all three
+  backends (`worldgen.h`) — an open sky over rolling ground, a sandy crust, and an
+  underground of rock veined with caverns and clustered pools of every liquid and
+  gas, lava welling up from the deep, and the rare buried spring or TNT cache.
 - **Live window.** A `gw × gh` box of chunks around the camera is kept resident in
   **one contiguous grid** with a `PAD`-cell `WALL` border (the border keeps
   material from falling into the void and gives the GPU/SIMD offset accesses a
