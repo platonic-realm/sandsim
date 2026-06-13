@@ -55,6 +55,15 @@ You can modify the following variables at the top of the script to customize the
 
 This implementation uses basic Python operations for the simulation logic. While Pygame provides efficient rendering, the core simulation might be slower compared to optimized or compiled implementations, especially for larger grids.
 
+## Materials variant
+
+`sandsim_materials.py` is the readable reference for the Noita-style
+multi-material engine (wall, sand, water, gas). Run `python3 sandsim_materials.py`
+for the pygame window (number keys pick a material, the mouse paints), or
+`python3 sandsim_materials.py --bench 200 120 90` for the headless cross-check —
+the `--bench` mode is pure Python and needs no pygame. See
+[MATERIALS.md](../MATERIALS.md).
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file in the root directory for details.
