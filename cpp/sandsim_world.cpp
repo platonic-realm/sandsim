@@ -1,382 +1,191 @@
 /*
- * sandsim - C++ chunked streaming world (Noita-style)
+ * sandsim - multi-material falling-sand world (CPU SIMD)
  *
- * Simulates a world far larger than the screen by keeping only a few "live
- * boxes" (chunks) resident around a camera and streaming the rest to disk. See
- * WORLD.md for the design and the Noita techniques it adapts.
- *
- *   - The world is a sparse grid of CHUNK x CHUNK chunks of material ids.
- *   - Only chunks within a live region around the camera are resident; chunks
- *     leaving the region are saved to disk and freed, chunks entering are read
- *     back (or generated if never visited).
- *   - Each chunk keeps a dirty rectangle; once a chunk settles (no cell moved)
- *     it sleeps and is skipped. A particle crossing a border wakes the neighbor.
- *   - The materials rule (EMPTY/WALL/SAND/WATER/GAS) runs over global cell
- *     coordinates, so material flows across chunk borders naturally.
+ * A huge world (chunked, streamed to/from disk around a camera) simulated on one
+ * contiguous, WALL-bordered live grid with the single-grid SIMD technique. The
+ * update rule lives in simd_core.h and is order-independent (disjoint even/odd
+ * passes), so it produces a bit-identical world on CPU SIMD and the GPU compute
+ * backends. The SIMD width is chosen at runtime: AVX2 (32 lanes) if the CPU has
+ * it, otherwise SSE4.1 (16 lanes) -- see world_step.h. Both give the same result.
  *
  * Modes:
- *   (default)                 SDL2 window over a large streamed world; WASD or
- *                             arrows pan the camera, number keys paint.
- *   --bench [steps] [wch] [hch]
- *                             headless: a finite wall-bordered world of wch x hch
- *                             chunks, a deterministic camera sweep that forces
- *                             most chunks out to disk and back, then one RESULT
- *                             line with a whole-world checksum, conserved
- *                             per-material counts, and streaming stats.
+ *   (default)                 SDL2 window; arrows pan the camera by a chunk,
+ *                             number keys pick a material, left mouse paints.
+ *   --bench [steps] [wch] [hch]   headless streaming benchmark (whole-world
+ *                             checksum + conserved per-material counts).
+ *   --ppm <file> [steps]      render a snapshot.
  */
 
+#include "materials.h"   // Material enum
+#include "world_step.h"  // runtime SSE/AVX2 step dispatch
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <chrono>
 #include <vector>
-#include <unordered_map>
-#include <algorithm>
 #include <string>
 #include <fstream>
 #include <filesystem>
 #include <SDL2/SDL.h>
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, MATERIAL_COUNT = 5 };
-
+static StepFn g_step = nullptr;   // selected at startup (AVX2 or SSE)
 static const uint32_t kColors[MATERIAL_COUNT] = {
     0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu,
 };
 
 static constexpr int CHUNK = 64;
-static constexpr int CHUNK_MASK = CHUNK - 1;
-static constexpr int CHUNK_SHIFT = 6;
-
-// --- shared rule (identical to the materials engine) -----------------------
-static inline bool canEnter(uint8_t mover, uint8_t target) {
-    if (target == WALL) return false;
-    switch (mover) {
-        case SAND:  return target == EMPTY || target == WATER || target == GAS;
-        case WATER: return target == EMPTY || target == GAS;
-        case GAS:   return target == EMPTY;
-        default:    return false;
-    }
-}
+static constexpr int GW = 4, GH = 4;             // live window: 4x4 chunks
+static constexpr int LW = GW * CHUNK, LH = GH * CHUNK;   // 256 x 256 cells
+static constexpr int PAD = 16;                   // WALL border / SIMD halo
+static constexpr int SW = LW + 2 * PAD;          // padded stride
+static constexpr int SH = LH + 2 * PAD;          // padded height
+static constexpr int X0 = PAD, X1 = PAD + LW;    // interior column range
+static constexpr int Y0 = PAD, Y1 = PAD + LH;    // interior row range
 
 static inline uint32_t hashCoord(int gx, int gy) {
     uint32_t h = (uint32_t)gx * 374761393u + (uint32_t)gy * 668265263u;
     return (h ^ (h >> 13)) * 1274126177u;
 }
-
-// Deterministic world generation in global coordinates (identical across ports).
-static inline uint8_t genCell(int gx, int gy, int wcells, int hcells) {
-    if (gx == 0 || gy == 0 || gx == wcells - 1 || gy == hcells - 1) return WALL;
-    if (gy % 40 == 39 && (gx % 11 != 0)) return WALL;             // perforated shelves
+static inline uint8_t seedMat(int gx, int gy) {
+    if (gy % 40 == 39 && (gx % 11 != 0)) return WALL;
     uint32_t r = hashCoord(gx, gy) % 100u;
-    switch ((gy / 40) % 3) {                                       // vertical bands
+    switch ((gy / 40) % 3) {
         case 0:  return (r < 35u) ? SAND  : EMPTY;
         case 1:  return (r < 30u) ? WATER : EMPTY;
         default: return (r < 18u) ? GAS   : EMPTY;
     }
 }
 
-struct Chunk {
-    std::vector<uint8_t> cells;   // CHUNK*CHUNK material ids
-    std::vector<uint8_t> moved;   // per-frame "already moved" flags
-    // dirty rect for THIS frame (local coords); empty when minx > maxx
-    int dminx, dminy, dmaxx, dmaxy;
-    // accumulator for NEXT frame's dirty rect
-    int nminx, nminy, nmaxx, nmaxy;
-
-    Chunk() : cells(CHUNK * CHUNK, EMPTY), moved(CHUNK * CHUNK, 0) { fullDirty(); clearNext(); }
-    void fullDirty() { dminx = 0; dminy = 0; dmaxx = CHUNK - 1; dmaxy = CHUNK - 1; }
-    void clearNext() { nminx = CHUNK; nminy = CHUNK; nmaxx = -1; nmaxy = -1; }
-    bool awake() const { return dminx <= dmaxx && dminy <= dmaxy; }
-    void wakeLocal(int lx, int ly) {
-        if (lx < nminx) nminx = lx;
-        if (ly < nminy) nminy = ly;
-        if (lx > nmaxx) nmaxx = lx;
-        if (ly > nmaxy) nmaxy = ly;
-    }
-    void commitNext() { dminx = nminx; dminy = nminy; dmaxx = nmaxx; dmaxy = nmaxy; clearNext(); }
-};
-
-class World {
+class SimdWorld {
 public:
-    World(int wch, int hch, std::string dir, bool finite)
-        : wchunks(wch), hchunks(hch), wcells(wch * CHUNK), hcells(hch * CHUNK),
-          finite(finite), dir(std::move(dir)) {
+    SimdWorld(int wbox, int hbox, std::string dir)
+        : wbox(wbox), hbox(hbox), dir(std::move(dir)) {
         std::filesystem::create_directories(this->dir);
+        grid.assign((size_t)SW * SH, WALL);     // everything starts solid (border stays WALL)
+        moved.assign((size_t)SW * SH, 0);
     }
 
-    int cellsW() const { return wcells; }
-    int cellsH() const { return hcells; }
-
-    // --- cell access in global coordinates ---------------------------------
-    uint8_t get(int gx, int gy) {
-        if (finite && (gx < 0 || gy < 0 || gx >= wcells || gy >= hcells)) return WALL;
-        Chunk* c = residentAt(gx >> CHUNK_SHIFT, gy >> CHUNK_SHIFT);
-        if (!c) return WALL;                       // unresident = solid
-        return c->cells[(gy & CHUNK_MASK) * CHUNK + (gx & CHUNK_MASK)];
-    }
-    void set(int gx, int gy, uint8_t m) {
-        Chunk* c = residentAt(gx >> CHUNK_SHIFT, gy >> CHUNK_SHIFT);
-        if (c) c->cells[(gy & CHUNK_MASK) * CHUNK + (gx & CHUNK_MASK)] = m;
-    }
-
-    // --- generation / streaming --------------------------------------------
-    // Pre-generate the whole finite world and flush every chunk to disk.
     void generateAllToDisk() {
-        for (int cy = 0; cy < hchunks; ++cy)
-            for (int cx = 0; cx < wchunks; ++cx) {
-                Chunk ch;
-                for (int ly = 0; ly < CHUNK; ++ly)
-                    for (int lx = 0; lx < CHUNK; ++lx)
-                        ch.cells[ly * CHUNK + lx] = genCell(cx * CHUNK + lx, cy * CHUNK + ly, wcells, hcells);
-                writeChunk(cx, cy, ch);
-            }
+        std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
+        for (int cy = 0; cy < hbox; ++cy)
+            for (int cx = 0; cx < wbox; ++cx) { genBox(cx, cy, buf); writeBox(cx, cy, buf); }
     }
 
-    // Keep chunks within `radius` (Chebyshev) of (camCx,camCy) resident; evict
-    // the rest to disk. Returns nothing; updates stats.
-    void streamAround(int camCx, int camCy, int radius) {
-        // evict out-of-range residents
-        std::vector<long long> toEvict;
-        for (auto& kv : resident) {
-            int cx = (int)(kv.first >> 20), cy = (int)(kv.first & 0xFFFFF);
-            if (std::abs(cx - camCx) > radius || std::abs(cy - camCy) > radius)
-                toEvict.push_back(kv.first);
-        }
-        for (long long k : toEvict) {
-            int cx = (int)(k >> 20), cy = (int)(k & 0xFFFFF);
-            writeChunk(cx, cy, resident[k]);
-            resident.erase(k);
-        }
-        // load/generate in-range chunks
-        for (int cy = camCy - radius; cy <= camCy + radius; ++cy)
-            for (int cx = camCx - radius; cx <= camCx + radius; ++cx) {
-                if (cx < 0 || cy < 0 || cx >= wchunks || cy >= hchunks) continue;
-                if (residentAt(cx, cy)) continue;
-                loadOrGenerate(cx, cy);
+    // Make the window's top-left chunk (camCx,camCy); save the old window and
+    // load the new one into the contiguous interior.
+    void setWindow(int camCx, int camCy) {
+        if (windowValid && camCx == winCx && camCy == winCy) return;
+        std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
+        if (windowValid)
+            for (int gy = 0; gy < GH; ++gy)
+                for (int gx = 0; gx < GW; ++gx) { extractChunk(gx, gy, buf); writeBox(winCx + gx, winCy + gy, buf); }
+        for (int gy = 0; gy < GH; ++gy)
+            for (int gx = 0; gx < GW; ++gx) {
+                if (!readBox(camCx + gx, camCy + gy, buf)) genBox(camCx + gx, camCy + gy, buf);
+                injectChunk(gx, gy, buf);
             }
-        if ((int)resident.size() > residentMax) residentMax = (int)resident.size();
+        winCx = camCx; winCy = camCy; windowValid = true;
+        residentMax = GW * GH;
     }
 
-    // --- one simulation frame ----------------------------------------------
     void step() {
-        // collect awake resident chunks, reset their moved flags
-        std::vector<std::pair<int,int>> awake;
-        for (auto& kv : resident) {
-            int cx = (int)(kv.first >> 20), cy = (int)(kv.first & 0xFFFFF);
-            std::fill(kv.second.moved.begin(), kv.second.moved.end(), 0);
-            if (kv.second.awake()) awake.push_back({cx, cy});
-        }
-        // bottom chunks first, then left-to-right -> globally bottom-up order
-        std::sort(awake.begin(), awake.end(), [](auto a, auto b) {
-            if (a.second != b.second) return a.second > b.second;
-            return a.first < b.first;
-        });
-
-        for (auto [cx, cy] : awake) {
-            Chunk* c = residentAt(cx, cy);
-            int baseX = cx * CHUNK, baseY = cy * CHUNK;
-            for (int ly = c->dmaxy; ly >= c->dminy; --ly) {       // bottom-to-top
-                for (int lx = c->dminx; lx <= c->dmaxx; ++lx) {
-                    if (c->moved[ly * CHUNK + lx]) continue;
-                    int gx = baseX + lx, gy = baseY + ly;
-                    uint8_t m = c->cells[ly * CHUNK + lx];
-                    if (m == EMPTY || m == WALL) continue;
-                    bool left = (((uint32_t)gx + (uint32_t)gy + frame) & 1u) == 0u;
-                    int d1 = left ? -1 : 1, d2 = -d1;
-                    if (m == SAND || m == WATER) {
-                        if (tryMove(gx, gy, gx, gy + 1)) continue;
-                        if (tryMove(gx, gy, gx + d1, gy + 1)) continue;
-                        if (tryMove(gx, gy, gx + d2, gy + 1)) continue;
-                        if (m == WATER) {
-                            if (tryMove(gx, gy, gx + d1, gy)) continue;
-                            if (tryMove(gx, gy, gx + d2, gy)) continue;
-                        }
-                    } else { // GAS
-                        if (tryMove(gx, gy, gx, gy - 1)) continue;
-                        if (tryMove(gx, gy, gx + d1, gy - 1)) continue;
-                        if (tryMove(gx, gy, gx + d2, gy - 1)) continue;
-                        if (tryMove(gx, gy, gx + d1, gy)) continue;
-                        if (tryMove(gx, gy, gx + d2, gy)) continue;
-                    }
-                }
-            }
-        }
-        // settle dirty rects: each resident chunk adopts its accumulated next rect
-        for (auto& kv : resident) kv.second.commitNext();
+        g_step(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
         ++frame;
     }
 
-    // The world border (generated as WALL) is the indestructible solid shell,
-    // including the bottom floor: painting never modifies it.
-    bool indestructible(int gx, int gy) const {
-        return gx == 0 || gy == 0 || gx == wcells - 1 || gy == hcells - 1;
-    }
-
-    void paint(int gx, int gy, uint8_t material, int radius) {
+    void paint(int lx, int ly, uint8_t material, int radius) {
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
-                int nx = gx + dx, ny = gy + dy;
-                if (dx * dx + dy * dy > radius * radius) continue;
-                if (indestructible(nx, ny)) continue;
-                Chunk* c = residentAt(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT);
-                if (!c) continue;
-                c->cells[(ny & CHUNK_MASK) * CHUNK + (nx & CHUNK_MASK)] = material;
-                wake(nx, ny);
+                int nx = lx + dx, ny = ly + dy;
+                if (nx >= 0 && nx < LW && ny >= 0 && ny < LH && dx * dx + dy * dy <= radius * radius)
+                    grid[(size_t)(ny + Y0) * SW + (nx + X0)] = material;
             }
     }
+    uint8_t viewCell(int lx, int ly) const { return grid[(size_t)(ly + Y0) * SW + (lx + X0)]; }
 
-    // --- whole-world summary (resident + on-disk) --------------------------
     void summary(uint64_t& checksum, uint64_t counts[MATERIAL_COUNT]) {
         for (int i = 0; i < MATERIAL_COUNT; ++i) counts[i] = 0;
+        std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         uint64_t c = 14695981039346656037ull;
-        std::vector<uint8_t> buf(CHUNK * CHUNK);
-        for (int cy = 0; cy < hchunks; ++cy)
-            for (int cx = 0; cx < wchunks; ++cx) {
-                const uint8_t* cells;
-                Chunk* res = residentAt(cx, cy);
-                if (res) cells = res->cells.data();
-                else { readChunkRaw(cx, cy, buf); cells = buf.data(); }
-                for (int i = 0; i < CHUNK * CHUNK; ++i) {
-                    uint8_t v = cells[i];
-                    counts[v]++;
-                    c = (c ^ (uint64_t)v) * 1099511628211ull;
-                }
+        for (int cy = 0; cy < hbox; ++cy)
+            for (int cx = 0; cx < wbox; ++cx) {
+                bool inWin = windowValid && cx >= winCx && cx < winCx + GW && cy >= winCy && cy < winCy + GH;
+                const uint8_t* data;
+                if (inWin) { extractChunk(cx - winCx, cy - winCy, buf); data = buf.data(); }
+                else { readBox(cx, cy, buf); data = buf.data(); }
+                for (int i = 0; i < CHUNK * CHUNK; ++i) { uint8_t v = data[i]; counts[v]++; c = (c ^ v) * 1099511628211ull; }
             }
         checksum = c;
     }
 
-    // Render the whole world (resident + on-disk chunks) as a PPM image.
-    void writePPM(const char* path) {
-        FILE* f = fopen(path, "wb");
-        if (!f) { fprintf(stderr, "cannot open %s\n", path); return; }
-        fprintf(f, "P6\n%d %d\n255\n", wcells, hcells);
-        std::vector<uint8_t> row((size_t)wcells * 3);
-        std::vector<uint8_t> buf(CHUNK * CHUNK);
-        for (int cy = 0; cy < hchunks; ++cy)
-            for (int ly = 0; ly < CHUNK; ++ly) {
-                for (int cx = 0; cx < wchunks; ++cx) {
-                    const uint8_t* cells;
-                    Chunk* res = residentAt(cx, cy);
-                    if (res) cells = res->cells.data();
-                    else { readChunkRaw(cx, cy, buf); cells = buf.data(); }
-                    for (int lx = 0; lx < CHUNK; ++lx) {
-                        uint32_t c = kColors[cells[ly * CHUNK + lx]];
-                        size_t px = (size_t)(cx * CHUNK + lx) * 3;
-                        row[px + 0] = (c >> 16) & 0xFF;
-                        row[px + 1] = (c >> 8) & 0xFF;
-                        row[px + 2] = c & 0xFF;
-                    }
-                }
-                fwrite(row.data(), 1, row.size(), f);
-            }
-        fclose(f);
-    }
-
-    int residentCount() const { return (int)resident.size(); }
     int residentMaxCount() const { return residentMax; }
-    long long diskWrites() const { return nDiskWrites; }
-    long long diskReads() const { return nDiskReads; }
-    long long generated() const { return nGenerated; }
+    long long diskWrites() const { return nWrites; }
+    long long diskReads() const { return nReads; }
 
 private:
-    int wchunks, hchunks, wcells, hcells;
-    bool finite;
+    int wbox, hbox;
     std::string dir;
-    std::unordered_map<long long, Chunk> resident;  // key = (cx<<20)|cy
+    std::vector<uint8_t> grid;   // padded contiguous live region
+    std::vector<uint8_t> moved;
+    int winCx = 0, winCy = 0;
+    bool windowValid = false;
     uint32_t frame = 0;
     int residentMax = 0;
-    long long nDiskWrites = 0, nDiskReads = 0, nGenerated = 0;
+    long long nWrites = 0, nReads = 0;
 
-    static long long key(int cx, int cy) { return ((long long)cx << 20) | (long long)cy; }
-
-    Chunk* residentAt(int cx, int cy) {
-        auto it = resident.find(key(cx, cy));
-        return it == resident.end() ? nullptr : &it->second;
+    // --- chunk <-> interior, disk -------------------------------------------
+    void extractChunk(int gx, int gy, std::vector<uint8_t>& out) const {
+        for (int ly = 0; ly < CHUNK; ++ly)
+            for (int lx = 0; lx < CHUNK; ++lx)
+                out[ly * CHUNK + lx] = grid[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)];
     }
-
+    void injectChunk(int gx, int gy, const std::vector<uint8_t>& in) {
+        for (int ly = 0; ly < CHUNK; ++ly)
+            for (int lx = 0; lx < CHUNK; ++lx)
+                grid[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = in[ly * CHUNK + lx];
+    }
+    void genBox(int cx, int cy, std::vector<uint8_t>& buf) {
+        for (int y = 0; y < CHUNK; ++y)
+            for (int x = 0; x < CHUNK; ++x)
+                buf[y * CHUNK + x] = seedMat(cx * CHUNK + x, cy * CHUNK + y);
+    }
     std::string path(int cx, int cy) const {
-        char name[64];
-        std::snprintf(name, sizeof(name), "/c_%d_%d.bin", cx, cy);
-        return dir + name;
+        char n[64]; std::snprintf(n, sizeof(n), "/b_%d_%d.bin", cx, cy); return dir + n;
     }
-    void writeChunk(int cx, int cy, const Chunk& ch) {
+    void writeBox(int cx, int cy, const std::vector<uint8_t>& buf) {
         std::ofstream f(path(cx, cy), std::ios::binary);
-        f.write(reinterpret_cast<const char*>(ch.cells.data()), CHUNK * CHUNK);
-        ++nDiskWrites;
+        f.write((const char*)buf.data(), CHUNK * CHUNK); ++nWrites;
     }
-    bool readChunkRaw(int cx, int cy, std::vector<uint8_t>& out) {
+    bool readBox(int cx, int cy, std::vector<uint8_t>& buf) const {
         std::ifstream f(path(cx, cy), std::ios::binary);
         if (!f) return false;
-        f.read(reinterpret_cast<char*>(out.data()), CHUNK * CHUNK);
-        return true;
-    }
-    void loadOrGenerate(int cx, int cy) {
-        Chunk ch;
-        if (readChunkRaw(cx, cy, ch.cells)) ++nDiskReads;
-        else {
-            for (int ly = 0; ly < CHUNK; ++ly)
-                for (int lx = 0; lx < CHUNK; ++lx)
-                    ch.cells[ly * CHUNK + lx] = genCell(cx * CHUNK + lx, cy * CHUNK + ly, wcells, hcells);
-            ++nGenerated;
-        }
-        ch.fullDirty();          // freshly resident chunks simulate until settled
-        resident[key(cx, cy)] = std::move(ch);
-    }
-
-    // Wake the chunk(s) around a changed global cell for next frame.
-    void wake(int gx, int gy) {
-        for (int dy = -1; dy <= 1; ++dy)
-            for (int dx = -1; dx <= 1; ++dx) {
-                int nx = gx + dx, ny = gy + dy;
-                Chunk* c = residentAt(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT);
-                if (c) c->wakeLocal(nx & CHUNK_MASK, ny & CHUNK_MASK);
-            }
-    }
-
-    bool tryMove(int gx, int gy, int nx, int ny) {
-        if (finite && (nx < 0 || ny < 0 || nx >= wcells || ny >= hcells)) return false;
-        Chunk* tc = residentAt(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT);
-        if (!tc) return false;                       // unresident neighbor = solid
-        int ti = (ny & CHUNK_MASK) * CHUNK + (nx & CHUNK_MASK);
-        if (tc->moved[ti]) return false;
-        uint8_t target = tc->cells[ti];
-        Chunk* sc = residentAt(gx >> CHUNK_SHIFT, gy >> CHUNK_SHIFT);
-        int si = (gy & CHUNK_MASK) * CHUNK + (gx & CHUNK_MASK);
-        uint8_t self = sc->cells[si];
-        if (!canEnter(self, target)) return false;
-        tc->cells[ti] = self;                        // swap conserves materials
-        sc->cells[si] = target;
-        tc->moved[ti] = 1;
-        sc->moved[si] = 1;
-        wake(gx, gy);
-        wake(nx, ny);
+        f.read((char*)buf.data(), CHUNK * CHUNK);
+        const_cast<SimdWorld*>(this)->nReads++;
         return true;
     }
 };
 
 // ---------------------------------------------------------------------------
-// Headless benchmark: finite world, deterministic camera sweep, streaming.
-// ---------------------------------------------------------------------------
-static int runBench(int steps, int wch, int hch) {
-    std::string dir = "/tmp/sandsim_world_cpp_" + std::to_string((long)steps) + "_" +
-                      std::to_string(wch) + "x" + std::to_string(hch);
+static int runBench(int steps, int wbox, int hbox) {
+    if (wbox < GW) wbox = GW;
+    if (hbox < GH) hbox = GH;
+    std::string dir = "/tmp/sandsim_world_simd_" + std::to_string(steps) + "_" +
+                      std::to_string(wbox) + "x" + std::to_string(hbox);
     std::filesystem::remove_all(dir);
-    World world(wch, hch, dir, /*finite=*/true);
+    SimdWorld world(wbox, hbox, dir);
     world.generateAllToDisk();
 
     uint64_t startCk, startCnt[MATERIAL_COUNT];
     world.summary(startCk, startCnt);
 
-    int cells = wch * hch;
+    int nposX = wbox - GW + 1, nposY = hbox - GH + 1, nWin = nposX * nposY;
     auto start = std::chrono::steady_clock::now();
     for (int s = 0; s < steps; ++s) {
-        int visit = (int)((long long)s * cells / steps);
-        if (visit >= cells) visit = cells - 1;
-        int row = visit / wch, col = visit % wch;
-        int camCx = (row % 2 == 0) ? col : (wch - 1 - col);     // snake sweep
-        int camCy = row;
-        world.streamAround(camCx, camCy, /*radius=*/1);
+        int visit = (int)((long long)s * nWin / steps);
+        if (visit >= nWin) visit = nWin - 1;
+        int row = visit / nposX, col = visit % nposX;
+        world.setWindow((row % 2 == 0) ? col : (nposX - 1 - col), row);
         world.step();
     }
     auto end = std::chrono::steady_clock::now();
@@ -385,78 +194,66 @@ static int runBench(int steps, int wch, int hch) {
     world.summary(ck, cnt);
     bool conserved = true;
     for (int i = WALL; i <= GAS; ++i) if (cnt[i] != startCnt[i]) conserved = false;
-
-    double elapsedMs = std::chrono::duration<double, std::milli>(end - start).count();
-    printf("RESULT impl=cpp_world rule=world wchunks=%d hchunks=%d chunk=%d steps=%d "
-           "elapsed_ms=%.3f checksum=%016llx empty=%llu wall=%llu sand=%llu water=%llu gas=%llu "
+    double ms = std::chrono::duration<double, std::milli>(end - start).count();
+    double cells = (double)LW * LH * steps;
+    double mc = (ms > 0.0) ? cells / (ms / 1000.0) / 1e6 : 0.0;
+    printf("RESULT impl=cpp_%s rule=world window=%dx%d wbox=%d hbox=%d steps=%d "
+           "elapsed_ms=%.3f mcells_per_s=%.2f checksum=%016llx "
+           "empty=%llu wall=%llu sand=%llu water=%llu gas=%llu "
            "resident_max=%d disk_writes=%lld disk_reads=%lld conserved=%s\n",
-           wch, hch, CHUNK, steps, elapsedMs, (unsigned long long)ck,
+           simdName(), GW, GH, wbox, hbox, steps, ms, mc, (unsigned long long)ck,
            (unsigned long long)cnt[EMPTY], (unsigned long long)cnt[WALL],
            (unsigned long long)cnt[SAND], (unsigned long long)cnt[WATER], (unsigned long long)cnt[GAS],
-           world.residentMaxCount(), world.diskWrites(), world.diskReads(),
-           conserved ? "yes" : "no");
-
+           world.residentMaxCount(), world.diskWrites(), world.diskReads(), conserved ? "yes" : "no");
     std::filesystem::remove_all(dir);
     return conserved ? 0 : 2;
 }
 
-// Run the deterministic streaming sim, then write the whole world as a PPM.
-static int runPPM(const char* path, int steps, int wch, int hch) {
-    std::string dir = "/tmp/sandsim_world_cpp_ppm";
+static int runPPM(const char* pathOut, int steps) {
+    std::string dir = "/tmp/sandsim_world_simd_ppm";
     std::filesystem::remove_all(dir);
-    World world(wch, hch, dir, /*finite=*/true);
+    SimdWorld world(GW, GH, dir);           // world == one live window
     world.generateAllToDisk();
-    int cells = wch * hch;
-    for (int s = 0; s < steps; ++s) {
-        int visit = (int)((long long)s * cells / steps);
-        if (visit >= cells) visit = cells - 1;
-        int row = visit / wch, col = visit % wch;
-        int camCx = (row % 2 == 0) ? col : (wch - 1 - col);
-        world.streamAround(camCx, row, 1);
-        world.step();
+    world.setWindow(0, 0);
+    for (int s = 0; s < steps; ++s) world.step();
+    FILE* f = fopen(pathOut, "wb");
+    if (!f) return 1;
+    fprintf(f, "P6\n%d %d\n255\n", LW, LH);
+    std::vector<uint8_t> row((size_t)LW * 3);
+    for (int y = 0; y < LH; ++y) {
+        for (int x = 0; x < LW; ++x) {
+            uint32_t c = kColors[world.viewCell(x, y)];
+            row[x*3+0] = (c>>16)&0xFF; row[x*3+1] = (c>>8)&0xFF; row[x*3+2] = c&0xFF;
+        }
+        fwrite(row.data(), 1, row.size(), f);
     }
-    world.writePPM(path);
-    printf("wrote %s (%dx%d cells, %d steps, %dx%d chunks)\n",
-           path, wch * CHUNK, hch * CHUNK, steps, wch, hch);
+    fclose(f);
+    printf("wrote %s (%dx%d, %d steps)\n", pathOut, LW, LH, steps);
     std::filesystem::remove_all(dir);
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Interactive: a large streamed world viewed through a moving camera.
-// ---------------------------------------------------------------------------
-static const char* materialName(uint8_t m) {
-    switch (m) { case EMPTY: return "Eraser"; case WALL: return "Wall"; case SAND: return "Sand";
-                 case WATER: return "Water"; case GAS: return "Gas"; default: return "?"; }
-}
-
 static int runInteractive() {
     static const int PIXEL = 2;
-    static const int VIEW_W = 320, VIEW_H = 240;       // cells shown
-    static const int WCH = 64, HCH = 64;               // 4096x4096-cell world
-    int renderW = VIEW_W * PIXEL, renderH = VIEW_H * PIXEL;
-
-    std::string dir = "/tmp/sandsim_world_cpp_interactive";
+    static const int WBOX = 16, HBOX = 16;
+    int renderW = LW * PIXEL, renderH = LH * PIXEL;
+    std::string dir = "/tmp/sandsim_world_simd_interactive";
     std::filesystem::remove_all(dir);
-    World world(WCH, HCH, dir, /*finite=*/true);
-
-    int camX = WCH * CHUNK / 2 - VIEW_W / 2;            // top-left global cell of view
-    int camY = HCH * CHUNK / 2 - VIEW_H / 2;
+    SimdWorld world(WBOX, HBOX, dir);
+    world.generateAllToDisk();
+    int camCx = 0, camCy = 0;
+    world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
-        "Streamed World - WASD/arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
+        "Connected SIMD World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    // Map rendering and the cursor through a fixed logical size, so painting
-    // lands under the pointer even when a tiling compositor (e.g. niri) resizes
-    // the window away from the requested size.
     SDL_RenderSetLogicalSize(renderer, renderW, renderH);
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
-
     bool quit = false, mouseDown = false;
     int mouseX = 0, mouseY = 0;
     SDL_Event e;
@@ -473,40 +270,26 @@ static int runInteractive() {
                     case SDLK_2: current = SAND;  break;
                     case SDLK_3: current = WATER; break;
                     case SDLK_4: current = GAS;   break;
+                    case SDLK_LEFT:  if (camCx > 0) camCx--; break;
+                    case SDLK_RIGHT: if (camCx < WBOX - GW) camCx++; break;
+                    case SDLK_UP:    if (camCy > 0) camCy--; break;
+                    case SDLK_DOWN:  if (camCy < HBOX - GH) camCy++; break;
                 }
             }
         }
-        // Arrow keys or WASD pan the camera while held (smooth, continuous).
-        const Uint8* keys = SDL_GetKeyboardState(nullptr);
-        const int pan = 6;
-        if (keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A]) camX -= pan;
-        if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D]) camX += pan;
-        if (keys[SDL_SCANCODE_UP]    || keys[SDL_SCANCODE_W]) camY -= pan;
-        if (keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S]) camY += pan;
-        char title[160];
-        snprintf(title, sizeof(title),
-                 "Streamed World - painting %s - camera (%d,%d) - resident chunks %d",
-                 materialName(current), camX, camY, world.residentCount());
-        SDL_SetWindowTitle(window, title);
-
-        // keep chunks under the viewport (plus margin) resident
-        int camCx = (camX + VIEW_W / 2) >> CHUNK_SHIFT;
-        int camCy = (camY + VIEW_H / 2) >> CHUNK_SHIFT;
-        world.streamAround(camCx, camCy, 3);
-
+        world.setWindow(camCx, camCy);
         if (mouseDown) {
-            float lx, ly;
-            SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &lx, &ly);
-            world.paint(camX + (int)lx / PIXEL, camY + (int)ly / PIXEL, current, 4);
+            float flx, fly;
+            SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &flx, &fly);
+            world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, 4);
         }
         world.step();
-
-        for (int vy = 0; vy < VIEW_H; ++vy)
-            for (int vx = 0; vx < VIEW_W; ++vx) {
-                uint32_t color = kColors[world.get(camX + vx, camY + vy)];
+        for (int y = 0; y < LH; ++y)
+            for (int x = 0; x < LW; ++x) {
+                uint32_t color = kColors[world.viewCell(x, y)];
                 for (int dy = 0; dy < PIXEL; ++dy)
                     for (int dx = 0; dx < PIXEL; ++dx)
-                        pixels[(size_t)(vy * PIXEL + dy) * renderW + (vx * PIXEL + dx)] = color;
+                        pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
             }
         SDL_UpdateTexture(texture, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(renderer);
@@ -523,17 +306,16 @@ static int runInteractive() {
 }
 
 int main(int argc, char* argv[]) {
+    g_step = selectStep();   // pick AVX2 or SSE based on the running CPU
     if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) {
         int steps = (argc > 2) ? std::atoi(argv[2]) : 600;
-        int wch   = (argc > 3) ? std::atoi(argv[3]) : 6;
-        int hch   = (argc > 4) ? std::atoi(argv[4]) : 6;
-        return runBench(steps, wch, hch);
+        int wbox  = (argc > 3) ? std::atoi(argv[3]) : 6;
+        int hbox  = (argc > 4) ? std::atoi(argv[4]) : 6;
+        return runBench(steps, wbox, hbox);
     }
     if (argc > 2 && std::strcmp(argv[1], "--ppm") == 0) {
-        int steps = (argc > 3) ? std::atoi(argv[3]) : 600;
-        int wch   = (argc > 4) ? std::atoi(argv[4]) : 6;
-        int hch   = (argc > 5) ? std::atoi(argv[5]) : 6;
-        return runPPM(argv[2], steps, wch, hch);
+        int steps = (argc > 3) ? std::atoi(argv[3]) : 400;
+        return runPPM(argv[2], steps);
     }
     return runInteractive();
 }

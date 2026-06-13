@@ -1,24 +1,9 @@
-# Compiled binaries (one per implementation directory)
-/c/sandsim
-/c/sandsim_materials
-/c/sandsim_world
-/zig/sandsim
-/zig/sandsim_materials
-/zig/sandsim_world
+# Compiled binaries and objects
+/cpp/sandsim_world
 /opengl/sandsim_gl
-/hip/sandsim_hip
 /vulkan/sandsim_vulkan_compute
-
-# C++ variant binaries (sources keep their .cpp extension)
-/cpp/sandsim_*
-!/cpp/sandsim_*.cpp
-
-# Compiled shaders and object files
-*.spv
 *.o
+*.spv
 
-# Language build caches
-/rust/target/
-/zig/.zig-cache/
-/zig/zig-cache/
+# Editor/OS
 __pycache__/
