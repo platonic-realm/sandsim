@@ -242,6 +242,26 @@ void main() {
         if (m == 1u) cells[i] = 20u; else if (m == 2u) cells[i] = 2u;
         return;
     }
+    if (pc.type == 28) {                                  // virus: mark infect (1) / die (2)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 21u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            uint h = (uint(x)*107u + uint(y)*199u + uint(pc.frame)*149u) & 0xFFu;
+            if (hot || h < 16u) r = 2u;
+        } else if (c != 0u && c != 1u && c != 6u && c != 7u && c != 19u) {   // not empty/wall/fire/lava/void
+            bool nv = cells[i-1]==21u||cells[i+1]==21u||cells[i-pc.SW]==21u||cells[i+pc.SW]==21u;
+            uint h = (uint(x)*191u + uint(y)*131u + uint(pc.frame)*73u) & 0xFFu;
+            if (nv && h < 36u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 29) {                                  // virus: apply (1 -> virus 21, 2 -> empty)
+        int i = y * pc.SW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 21u; else if (m == 2u) cells[i] = 0u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

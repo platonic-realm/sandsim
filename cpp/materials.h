@@ -25,12 +25,14 @@
 // sink to those sources: a black hole that CONSUMES everything around it to EMPTY
 // (only WALL contains it), never depleting. MUD is wet earth: SAND that touches
 // WATER packs into it, and it bakes back to SAND next to FIRE/LAVA -- a little
-// wet/dry cycle that muddies shores.
+// wet/dry cycle that muddies shores. VIRUS is a self-propagating infection: it
+// converts the cells it touches into more VIRUS, burns itself out to EMPTY over
+// time (so it spreads as a wave), and is cauterised by FIRE/LAVA -- WALL contains it.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20,
-    MATERIAL_COUNT = 21
+    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
+    MATERIAL_COUNT = 22
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -107,6 +109,21 @@ static constexpr uint32_t MUD_BAKE = 14;       // of 256/frame -> mud by fire/la
 inline bool mudBakes(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 83u + (uint32_t)y * 173u + frame * 109u) & 0xFFu;
     return h < MUD_BAKE;
+}
+static constexpr uint32_t VIRUS_SPREAD = 36;   // of 256/frame -> infection eats a neighbour
+inline bool virusSpreads(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 191u + (uint32_t)y * 131u + frame * 73u) & 0xFFu;
+    return h < VIRUS_SPREAD;
+}
+static constexpr uint32_t VIRUS_DECAY = 16;    // of 256/frame -> virus burns out (~16 frame life)
+inline bool virusDecays(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 107u + (uint32_t)y * 199u + frame * 149u) & 0xFFu;
+    return h < VIRUS_DECAY;
+}
+// What the infection can convert: anything but the void, the walls that contain it,
+// the fire/lava that cauterise it, and itself.
+inline bool virusEats(uint8_t m) {
+    return m != EMPTY && m != WALL && m != VIRUS && m != FIRE && m != LAVA && m != VOID;
 }
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
@@ -366,6 +383,34 @@ inline void mudCycle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = MUD;
             else if (scratch[i] == 2) grid[i] = SAND;
+        }
+}
+
+// Virus: a self-propagating infection, one combined two-pass snapshot. A VIRUS cell
+// dies to EMPTY if it burns out (frame hash) or touches FIRE/LAVA (cauterised); any
+// other consumable cell next to a VIRUS turns into VIRUS. Because new infection
+// outpaces decay, it spreads as an expanding wave that leaves emptiness behind and
+// stops at WALL. Pass 1 marks each cell (1 = infect, 2 = die), pass 2 applies, so
+// it's order-independent and GPU-identical.
+inline void spreadVirus(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == VIRUS) {
+                bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+                if (hot || virusDecays(x, y, frame)) r = 2;
+            } else if (virusEats(c)) {
+                bool nv = grid[i-1]==VIRUS || grid[i+1]==VIRUS || grid[i-SW]==VIRUS || grid[i+SW]==VIRUS;
+                if (nv && virusSpreads(x, y, frame)) r = 1;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = VIRUS;
+            else if (scratch[i] == 2) grid[i] = EMPTY;
         }
 }
 
