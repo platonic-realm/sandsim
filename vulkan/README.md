@@ -26,7 +26,7 @@ GPU.
 ```sh
 make                                        # glslc shaders/world.comp -> .spv, then the app
 ./sandsim_world_vk                          # interactive: arrows pan, number keys paint
-./sandsim_world_vk --res 1280x800 --scale 3 # window resolution + virtual-pixel size (default 1024x768, 2x2)
+./sandsim_world_vk --res 1280x800 --scale 3 --sps 120  # window res / virtual-pixel size / physics rate
 ./sandsim_world_vk --bench 600 6 6          # headless streaming benchmark (one RESULT line)
 ```
 

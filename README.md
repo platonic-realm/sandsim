@@ -40,10 +40,12 @@ make benchmark  # build all three, verify identical output, print a throughput t
 ```
 
 The interactive view renders each cell as a **virtual pixel** of `scale × scale`
-screen pixels, so the resident window is `winW/scale × winH/scale` cells. Window
-resolution and scale are configurable the same way on all three backends —
-`--res WxH` / `--scale N`, or `SANDSIM_RES` / `SANDSIM_SCALE` (default
-**1024×768, 2×2**).
+screen pixels, so the resident window is `winW/scale × winH/scale` cells. The
+**physics rate is decoupled from rendering** (a fixed-timestep accumulator keyed
+to real time), so the simulation runs at the same wall-clock speed on every
+backend, whatever the frame rate. All configurable the same way on all three —
+`--res WxH` / `--scale N` / `--sps STEPS_PER_SEC`, or `SANDSIM_RES` /
+`SANDSIM_SCALE` / `SANDSIM_SPS` (default **1024×768, 2×2, 60 steps/s**).
 
 Dependencies: a C++17 compiler + SDL2; GLEW + GLFW (OpenGL); the Vulkan SDK +
 `glslc` (Vulkan).

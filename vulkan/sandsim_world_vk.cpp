@@ -42,17 +42,22 @@ static const uint32_t kColors[MATERIAL_COUNT] = {
     0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu,
 };
 
-// Window resolution + virtual-pixel scale for the interactive view.
-struct ViewCfg { int winW = 1024, winH = 768, scale = 2; };
+// Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
+// decoupled from the render rate so the physics runs at the same wall-clock speed
+// on every backend.
+struct ViewCfg { int winW = 1024, winH = 768, scale = 2, simHz = 60; };
 static ViewCfg parseView(int argc, char* argv[]) {
     ViewCfg c;
     if (const char* e = getenv("SANDSIM_RES"))   std::sscanf(e, "%dx%d", &c.winW, &c.winH);
     if (const char* e = getenv("SANDSIM_SCALE")) c.scale = std::atoi(e);
+    if (const char* e = getenv("SANDSIM_SPS"))   c.simHz = std::atoi(e);
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--res") && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &c.winW, &c.winH);
         else if (!std::strcmp(argv[i], "--scale") && i + 1 < argc) c.scale = std::atoi(argv[++i]);
+        else if (!std::strcmp(argv[i], "--sps") && i + 1 < argc) c.simHz = std::atoi(argv[++i]);
     }
     if (c.scale < 1) c.scale = 1;
+    if (c.simHz < 1) c.simHz = 1;
     if (c.winW < CHUNK * c.scale) c.winW = CHUNK * c.scale;
     if (c.winH < CHUNK * c.scale) c.winH = CHUNK * c.scale;
     return c;
@@ -549,6 +554,9 @@ static int runInteractive(ViewCfg cfg) {
     SDL_Texture* tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false, mouseDown = false; int mouseX = 0, mouseY = 0; SDL_Event e;
+    const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
+    double acc = 0.0;
+    auto last = std::chrono::steady_clock::now();
     while (!quit) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) quit = true;
@@ -570,7 +578,16 @@ static int runInteractive(ViewCfg cfg) {
             float flx, fly; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &flx, &fly);
             world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, 4);
         }
-        world.stepAndPresent();          // one submit: advance + read back for rendering
+        // Advance the simulation by however much real time elapsed, so physics
+        // runs at cfg.simHz steps/s regardless of the render frame rate.
+        auto nowT = std::chrono::steady_clock::now();
+        acc += std::chrono::duration<double>(nowT - last).count();
+        last = nowT;
+        int ran = 0;
+        while (acc >= stepDt && ran < 8) { acc -= stepDt; ++ran; }
+        if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
+        if (ran > 1) world.stepN(ran - 1);
+        if (ran > 0) world.stepAndPresent();        // last step + readback in one submit
         for (int y = 0; y < LH; ++y)
             for (int x = 0; x < LW; ++x) {
                 uint32_t color = kColors[world.viewCell(x, y)];
