@@ -72,11 +72,18 @@ noted as further refinements.
 `cpp/sandsim_world_simd.cpp` reuses the **multi-buffer SIMD** technique from
 `cpp/sandsim_sse_mb.cpp` / `sandsim_avx_mb.cpp`: the interleaved layout
 `cells[(y*W + x)*LANES + lane]` lets a single vector load read the same cell
-across `LANES` boxes at once, so one SIMD instruction advances `LANES` live
-boxes in parallel. Here the lanes are **live boxes of the streamed world**
-rather than independent windows. Box interiors advance in lockstep across the
-lanes; a scalar pass resolves the one-cell flow across box borders, and the same
-streaming/eviction keeps only a working set of boxes resident.
+across `LANES` boxes at once, so one SSE instruction advances `LANES = 16` live
+boxes in parallel. Here the lanes are **live boxes of the streamed world**, each
+an independent box with solid edges, and the boxes stream to/from disk as the
+camera moves.
+
+It runs the **full materials rule** (EMPTY/WALL/SAND/WATER/GAS), vectorised
+across the lanes: for each directional move attempt it computes — for all 16
+lanes at once — `canEnter(current, target)` and an "eligible movers" mask, then
+swaps the matching lanes with `_mm_blendv_epi8`. A per-cell `moved` mask gives
+the same one-move-per-frame semantics as the scalar engine, so each box behaves
+exactly like a small materials simulation. Sand piles, water finds its level,
+and gas rises — all in parallel SIMD lanes.
 
 ## Verifying it
 
