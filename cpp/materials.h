@@ -23,11 +23,14 @@
 // out -- the soot of a dying flame. VOLCANO is SPRING's hot twin: an inert vent
 // that never depletes but SOURCES LAVA into the empty cells around it. VOID is the
 // sink to those sources: a black hole that CONSUMES everything around it to EMPTY
-// (only WALL contains it), never depleting.
+// (only WALL contains it), never depleting. MUD is wet earth: SAND that touches
+// WATER packs into it, and it bakes back to SAND next to FIRE/LAVA -- a little
+// wet/dry cycle that muddies shores.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MATERIAL_COUNT = 20
+    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20,
+    MATERIAL_COUNT = 21
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -94,6 +97,16 @@ static constexpr uint32_t VOLCANO_FLOW = 16;   // of 256/frame -> empty cells by
 inline bool volcanoFlows(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 109u + (uint32_t)y * 241u + frame * 67u) & 0xFFu;
     return h < VOLCANO_FLOW;
+}
+static constexpr uint32_t MUD_FORM = 10;       // of 256/frame -> sand touching water packs to mud
+inline bool mudForms(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 157u + (uint32_t)y * 97u + frame * 61u) & 0xFFu;
+    return h < MUD_FORM;
+}
+static constexpr uint32_t MUD_BAKE = 14;       // of 256/frame -> mud by fire/lava bakes back to sand
+inline bool mudBakes(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 83u + (uint32_t)y * 173u + frame * 109u) & 0xFFu;
+    return h < MUD_BAKE;
 }
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
@@ -326,6 +339,33 @@ inline void consumeVoid(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = EMPTY;
+        }
+}
+
+// Mud: a little wet/dry cycle done as ONE two-pass snapshot. SAND touching WATER
+// packs into MUD; MUD touching FIRE/LAVA bakes back to SAND. Pass 1 marks each cell
+// with which way it goes (1 = wet to mud, 2 = bake to sand), pass 2 applies -- so
+// it's order-independent and GPU-identical. Frame-hashed, so shores muddy and bake
+// gradually rather than all at once.
+inline void mudCycle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == SAND) {
+                bool water = grid[i-1]==WATER || grid[i+1]==WATER || grid[i-SW]==WATER || grid[i+SW]==WATER;
+                if (water && mudForms(x, y, frame)) r = 1;
+            } else if (c == MUD) {
+                bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+                if (hot && mudBakes(x, y, frame)) r = 2;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = MUD;
+            else if (scratch[i] == 2) grid[i] = SAND;
         }
 }
 

@@ -222,6 +222,26 @@ void main() {
         if (moved[i] == 1u) cells[i] = 0u;
         return;
     }
+    if (pc.type == 26) {                                  // mud: mark sand->mud (1) by water, mud->sand (2) by hot
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 2u) {
+            bool w = cells[i-1]==3u||cells[i+1]==3u||cells[i-pc.SW]==3u||cells[i+pc.SW]==3u;
+            uint h = (uint(x)*157u + uint(y)*97u + uint(pc.frame)*61u) & 0xFFu;
+            if (w && h < 10u) r = 1u;
+        } else if (c == 20u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            uint h = (uint(x)*83u + uint(y)*173u + uint(pc.frame)*109u) & 0xFFu;
+            if (hot && h < 14u) r = 2u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 27) {                                  // mud: apply (1 -> mud 20, 2 -> sand 2)
+        int i = y * pc.SW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 20u; else if (m == 2u) cells[i] = 2u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

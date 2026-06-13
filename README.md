@@ -21,12 +21,12 @@ builds them, asserts the checksums match, and prints a throughput table.
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
-`TNT`, `ASH` (powder), `VOLCANO`, `VOID`. Movement is a density swap — heaviest to
-lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`, with
+`TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`. Movement is a density swap —
+heaviest to lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`, with
 `STEAM`/`SMOKE` the lightest — so sand sinks through lava, acid sinks below water,
 oil floats on water, and gas/fire/steam/smoke rise. `ASH` falls and piles like
-sand. `WALL`, `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, and
-`VOID` are solids that don't move.
+sand. `WALL`, `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`,
+and `MUD` are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -51,6 +51,9 @@ CPU and GPU:
   hot.
 - `GLASS` is **made by melting `SAND` in `LAVA`** — drop sand into a lava pool and
   it sets into an inert, fireproof, acid-proof solid you can build with.
+- `MUD` is **wet earth**: `SAND` that touches `WATER` packs into it, so shores and
+  riverbanks turn muddy — and it **bakes back to `SAND`** next to `FIRE` or `LAVA`,
+  a little wet/dry cycle (water makes mud, heat dries it out again).
 - `ICE` is a two-way **phase** solid: it **melts back to `WATER`** wherever it
   touches `FIRE` or `LAVA`, and it also **freezes the `WATER` it touches** into
   more ice — a slow cold front that creeps across a still pool. Both are
@@ -87,7 +90,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud); `[` / `]` size the brush. The palette
 is the same on all three backends, and every rule — movement, the time-varying
 transforms, and the neighbour reactions — is bit-identical across CPU SIMD,
 OpenGL, and Vulkan.

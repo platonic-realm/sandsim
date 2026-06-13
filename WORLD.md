@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -64,6 +64,10 @@ GPU and produce a **bit-identical** world.
     the first rule that *creates* material rather than moving or transforming it.
   - **glassmaking** — `SAND` touching `LAVA` sets into `GLASS`, an inert solid
     (another mark/apply snapshot pair), so sand poured into a lava pool fuses.
+  - **mud** — a wet/dry cycle folded into one mark/apply pass: `SAND` next to
+    `WATER` packs into `MUD`, and `MUD` next to `FIRE`/`LAVA` bakes back to `SAND`
+    (pass 1 marks which way each cell goes, pass 2 applies). Mud forms naturally
+    along the generated world's shores, so the benchmark exercises it directly.
   - **melting & freezing** — `ICE` is a two-way phase solid: it thaws to `WATER`
     next to `FIRE`/`LAVA`, and freezes the `WATER` it touches into more `ICE` (both
     frame-hashed mark/apply pairs). Freezing is slower than melting, so a pond ices

@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MATERIAL_COUNT = 20 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, MATERIAL_COUNT = 21 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -292,6 +292,26 @@ void main() {
         if (moved[i] == 1u) cells[i] = 0u;
         return;
     }
+    if (uType == 26) {                                    // mud: mark sand->mud (1) by water, mud->sand (2) by hot
+        int i = y * uSW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 2u) {
+            bool w = cells[i-1]==3u||cells[i+1]==3u||cells[i-uSW]==3u||cells[i+uSW]==3u;
+            uint h = (uint(x)*157u + uint(y)*97u + uint(uFrame)*61u) & 0xFFu;
+            if (w && h < 10u) r = 1u;
+        } else if (c == 20u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-uSW]==6u||cells[i-uSW]==7u||cells[i+uSW]==6u||cells[i+uSW]==7u;
+            uint h = (uint(x)*83u + uint(y)*173u + uint(uFrame)*109u) & 0xFFu;
+            if (hot && h < 14u) r = 2u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 27) {                                    // mud: apply (1 -> mud 20, 2 -> sand 2)
+        int i = y * uSW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 20u; else if (m == 2u) cells[i] = 2u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -345,6 +365,7 @@ vec3 matColor(uint m) {
     if (m == 17u) return vec3(0.420, 0.388, 0.345);
     if (m == 18u) return vec3(0.251, 0.165, 0.157);
     if (m == 19u) return vec3(0.235, 0.078, 0.322);
+    if (m == 20u) return vec3(0.306, 0.231, 0.141);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -500,7 +521,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 25; ++t) {         // + glass, ice, spring, tnt, volcano, void
+            for (int t = 3; t <= 27; ++t) {         // + ... volcano, void, mud
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -511,7 +532,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -581,7 +602,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
@@ -696,8 +717,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[20] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID};
-    ui::Palette pal = ui::palette(renderW, 20);
+    static const uint8_t kSwatch[21] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD};
+    ui::Palette pal = ui::palette(renderW, 21);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -710,7 +731,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 20; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 21; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -739,6 +760,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_H) == GLFW_PRESS) current = ASH;
         if (glfwGetKey(win, GLFW_KEY_V) == GLFW_PRESS) current = VOLCANO;
         if (glfwGetKey(win, GLFW_KEY_X) == GLFW_PRESS) current = VOID;
+        if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) current = MUD;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;
