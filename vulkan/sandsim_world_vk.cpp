@@ -418,12 +418,15 @@ private:
                 barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
             }
-            if (hasFire) {                          // fire burn-out pass (time-varying in frame)
-                PushConsts pc{SW, X0, X1, Y0, Y1, 3, 0, 0, 0, 0, (int)(frame + (uint32_t)f)};
-                vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
-                barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            if (hasFire) {                          // fire burn-out + spread (two-pass ignite)
+                int decay = (int)(frame + (uint32_t)f);
+                for (int t : {3, 4, 5}) {           // 3 burn-out, 4 mark oil touching fire, 5 apply
+                    PushConsts pc{SW, X0, X1, Y0, Y1, t, 0, 0, 0, 0, decay};
+                    vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                    vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
+                    barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+                }
             }
             // next frame's moved-clear (TRANSFER) must wait for this frame's shader writes
             if (f + 1 < n)

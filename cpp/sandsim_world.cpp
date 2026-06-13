@@ -121,7 +121,10 @@ public:
 
     void step() {
         g_step(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
-        if (hasFire) decayFire(grid.data(), SW, X0, X1, Y0, Y1, frame);
+        if (hasFire) {
+            decayFire(grid.data(), SW, X0, X1, Y0, Y1, frame);
+            igniteFire(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);   // moved = scratch
+        }
         ++frame;
     }
 

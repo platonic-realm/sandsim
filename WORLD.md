@@ -47,10 +47,15 @@ GPU and produce a **bit-identical** world.
   is a pure density swap (heavy→light: `SAND > WATER > OIL > air > GAS > FIRE`), so
   oil floats on water and gas/fire rise. `FIRE` also **burns out** via a separate
   per-cell pass that is a pure function of `(x, y, frame)` — no neighbour reads —
-  so it stays order-independent and the GPU computes the identical hash. New
-  materials are additive: they don't appear in the `--bench` seed, so the
-  cross-backend reference checksums are unchanged (the fire rule was verified
-  bit-identical by temporarily seeding it across all three backends).
+  so it stays order-independent and the GPU computes the identical hash. `FIRE`
+  **spreads through `OIL`**: a neighbour-based rule that would normally be
+  order-dependent (CPU-sequential ≠ GPU-parallel) is made order-independent by
+  doing it in **two snapshot passes through the `moved` scratch buffer** — pass 1
+  reads the grid and records which oil cells touch fire, pass 2 applies them — so
+  each pass reads one buffer and writes another. New materials/rules are additive:
+  they don't appear in the `--bench` seed, so the cross-backend reference
+  checksums are unchanged (fire + ignition were verified bit-identical by
+  temporarily seeding them across all three backends).
 - **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
   `wbox × hbox` chunks; chunks live on disk and are generated (from a
   deterministic seed) the first time they're needed.

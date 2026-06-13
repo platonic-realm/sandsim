@@ -30,3 +30,24 @@ inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uin
             if (grid[i] == FIRE && fireBurnsOut(x, y, frame)) grid[i] = EMPTY;
         }
 }
+
+// Ignition: OIL touching FIRE (4-neighbour) catches and becomes FIRE, so flame
+// spreads through fuel one layer per frame. Done in two per-cell passes through a
+// scratch buffer (the `moved` flags, free after the movement step): pass 1 reads
+// a consistent snapshot of the grid and records intent; pass 2 applies it. Each
+// pass reads one buffer and writes another, so it is order-independent and the
+// GPU reproduces it bit-for-bit.
+inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            scratch[i] = (grid[i] == OIL &&
+                          (grid[i - 1] == FIRE || grid[i + 1] == FIRE ||
+                           grid[i - SW] == FIRE || grid[i + SW] == FIRE)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = FIRE;
+        }
+}

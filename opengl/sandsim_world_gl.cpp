@@ -122,6 +122,17 @@ void main() {
         }
         return;
     }
+    if (uType == 4) {                                      // ignite: mark oil (5) touching fire (6)
+        int i = y * uSW + x;
+        moved[i] = (cells[i] == 5u &&
+                    (cells[i-1]==6u || cells[i+1]==6u || cells[i-uSW]==6u || cells[i+uSW]==6u)) ? 1u : 0u;
+        return;
+    }
+    if (uType == 5) {                                      // ignite: apply marked cells
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 6u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -307,8 +318,14 @@ public:
             glDispatchCompute(LW / 16, LH / 16, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
-        if (hasFire) {                              // fire burn-out pass (time-varying)
+        if (hasFire) {                              // fire burn-out + spread (two-pass ignite)
             glUniform1i(lType, 3); glUniform1i(lFrame, (int)frame);
+            glDispatchCompute(LW / 16, LH / 16, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            glUniform1i(lType, 4);                  // mark oil touching fire (into moved)
+            glDispatchCompute(LW / 16, LH / 16, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+            glUniform1i(lType, 5);                  // apply marks -> fire
             glDispatchCompute(LW / 16, LH / 16, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }

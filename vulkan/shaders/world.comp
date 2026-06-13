@@ -40,6 +40,17 @@ void main() {
         }
         return;
     }
+    if (pc.type == 4) {                                   // ignite: mark oil (5) touching fire (6)
+        int i = y * pc.SW + x;
+        moved[i] = (cells[i] == 5u &&
+                    (cells[i-1]==6u || cells[i+1]==6u || cells[i-pc.SW]==6u || cells[i+pc.SW]==6u)) ? 1u : 0u;
+        return;
+    }
+    if (pc.type == 5) {                                   // ignite: apply marked cells
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 6u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
