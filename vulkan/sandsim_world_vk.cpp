@@ -33,14 +33,14 @@
 #include <unistd.h>
 #include "../ui.h"       // on-screen material palette
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, MATERIAL_COUNT = 8 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, MATERIAL_COUNT = 9 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -205,7 +205,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -469,7 +469,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM) hasReactive = true;
                 stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = v;
             }
     }
@@ -580,13 +580,13 @@ static int runInteractive(ViewCfg cfg) {
             "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
             renderW, renderH, outW, outH, ri.name, PIXEL, gw, gh, LW, LH, cfg.simHz);
 
-    static const uint8_t kSwatch[8] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA};
-    uint32_t swatchCol[8];
-    for (int i = 0; i < 8; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 8);
+    static const uint8_t kSwatch[9] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM};
+    uint32_t swatchCol[9];
+    for (int i = 0; i < 9; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 9);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 8; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 9; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false; int mouseX = 0, mouseY = 0; SDL_Event e;
@@ -611,6 +611,7 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_5: current = OIL;   break;
                 case SDLK_6: current = FIRE;  break;
                 case SDLK_7: current = LAVA;  break;
+                case SDLK_8: current = STEAM; break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                 case SDLK_LEFT:  if (camCx > 0) camCx--; break;

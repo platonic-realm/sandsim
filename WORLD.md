@@ -43,18 +43,21 @@ Sources:
 The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
-- **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`.
-  Movement is a pure density swap (heavy→light:
-  `SAND > LAVA > WATER > OIL > air > GAS > FIRE`). On top of it sit three
-  reactions, each kept order-independent so the GPU reproduces them exactly:
-  - **burn-out** — `FIRE` vanishing is a per-cell pass that is a pure function of
-    `(x, y, frame)`, no neighbour reads, so the GPU computes the identical hash.
-  - **ignition** (`FIRE`/`LAVA` → `OIL`) and **lava+water → stone** are
-    neighbour-based, which is normally order-*dependent* (CPU-sequential ≠
-    GPU-parallel). Each is made order-independent with **two snapshot passes
-    through the `moved` scratch buffer** (free after the movement step): pass 1
-    reads the grid and marks the cells to transform, pass 2 applies the marks —
-    so every pass reads one buffer and writes another.
+- **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
+  `STEAM`. Movement is a pure density swap (heavy→light:
+  `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
+  sit the reactions, each kept order-independent so the GPU reproduces them
+  exactly:
+  - **time-varying transforms** — `FIRE` burning out to `EMPTY` and `STEAM`
+    condensing back to `WATER` are per-cell passes that are pure functions of
+    `(x, y, frame)` (no neighbour reads), so the GPU computes the identical hash.
+  - **ignition** (`FIRE`/`LAVA` → `OIL`) and **water-meets-hot** (`WATER` →
+    `STEAM`, `FIRE` quenched, `LAVA` → stone) are neighbour-based, which is
+    normally order-*dependent* (CPU-sequential ≠ GPU-parallel). Each is made
+    order-independent with **two snapshot passes through the `moved` scratch
+    buffer** (free after the movement step): pass 1 reads the grid and marks the
+    cells to transform, pass 2 applies the marks — so every pass reads one buffer
+    and writes another. Steam thus completes a boil → rise → condense water cycle.
 
   All reaction passes are gated by a per-world flag set when fire/lava enters, so
   fire-free worlds (like the `--bench` seed) skip them and the cross-backend

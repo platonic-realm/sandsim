@@ -3,32 +3,42 @@
 #include <cstdint>
 #include <cstddef>
 
-// Density order (heavy -> light): SAND > LAVA > WATER > OIL > air > GAS > FIRE.
-// OIL floats on water; FIRE rises and burns out; LAVA is a heavy molten liquid
-// that sets oil ablaze and freezes to WALL where it meets water.
+// Density order (heavy -> light): SAND > LAVA > WATER > OIL > air > GAS > FIRE,
+// with STEAM the lightest (rises). OIL floats on water; FIRE rises and burns out;
+// LAVA is a heavy molten liquid that sets oil ablaze. Water meeting fire/lava
+// flashes to STEAM, which rises and condenses back to WATER -> a little water cycle.
 enum Material : uint8_t {
-    EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, MATERIAL_COUNT = 8
+    EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
+    STEAM = 8, MATERIAL_COUNT = 9
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
 // (x, y, frame) -- no neighbour reads -- so it stays order-independent and is
 // bit-identical on CPU SIMD and the GPU compute backends (which compute the same
 // hash). ~FIRE_DECAY/256 of the flame winks out each frame.
-static constexpr uint32_t FIRE_DECAY = 12;   // of 256 -> avg flame life ~21 frames
+static constexpr uint32_t FIRE_DECAY = 12;     // of 256 -> avg flame life ~21 frames
+static constexpr uint32_t STEAM_CONDENSE = 5;  // of 256 -> steam lasts ~50 frames, rises first
 
 inline bool fireBurnsOut(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 167u + (uint32_t)y * 101u + frame * 131u) & 0xFFu;
     return h < FIRE_DECAY;
 }
+inline bool steamCondenses(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 193u + (uint32_t)y * 97u + frame * 111u) & 0xFFu;
+    return h < STEAM_CONDENSE;
+}
 
-// Run the burn-out over the live interior (scalar; cheap and identical on every
-// SIMD width). Gated by the world on "is there any fire?" so fire-free worlds
+// Per-cell time-varying transforms over the live interior (scalar; identical on
+// every SIMD width and the GPU). FIRE burns out to EMPTY; STEAM condenses back to
+// WATER. Gated by the world on "is anything reactive present?" so plain worlds
 // (e.g. the benchmark) pay nothing.
 inline void decayFire(uint8_t* grid, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
-            if (grid[i] == FIRE && fireBurnsOut(x, y, frame)) grid[i] = EMPTY;
+            uint8_t c = grid[i];
+            if (c == FIRE && fireBurnsOut(x, y, frame)) grid[i] = EMPTY;
+            else if (c == STEAM && steamCondenses(x, y, frame)) grid[i] = WATER;
         }
 }
 
@@ -55,24 +65,29 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
         }
 }
 
-// LAVA + WATER freeze to stone: any LAVA touching WATER (or vice-versa) becomes
-// WALL. Same two-pass snapshot as ignition so it's order-independent and the GPU
-// matches exactly.
-inline void lavaReact(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+// Water meets hot: when WATER touches FIRE or LAVA, the water flashes to STEAM,
+// fire is quenched to EMPTY, and lava freezes to WALL (stone). One two-pass
+// snapshot (the `moved` scratch): pass 1 marks every cell at such an interface,
+// pass 2 transforms each by its own type -- order-independent, GPU-identical.
+inline void quench(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    auto nb = [&](size_t i, uint8_t m) {
+        return grid[i-1]==m || grid[i+1]==m || grid[i-SW]==m || grid[i+SW]==m;
+    };
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
             bool react = false;
-            if (c == LAVA)
-                react = (grid[i-1]==WATER || grid[i+1]==WATER || grid[i-SW]==WATER || grid[i+SW]==WATER);
-            else if (c == WATER)
-                react = (grid[i-1]==LAVA || grid[i+1]==LAVA || grid[i-SW]==LAVA || grid[i+SW]==LAVA);
+            if (c == WATER)      react = nb(i, FIRE) || nb(i, LAVA);
+            else if (c == FIRE)  react = nb(i, WATER);
+            else if (c == LAVA)  react = nb(i, WATER);
             scratch[i] = react ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
-            if (scratch[i]) grid[i] = WALL;
+            if (!scratch[i]) continue;
+            uint8_t c = grid[i];
+            grid[i] = (c == WATER) ? STEAM : (c == FIRE) ? EMPTY : WALL;   // lava -> stone
         }
 }
