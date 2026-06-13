@@ -60,13 +60,13 @@ hipcc 7.2 (ROCm), Mesa OpenGL/Vulkan. `steps=1000`, grid `400×300`.
 
 | Implementation | Rule | Mcells/s | Checksum | Sand |
 |----------------|------|---------:|----------|-----:|
-| opengl         | gpu  | 13929.53 | (varies) | 36021 |
-| hip            | gpu  | 10951.75 | (varies) | 36021 |
-| cpp_scalar_sb  | scalar |  1174.81 | 31128ca3d1fcadc6 | - |
-| c              | scalar |  1125.67 | 31128ca3d1fcadc6 | - |
-| zig            | scalar |  1119.25 | 31128ca3d1fcadc6 | - |
-| rust           | scalar |   957.53 | 31128ca3d1fcadc6 | - |
-| vulkan         | gpu  |    37.47 | (varies) | 36021 |
+| opengl         | gpu  | 14014.54 | (varies) | 36021 |
+| hip            | gpu  | 11488.08 | (varies) | 36021 |
+| vulkan         | gpu  |  4474.47 | (varies) | 36021 |
+| c              | scalar |  1075.54 | 31128ca3d1fcadc6 | - |
+| cpp_scalar_sb  | scalar |  1022.65 | 31128ca3d1fcadc6 | - |
+| zig            | scalar |   990.33 | 31128ca3d1fcadc6 | - |
+| rust           | scalar |   862.47 | 31128ca3d1fcadc6 | - |
 
 `scalar-rule checksum agreement: PASS (4 implementations share 31128ca3d1fcadc6)`
 
@@ -82,13 +82,18 @@ toolchain; they build and run on a suitable machine.
 - **The GPU compute versions are ~10× faster** than the CPU versions despite
   doing more synchronization work, because thousands of cells update in
   parallel each step.
-- **Vulkan is dramatically slower here — and that is the interesting part.** The
-  existing Vulkan implementation copies the grid on the *host* (through
-  host-visible coherent memory) and waits on a fence after *every* step. That
-  per-step CPU↔GPU round-trip and full pipeline stall is latency-bound, which is
-  exactly why the OpenGL/HIP versions — which copy on the device and let work
-  pipeline — are orders of magnitude faster. It is a clean illustration of why
-  batching and keeping data on the device matters more than the API itself.
+- **Batching the GPU work matters far more than the API.** The first cut of the
+  Vulkan benchmark copied the grid on the *host* and waited on a fence after
+  *every* step; it managed only ~38 Mcells/s — ~300× slower than OpenGL. Moving
+  the copy onto the device (`vkCmdCopyBuffer`) and recording all steps into a
+  single command buffer with pipeline barriers — one submit, one fence wait —
+  brought it to ~4500 Mcells/s, a **~120× speedup**, putting it in the same
+  league as the others. The remaining gap to OpenGL/HIP is mostly that the
+  integrated GPU's host-visible buffer copy is slower than a device-local one.
+  The HIP and CUDA benchmarks apply the same idea with an async stream and a
+  single `StreamSynchronize`, and OpenGL caches its uniform locations out of the
+  step loop. The lesson: keep work on the device and avoid a host round-trip per
+  step.
 - **All three runnable GPU back-ends conserve the same 36021 sand particles**,
   a good cross-API correctness signal even though their exact layouts differ.
 
