@@ -153,7 +153,7 @@ public:
 
 // ---------------------------------------------------------------------------
 // Headless benchmark mode. This is the golden reference for the "scalar" rule
-// group: every CPU port (C, Rust, Zig, Mojo) must reproduce these exact numbers
+// group: every CPU port (C, Rust, Zig) must reproduce these exact numbers
 // from the same deterministic seed. The update rule below is identical to
 // ScalarSandSimulation::update() above. Nothing here touches SDL.
 // ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ SSE/AVX2 technique (see [`cpp/simd_core.h`](cpp/simd_core.h) and [WORLD.md](WORL
 They use a pass-based update order, so their checksum differs from the scalar
 ports above (but SSE and AVX agree with each other and conserve every material).
 
-The GPU / Mojo ports of the base simulation are not (yet) extended: the
+The GPU ports of the base simulation are not (yet) extended: the
 GPU back-ends use an atomic single-target "claim" model that does not map
 cleanly onto liquids and gases, which need horizontal flow and density swaps.
 The model above is the reference for porting them.

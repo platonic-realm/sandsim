@@ -7,7 +7,6 @@
 /zig/sandsim_world
 /opengl/sandsim_gl
 /hip/sandsim_hip
-/cuda/sandsim_cuda
 /vulkan/sandsim_vulkan_compute
 
 # C++ variant binaries (sources keep their .cpp extension)

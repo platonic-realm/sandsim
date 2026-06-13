@@ -48,7 +48,6 @@ command -v zig   >/dev/null 2>&1 && try_build zig    zig build-exe sandsim.zig -
 pkg-config --exists glfw3 glew gl 2>/dev/null && try_build opengl make
 command -v glslc >/dev/null 2>&1 && try_build vulkan make sandsim_vulkan_compute
 command -v hipcc >/dev/null 2>&1 && try_build hip    make
-command -v nvcc  >/dev/null 2>&1 && try_build cuda   make
 
 # Run each (vulkan must run from its own dir so it finds shaders/sand.comp.spv).
 collect cpp_scalar_sb cpp    ./sandsim_scalar_sb
@@ -58,8 +57,6 @@ collect zig           zig    ./sandsim
 collect opengl        opengl ./sandsim_gl
 collect vulkan        vulkan ./sandsim_vulkan_compute
 collect hip           hip    ./sandsim_hip
-collect cuda          cuda   ./sandsim_cuda
-command -v mojo >/dev/null 2>&1 && collect mojo mojo mojo run sandsim.mojo
 
 if [ ! -s "$RESULTS_FILE" ]; then
     echo "No implementations ran. Build something first (make all)." >&2

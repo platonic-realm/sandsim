@@ -27,20 +27,15 @@ liquid, and gas with density-based interaction — see
 |----------------|--------|-------|
 | [Bash](bash/)     | ✅ done        | Terminal ASCII, adapts to terminal size |
 | [C](c/)           | ✅ done        | Scalar, SDL2 window, headless `--bench` |
-| [C++](cpp/)       | ✅ done        | Scalar / SSE / AVX2 / NEON, single- and multi-buffer; `--bench` on `scalar_sb` |
+| [C++](cpp/)       | ✅ done        | scalar / SSE / AVX2 × sand / materials / world; `--bench` on `scalar_sb` |
 | [Python](python/) | ✅ done        | Pygame window |
 | [Rust](rust/)     | ✅ done        | `std`-only (SDL2 via FFI), headless `--bench` |
 | [Zig](zig/)       | ✅ done        | SDL2 via `@cImport`, headless `--bench` |
 | [OpenGL](opengl/) | ✅ done        | GL 4.3 compute shader, GPU; headless `--bench` |
 | [Vulkan](vulkan/) | ✅ done        | Compute shader, GPU; headless `--bench` |
 | [HIP](hip/)       | ✅ done        | Compute kernel (ROCm / AMD, or CUDA backend); headless `--bench` |
-| [CUDA](cuda/)     | 📝 source-only | Mirrors the HIP kernel; build with `nvcc` on an NVIDIA host |
-| [Mojo](mojo/)     | 📝 source-only | Scalar rule + ASCII demo + `--bench`; build with the Mojo toolchain |
 
-"source-only" means the code is provided and documented but was not compiled on
-the development host (no CUDA toolkit / no Mojo toolchain there).
-
-The GPU implementations (OpenGL, Vulkan, HIP, CUDA) follow a shared model: a
+The GPU implementations (OpenGL, Vulkan, HIP) follow a shared model: a
 double-buffered grid in GPU memory where each step the source half is copied to
 the destination half and a compute shader/kernel atomically claims destination
 cells. They form a distinct "gpu" rule group from the CPU scalar rule.
@@ -51,7 +46,7 @@ Each directory builds on its own (see its README), or use the root Makefile:
 
 ```sh
 make all      # build every implementation whose toolchain is installed
-make c        # build a single implementation (c rust zig cpp opengl hip cuda vulkan)
+make c        # build a single implementation (c rust zig cpp opengl hip vulkan)
 make bench    # build the benchmarkable implementations and print a comparison table
 make clean    # remove all build artifacts
 ```
@@ -59,9 +54,9 @@ make clean    # remove all build artifacts
 `make all` detects the available toolchains and skips any that are missing,
 printing a short note for each skip.
 
-Common dependencies: a C/C++ compiler, SDL2 (CPU/HIP/CUDA/Vulkan windows),
+Common dependencies: a C/C++ compiler, SDL2 (CPU/HIP/Vulkan windows),
 GLEW + GLFW (OpenGL), the Vulkan SDK + `glslc` (Vulkan), `cargo` (Rust),
-`zig` (Zig), `hipcc` (HIP), `nvcc` (CUDA), and the Mojo toolchain (Mojo).
+`zig` (Zig), and `hipcc` (HIP).
 
 ## Benchmarking
 

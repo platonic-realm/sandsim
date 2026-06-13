@@ -40,10 +40,10 @@ arithmetic:
 ### Rule groups
 
 - **scalar** — the canonical CPU rule from `cpp/sandsim_scalar_sb.cpp`. All
-  scalar implementations (C++, C, Rust, Zig, Mojo) must print the **same
+  scalar implementations (C++, C, Rust, Zig) must print the **same
   checksum**; the harness asserts this and fails if they diverge.
 - **gpu** — the double-buffered, atomic-claim model used by OpenGL, Vulkan,
-  HIP, and CUDA. Cell contention is resolved by GPU scheduling order, so the
+  and HIP. Cell contention is resolved by GPU scheduling order, so the
   exact final positions (and therefore the checksum) can vary run to run. The
   number of sand particles is conserved, so each GPU run instead reports a
   `sand` count, which is deterministic (here, 36021 for the default seed).
@@ -70,9 +70,6 @@ hipcc 7.2 (ROCm), Mesa OpenGL/Vulkan. `steps=1000`, grid `400×300`.
 
 `scalar-rule checksum agreement: PASS (4 implementations share 31128ca3d1fcadc6)`
 
-CUDA and Mojo are absent above because this host has neither `nvcc` nor the Mojo
-toolchain; they build and run on a suitable machine.
-
 ### Notes and takeaways
 
 - **The scalar implementations land within ~20% of one another.** They run the
@@ -90,7 +87,7 @@ toolchain; they build and run on a suitable machine.
   brought it to ~4500 Mcells/s, a **~120× speedup**, putting it in the same
   league as the others. The remaining gap to OpenGL/HIP is mostly that the
   integrated GPU's host-visible buffer copy is slower than a device-local one.
-  The HIP and CUDA benchmarks apply the same idea with an async stream and a
+  The HIP benchmark applies the same idea with an async stream and a
   single `StreamSynchronize`, and OpenGL caches its uniform locations out of the
   step loop. The lesson: keep work on the device and avoid a host round-trip per
   step.

@@ -8,7 +8,7 @@ ZIG_BUILD = zig build-exe sandsim.zig -lSDL2 -lc -I/usr/include -O ReleaseFast -
 ZIG_BUILD_MAT = zig build-exe sandsim_materials.zig -lSDL2 -lc -I/usr/include -O ReleaseFast -femit-bin=sandsim_materials
 ZIG_BUILD_WORLD = zig build-exe sandsim_world.zig -lSDL2 -lc -I/usr/include -O ReleaseFast -femit-bin=sandsim_world
 
-.PHONY: all help c rust zig cpp opengl hip cuda vulkan bench materials bench-materials world bench-world clean
+.PHONY: all help c rust zig cpp opengl hip vulkan bench materials bench-materials world bench-world clean
 
 help:
 	@echo "sandsim build targets:"
@@ -18,7 +18,7 @@ help:
 	@echo "  make bench-materials  cross-check the materials engine across languages"
 	@echo "  make world            build the chunked streaming-world implementations"
 	@echo "  make bench-world      cross-check the streaming world across languages"
-	@echo "  make <impl>           build one of: c rust zig cpp opengl hip cuda vulkan"
+	@echo "  make <impl>           build one of: c rust zig cpp opengl hip vulkan"
 	@echo "  make clean            remove all build artifacts"
 
 # --- individual implementations ---------------------------------------------
@@ -34,8 +34,6 @@ opengl:
 	$(MAKE) -C opengl
 hip:
 	$(MAKE) -C hip
-cuda:
-	$(MAKE) -C cuda
 vulkan:
 	$(MAKE) -C vulkan
 
@@ -49,8 +47,6 @@ all:
 	@if pkg-config --exists glfw3 glew gl 2>/dev/null; then $(MAKE) -C opengl; else echo "skip opengl (no glfw3/glew/gl)"; fi
 	@if command -v glslc >/dev/null 2>&1; then $(MAKE) -C vulkan; else echo "skip vulkan (no glslc)";      fi
 	@if command -v hipcc >/dev/null 2>&1; then $(MAKE) -C hip;  else echo "skip hip    (no hipcc)";        fi
-	@if command -v nvcc  >/dev/null 2>&1; then $(MAKE) -C cuda; else echo "skip cuda   (no nvcc)";         fi
-	@command -v mojo >/dev/null 2>&1 || echo "skip mojo   (no mojo; source-only)"
 
 # --- benchmark --------------------------------------------------------------
 bench:
@@ -86,5 +82,4 @@ clean:
 	-$(MAKE) -C cpp clean
 	-$(MAKE) -C opengl clean
 	-$(MAKE) -C hip clean
-	-$(MAKE) -C cuda clean
 	-$(MAKE) -C vulkan clean
