@@ -50,7 +50,7 @@ void main() {
         bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
                    cells[i-pc.SW]==6u||cells[i-pc.SW]==7u || cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
         uint c = cells[i]; uint r = 0u;
-        if (c == 5u) r = hot ? 1u : 0u;
+        if (c == 5u || c == 10u) r = hot ? 1u : 0u;
         else if (c == 9u && hot) {
             uint h = (uint(x)*149u + uint(y)*83u + uint(pc.frame)*157u) & 0xFFu;
             r = (h < 28u) ? 1u : 0u;
@@ -76,6 +76,22 @@ void main() {
     if (pc.type == 7) {                                   // apply: water->steam, fire->empty, lava->stone
         int i = y * pc.SW + x;
         if (moved[i] == 1u) { uint c = cells[i]; cells[i] = (c==3u) ? 8u : (c==6u) ? 0u : 1u; }
+        return;
+    }
+    if (pc.type == 8) {                                   // plant grow: mark empty next to plant+water
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 0u) {
+            bool nP = cells[i-1]==10u||cells[i+1]==10u||cells[i-pc.SW]==10u||cells[i+pc.SW]==10u;
+            bool nW = cells[i-1]==3u||cells[i+1]==3u||cells[i-pc.SW]==3u||cells[i+pc.SW]==3u;
+            uint h = (uint(x)*113u + uint(y)*191u + uint(pc.frame)*71u) & 0xFFu;
+            r = (nP && nW && h < 14u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 9) {                                   // plant grow: apply -> plant
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 10u;
         return;
     }
     int cx = x - pc.X0;

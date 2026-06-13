@@ -8,10 +8,11 @@
 // LAVA is a heavy molten liquid that sets oil ablaze. Water meeting fire/lava
 // flashes to STEAM, which rises and condenses back to WATER -> a little water cycle.
 // WOOD is a flammable SOLID: it never moves (absent from every density group) and
-// blocks like WALL, but fire/lava set it alight (slowly).
+// blocks like WALL, but fire/lava set it alight (slowly). PLANT is a flammable
+// solid too, but it GROWS into empty space wherever it meets WATER.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
-    STEAM = 8, WOOD = 9, MATERIAL_COUNT = 10
+    STEAM = 8, WOOD = 9, PLANT = 10, MATERIAL_COUNT = 11
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -33,6 +34,11 @@ static constexpr uint32_t WOOD_IGNITE = 28;    // of 256/frame -> wood smoulders
 inline bool woodCatches(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 149u + (uint32_t)y * 83u + frame * 157u) & 0xFFu;
     return h < WOOD_IGNITE;
+}
+static constexpr uint32_t PLANT_GROW = 14;     // of 256/frame -> vines creep, not explode
+inline bool plantGrows(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 113u + (uint32_t)y * 191u + frame * 71u) & 0xFFu;
+    return h < PLANT_GROW;
 }
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
@@ -66,7 +72,8 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            bool ign = (c == OIL && hot) || (c == WOOD && hot && woodCatches(x, y, frame));
+            bool ign = ((c == OIL || c == PLANT) && hot)      // oil & dry plant: instant
+                    || (c == WOOD && hot && woodCatches(x, y, frame));   // wood: slow
             scratch[i] = ign ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
@@ -100,5 +107,26 @@ inline void quench(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int 
             if (!scratch[i]) continue;
             uint8_t c = grid[i];
             grid[i] = (c == WATER) ? STEAM : (c == FIRE) ? EMPTY : WALL;   // lava -> stone
+        }
+}
+
+// Plant growth: an EMPTY cell with both a PLANT neighbour and a WATER neighbour
+// sprouts PLANT (frame-hashed so vines creep). Each empty cell decides from a
+// snapshot and writes only itself, so it's order-independent and GPU-identical.
+// Self-limiting: once plant lines a waterline, the remaining empty cells no
+// longer touch water.
+inline void growPlant(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    auto nb = [&](size_t i, uint8_t m) {
+        return grid[i-1]==m || grid[i+1]==m || grid[i-SW]==m || grid[i+SW]==m;
+    };
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            scratch[i] = (grid[i] == EMPTY && nb(i, PLANT) && nb(i, WATER) && plantGrows(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = PLANT;
         }
 }

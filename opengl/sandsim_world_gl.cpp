@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, MATERIAL_COUNT = 10 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, MATERIAL_COUNT = 11 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -132,7 +132,7 @@ void main() {
         bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
                    cells[i-uSW]==6u||cells[i-uSW]==7u || cells[i+uSW]==6u||cells[i+uSW]==7u;
         uint c = cells[i]; uint r = 0u;
-        if (c == 5u) r = hot ? 1u : 0u;                   // oil: instant
+        if (c == 5u || c == 10u) r = hot ? 1u : 0u;       // oil & plant: instant
         else if (c == 9u && hot) {                        // wood: smoulders
             uint h = (uint(x)*149u + uint(y)*83u + uint(uFrame)*157u) & 0xFFu;
             r = (h < 28u) ? 1u : 0u;
@@ -158,6 +158,22 @@ void main() {
     if (uType == 7) {                                     // apply: water->steam, fire->empty, lava->stone
         int i = y * uSW + x;
         if (moved[i] == 1u) { uint c = cells[i]; cells[i] = (c==3u) ? 8u : (c==6u) ? 0u : 1u; }
+        return;
+    }
+    if (uType == 8) {                                     // plant grow: mark empty next to plant+water
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 0u) {
+            bool nP = cells[i-1]==10u||cells[i+1]==10u||cells[i-uSW]==10u||cells[i+uSW]==10u;
+            bool nW = cells[i-1]==3u||cells[i+1]==3u||cells[i-uSW]==3u||cells[i+uSW]==3u;
+            uint h = (uint(x)*113u + uint(y)*191u + uint(uFrame)*71u) & 0xFFu;
+            r = (nP && nW && h < 14u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 9) {                                     // plant grow: apply -> plant
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 10u;
         return;
     }
     int cx = x - uX0;
@@ -203,6 +219,7 @@ vec3 matColor(uint m) {
     if (m == 7u) return vec3(0.812, 0.106, 0.043);
     if (m == 8u) return vec3(0.863, 0.894, 0.925);
     if (m == 9u) return vec3(0.545, 0.353, 0.169);
+    if (m == 10u) return vec3(0.227, 0.659, 0.290);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -356,9 +373,9 @@ public:
             glDispatchCompute(LW / 16, LH / 16, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
-        if (hasReactive) {                          // burn-out, ignition, lava+water (gated)
+        if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 7; ++t) {          // 3 decay, 4/5 ignite, 6/7 lava->stone
+            for (int t = 3; t <= 9; ++t) {          // 3 decay, 4/5 ignite, 6/7 water-meets-hot, 8/9 grow
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -554,8 +571,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[10] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD};
-    ui::Palette pal = ui::palette(renderW, 10);
+    static const uint8_t kSwatch[11] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT};
+    ui::Palette pal = ui::palette(renderW, 11);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -568,7 +585,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 10; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 11; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -587,6 +604,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_7) == GLFW_PRESS) current = LAVA;
         if (glfwGetKey(win, GLFW_KEY_8) == GLFW_PRESS) current = STEAM;
         if (glfwGetKey(win, GLFW_KEY_9) == GLFW_PRESS) current = WOOD;
+        if (glfwGetKey(win, GLFW_KEY_P) == GLFW_PRESS) current = PLANT;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;
