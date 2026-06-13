@@ -23,6 +23,7 @@
 
 #include "materials.h"   // Material enum
 #include "world_step.h"  // runtime SSE/AVX2 step dispatch
+#include "../ui.h"       // on-screen material palette
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -284,6 +285,14 @@ static int runInteractive(ViewCfg cfg) {
     world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
+    static const uint8_t kSwatch[6] = {EMPTY, WALL, SAND, WATER, GAS, OIL};
+    uint32_t swatchCol[6];
+    for (int i = 0; i < 6; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 6);
+    int brushRadius = 4;
+    bool painting = false;
+    auto selectedIdx = [&]() { for (int i = 0; i < 6; ++i) if (kSwatch[i] == current) return i; return -1; };
+
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
@@ -297,7 +306,7 @@ static int runInteractive(ViewCfg cfg) {
     fprintf(stderr, "sandsim [cpp_%s]: window %dx%d (output %dx%d), scale %d, "
             "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
             simdName(), renderW, renderH, outW, outH, PIXEL, gw, gh, LW, LH, cfg.simHz);
-    bool quit = false, mouseDown = false;
+    bool quit = false;
     int mouseX = 0, mouseY = 0;
     SDL_Event e;
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -306,8 +315,13 @@ static int runInteractive(ViewCfg cfg) {
     while (!quit) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) quit = true;
-            else if (e.type == SDL_MOUSEBUTTONDOWN) mouseDown = true;
-            else if (e.type == SDL_MOUSEBUTTONUP) mouseDown = false;
+            else if (e.type == SDL_MOUSEBUTTONDOWN) {
+                float flx, fly; SDL_RenderWindowToLogical(renderer, e.button.x, e.button.y, &flx, &fly);
+                int h = ui::hit(pal, (int)flx, (int)fly);
+                if (h >= 0) current = kSwatch[h];     // clicked a palette swatch
+                else { painting = true; world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, brushRadius); }
+            }
+            else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
             else if (e.type == SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX, &mouseY);
             else if (e.type == SDL_KEYDOWN) {
                 switch (e.key.keysym.sym) {
@@ -317,6 +331,8 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_3: current = WATER; break;
                     case SDLK_4: current = GAS;   break;
                     case SDLK_5: current = OIL;   break;
+                    case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
+                    case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_LEFT:  if (camCx > 0) camCx--; break;
                     case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
                     case SDLK_UP:    if (camCy > 0) camCy--; break;
@@ -325,10 +341,10 @@ static int runInteractive(ViewCfg cfg) {
             }
         }
         world.setWindow(camCx, camCy);
-        if (mouseDown) {
+        if (painting) {
             float flx, fly;
             SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &flx, &fly);
-            world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, 4);
+            world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, brushRadius);
         }
         // Advance the simulation by however much real time elapsed, so physics
         // runs at cfg.simHz steps/s regardless of the render frame rate.
@@ -344,6 +360,7 @@ static int runInteractive(ViewCfg cfg) {
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
             }
+        ui::draw(pixels.data(), renderW, renderH, pal, swatchCol, selectedIdx());
         SDL_UpdateTexture(texture, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);

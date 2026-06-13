@@ -31,6 +31,7 @@
 #include <vector>
 #include <algorithm>
 #include <unistd.h>
+#include "../ui.h"       // on-screen material palette
 
 enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, MATERIAL_COUNT = 6 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
@@ -543,35 +544,55 @@ static int runInteractive(ViewCfg cfg) {
 
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* win = SDL_CreateWindow(
-        "Vulkan World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [5]Oil [0]Eraser",
+        "Vulkan World - arrows pan, click palette to pick, [ ] brush",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
-    // Software renderer on purpose: an accelerated (OpenGL) SDL renderer would
-    // fight the Vulkan compute for the same GPU every frame -- context thrash
-    // that shows up as severe slowdown and flicker. A CPU blit of one texture is
-    // cheap and fully decoupled from the compute device.
-    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
+    // The compute step fence-waits to completion before we present, so the
+    // accelerated (GPU) blit no longer overlaps the Vulkan compute -- it's the
+    // snappy default. Set SANDSIM_VK_RENDERER=software to force a CPU blit if the
+    // GPU-shared path ever flickers on your driver.
+    const char* rk = getenv("SANDSIM_VK_RENDERER");
+    bool wantSoft = (rk && std::strcmp(rk, "software") == 0);
+    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, wantSoft ? SDL_RENDERER_SOFTWARE : SDL_RENDERER_ACCELERATED);
+    if (!ren) ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
     SDL_RenderSetLogicalSize(ren, renderW, renderH);        // scales content to the actual output
     SDL_Texture* tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
+    SDL_RendererInfo ri{}; SDL_GetRendererInfo(ren, &ri);
     int outW = renderW, outH = renderH; SDL_GetRendererOutputSize(ren, &outW, &outH);
-    fprintf(stderr, "sandsim [vulkan]: window %dx%d (output %dx%d), scale %d, "
+    fprintf(stderr, "sandsim [vulkan]: window %dx%d (output %dx%d), renderer=%s, scale %d, "
             "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
-            renderW, renderH, outW, outH, PIXEL, gw, gh, LW, LH, cfg.simHz);
+            renderW, renderH, outW, outH, ri.name, PIXEL, gw, gh, LW, LH, cfg.simHz);
+
+    static const uint8_t kSwatch[6] = {EMPTY, WALL, SAND, WATER, GAS, OIL};
+    uint32_t swatchCol[6];
+    for (int i = 0; i < 6; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 6);
+    int brushRadius = 4;
+    bool painting = false;
+    auto selectedIdx = [&]() { for (int i = 0; i < 6; ++i) if (kSwatch[i] == current) return i; return -1; };
+
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
-    bool quit = false, mouseDown = false; int mouseX = 0, mouseY = 0; SDL_Event e;
+    bool quit = false; int mouseX = 0, mouseY = 0; SDL_Event e;
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
     double acc = 0.0;
     auto last = std::chrono::steady_clock::now();
     while (!quit) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) quit = true;
-            else if (e.type == SDL_MOUSEBUTTONDOWN) mouseDown = true;
-            else if (e.type == SDL_MOUSEBUTTONUP) mouseDown = false;
+            else if (e.type == SDL_MOUSEBUTTONDOWN) {
+                float flx, fly; SDL_RenderWindowToLogical(ren, e.button.x, e.button.y, &flx, &fly);
+                int h = ui::hit(pal, (int)flx, (int)fly);
+                if (h >= 0) current = kSwatch[h];     // clicked a palette swatch
+                else { painting = true; world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, brushRadius); }
+            }
+            else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
             else if (e.type == SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX, &mouseY);
             else if (e.type == SDL_KEYDOWN) switch (e.key.keysym.sym) {
                 case SDLK_0: current = EMPTY; break; case SDLK_1: current = WALL; break;
                 case SDLK_2: current = SAND;  break; case SDLK_3: current = WATER; break;
                 case SDLK_4: current = GAS;   break;
                 case SDLK_5: current = OIL;   break;
+                case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
+                case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                 case SDLK_LEFT:  if (camCx > 0) camCx--; break;
                 case SDLK_RIGHT: if (camCx < WBOX - gw) camCx++; break;
                 case SDLK_UP:    if (camCy > 0) camCy--; break;
@@ -579,9 +600,9 @@ static int runInteractive(ViewCfg cfg) {
             }
         }
         world.setWindow(camCx, camCy);
-        if (mouseDown) {
+        if (painting) {
             float flx, fly; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &flx, &fly);
-            world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, 4);
+            world.paint((int)flx / PIXEL, (int)fly / PIXEL, current, brushRadius);
         }
         // Advance the simulation by however much real time elapsed, so physics
         // runs at cfg.simHz steps/s regardless of the render frame rate.
@@ -600,6 +621,7 @@ static int runInteractive(ViewCfg cfg) {
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
             }
+        ui::draw(pixels.data(), renderW, renderH, pal, swatchCol, selectedIdx());
         SDL_UpdateTexture(tex, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
         SDL_Delay(16);

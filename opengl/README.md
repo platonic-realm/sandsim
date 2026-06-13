@@ -36,8 +36,9 @@ notice on EGL-backed contexts.
 ## Controls
 
 - Arrows: pan the camera by a chunk
-- `1` Wall · `2` Sand · `3` Water · `4` Gas · `0` Eraser
-- Left mouse: paint · `Esc`: quit
+- Click a swatch in the on-screen palette to pick a material (or keys `0`-`5`:
+  `0` Eraser · `1` Wall · `2` Sand · `3` Water · `4` Gas · `5` Oil)
+- Left mouse: paint · `[` / `]`: brush size · `Esc`: quit
 
 The `RESULT` checksum matches the C++ and Vulkan builds bit-for-bit; see
 [`../tools/benchmark.sh`](../tools/benchmark.sh) and [WORLD.md](../WORLD.md).

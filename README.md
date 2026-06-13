@@ -19,8 +19,9 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER` (liquid), `GAS`,
 `OIL` (liquid). Movement is a density swap — heaviest to lightest is
 `SAND > WATER > OIL > air > GAS`, so sand sinks through water, oil floats on
-water, and gas rises — and every material is conserved. Paint with number keys
-(`1`-`5`) in the interactive view.
+water, and gas rises — and every material is conserved. Paint with the mouse and
+pick a material from the on-screen palette (or number keys `0`-`5`); `[` / `]`
+size the brush. The palette is the same on all three backends.
 
 The update rule is **order-independent**: each frame is a fixed sequence of
 sub-passes, and within a pass every move is between a disjoint pair of cells

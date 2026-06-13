@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <fstream>
 #include <filesystem>
+#include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
 enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, MATERIAL_COUNT = 6 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
@@ -142,20 +143,44 @@ static const char* kPresentFrag = R"GLSL(
 #version 430
 layout(std430, binding = 0) buffer Cells { uint cells[]; };
 uniform int uSW, uX0, uY0, uLW, uLH, uRW, uRH;
+uniform int uWinW, uWinH;                                  // window (logical) size
+uniform int uPalX0, uPalY0, uPalSW, uPalGap, uPalN, uPalSel;
 out vec4 frag;
+vec3 matColor(uint m) {
+    if (m == 1u) return vec3(0.502, 0.502, 0.502);
+    if (m == 2u) return vec3(0.886, 0.784, 0.471);
+    if (m == 3u) return vec3(0.267, 0.533, 1.000);
+    if (m == 4u) return vec3(0.690, 0.769, 0.871);
+    if (m == 5u) return vec3(0.557, 0.267, 0.678);
+    return vec3(0.0);
+}
 void main() {
     int px = int(gl_FragCoord.x);
     int py = uRH - 1 - int(gl_FragCoord.y);
-    int lx = px * uLW / uRW;
-    int ly = py * uLH / uRH;
-    uint m = cells[(uY0 + ly) * uSW + (uX0 + lx)] & 0xFFu;
-    vec3 c = vec3(0.0);
-    if      (m == 1u) c = vec3(0.502, 0.502, 0.502);
-    else if (m == 2u) c = vec3(0.886, 0.784, 0.471);
-    else if (m == 3u) c = vec3(0.267, 0.533, 1.000);
-    else if (m == 4u) c = vec3(0.690, 0.769, 0.871);
-    else if (m == 5u) c = vec3(0.557, 0.267, 0.678);
-    frag = vec4(c, 1.0);
+    // HUD palette, evaluated in window (logical) coordinates so it matches the
+    // SDL builds regardless of HiDPI framebuffer scaling.
+    int wx = px * uWinW / uRW;
+    int wy = py * uWinH / uRH;
+    int panelX = uPalX0 - uPalGap, panelY = uPalY0 - uPalGap;
+    int panelW = uPalN * (uPalSW + uPalGap) + uPalGap, panelH = uPalSW + 2 * uPalGap;
+    if (wx >= panelX && wx < panelX + panelW && wy >= panelY && wy < panelY + panelH) {
+        vec3 hud = vec3(0.102);
+        int ix = wx - uPalX0, rowy = wy - uPalY0;
+        if (rowy >= 0 && rowy < uPalSW && ix >= 0) {
+            int slot = ix / (uPalSW + uPalGap);
+            int inSlot = ix - slot * (uPalSW + uPalGap);
+            if (slot < uPalN && inSlot < uPalSW) hud = matColor(uint(slot));
+        }
+        if (uPalSel >= 0) {
+            int sx = uPalX0 + uPalSel * (uPalSW + uPalGap);
+            bool inO = wx >= sx-2 && wx < sx+uPalSW+2 && wy >= uPalY0-2 && wy < uPalY0+uPalSW+2;
+            bool inI = wx >= sx && wx < sx+uPalSW && wy >= uPalY0 && wy < uPalY0+uPalSW;
+            if (inO && !inI) hud = vec3(1.0);
+        }
+        frag = vec4(hud, 1.0); return;
+    }
+    uint m = cells[(uY0 + py * uLH / uRH) * uSW + (uX0 + px * uLW / uRW)] & 0xFFu;
+    frag = vec4(matColor(m), 1.0);
 }
 )GLSL";
 
@@ -452,6 +477,22 @@ static int runInteractive(ViewCfg cfg) {
             "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
             renderW, renderH, fbW, fbH, PIXEL, gw, gh, gw * CHUNK, gh * CHUNK, cfg.simHz);
 
+    // Material palette HUD: laid out in window/logical coords (the present shader
+    // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
+    static const uint8_t kSwatch[6] = {EMPTY, WALL, SAND, WATER, GAS, OIL};
+    ui::Palette pal = ui::palette(renderW, 6);
+    glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
+    glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
+    glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
+    glUniform1i(glGetUniformLocation(present, "uPalY0"), pal.y0);
+    glUniform1i(glGetUniformLocation(present, "uPalSW"), pal.sw);
+    glUniform1i(glGetUniformLocation(present, "uPalGap"), pal.gap);
+    glUniform1i(glGetUniformLocation(present, "uPalN"), pal.n);
+    GLint uPalSel = glGetUniformLocation(present, "uPalSel");
+    int brushRadius = 4;
+    bool painting = false, pMb = false, pLB = false, pRB = false;
+    auto selectedIdx = [&]() { for (int i = 0; i < 6; ++i) if (kSwatch[i] == current) return i; return -1; };
+
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
     double acc = 0.0;
@@ -475,12 +516,23 @@ static int runInteractive(ViewCfg cfg) {
         if (u && !pU && camCy > 0) camCy--;
         if (d && !pD && camCy < HBOX - gh) camCy++;
         pL = l; pR = r; pU = u; pD = d;
+        bool lb = glfwGetKey(win, GLFW_KEY_LEFT_BRACKET) == GLFW_PRESS;
+        bool rb = glfwGetKey(win, GLFW_KEY_RIGHT_BRACKET) == GLFW_PRESS;
+        if (lb && !pLB && brushRadius > 0)  brushRadius--;
+        if (rb && !pRB && brushRadius < 32) brushRadius++;
+        pLB = lb; pRB = rb;
 
         world.setWindow(camCx, camCy);
-        if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            double mx, my; glfwGetCursorPos(win, &mx, &my);
-            world.paint((int)mx / PIXEL, (int)my / PIXEL, current, 4);
+        bool mb = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        double mx, my; glfwGetCursorPos(win, &mx, &my);
+        if (mb && !pMb) {                                // press edge
+            int h = ui::hit(pal, (int)mx, (int)my);
+            if (h >= 0) current = kSwatch[h];            // clicked a palette swatch
+            else painting = true;
         }
+        if (!mb) painting = false;
+        pMb = mb;
+        if (painting) world.paint((int)mx / PIXEL, (int)my / PIXEL, current, brushRadius);
         // Advance the simulation by however much real time elapsed, so physics
         // runs at cfg.simHz steps/s regardless of the render frame rate.
         auto nowT = std::chrono::steady_clock::now();
@@ -489,9 +541,10 @@ static int runInteractive(ViewCfg cfg) {
         for (int n = 0; acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
 
+        glUseProgram(present);
         int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH);
         if (cfbW != fbW || cfbH != fbH) { fbW = cfbW; fbH = cfbH; glUniform1i(uRW, fbW); glUniform1i(uRH, fbH); }
-        glUseProgram(present);
+        glUniform1i(uPalSel, selectedIdx());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, world.buffer());
         glViewport(0, 0, fbW, fbH);
         glBindVertexArray(vao);
