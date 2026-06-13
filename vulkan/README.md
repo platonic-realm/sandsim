@@ -36,8 +36,8 @@ The SPIR-V is located next to the executable, so the binary runs from anywhere
 ## Controls
 
 - Arrows: pan the camera by a chunk
-- Click a swatch in the on-screen palette to pick a material (or keys `0`-`5`:
-  `0` Eraser · `1` Wall · `2` Sand · `3` Water · `4` Gas · `5` Oil)
+- Click a swatch in the on-screen palette to pick a material (or keys `0`-`6`:
+  `0` Eraser · `1` Wall · `2` Sand · `3` Water · `4` Gas · `5` Oil · `6` Fire)
 - Left mouse: paint · `[` / `]`: brush size
 
 Presentation uses SDL's accelerated renderer (snappy, matches the C++ build);

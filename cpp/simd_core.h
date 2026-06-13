@@ -14,9 +14,9 @@
 // A per-cell `moved` mask (reset each frame) gives one-move-per-frame priority
 // across the passes: a cell that fell can't also slide the same frame.
 //
-// Materials: EMPTY/WALL/SAND/WATER/GAS/OIL, density swaps
-//   SAND -> EMPTY,WATER,GAS,OIL   WATER -> EMPTY,GAS,OIL   OIL -> EMPTY,GAS   GAS -> EMPTY
-//   (OIL is heavier than air but lighter than water, so it floats on water.)
+// Materials: EMPTY/WALL/SAND/WATER/GAS/OIL/FIRE, density swaps
+//   (OIL floats on water; FIRE rises like flame. FIRE's burn-out is a separate
+//   per-cell time-varying pass in materials.h, kept out of this movement step.)
 #pragma once
 #include "materials.h"
 #include <emmintrin.h>
@@ -79,21 +79,25 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
     using V = typename Ops::V;
     const int W = Ops::W;
     const V vE = Ops::zero(), vS = Ops::set1(SAND), vW = Ops::set1(WATER),
-            vG = Ops::set1(GAS), vO = Ops::set1(OIL);
+            vG = Ops::set1(GAS), vO = Ops::set1(OIL), vF = Ops::set1(FIRE);
 
     // move mask: which lanes hold an eligible mover whose target is enterable and
     // where neither cell has already moved this frame.
-    //   SAND  enters E,W,O,G   WATER enters E,O,G   OIL enters E,G   GAS enters E
+    //   SAND enters E,W,O,G,F   WATER enters E,O,G,F   OIL enters E,G,F
+    //   GAS enters E   FIRE enters E (rises like gas; sand/water/oil fall through it)
     auto mask = [&](V cur, V tgt, V mc, V mt, int grp) -> V {
-        V isS = Ops::eq(cur, vS), isW = Ops::eq(cur, vW), isG = Ops::eq(cur, vG), isO = Ops::eq(cur, vO);
-        V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG), tO = Ops::eq(tgt, vO);
-        V can = Ops::Or(Ops::Or(Ops::And(isS, Ops::Or(Ops::Or(tE, tW), Ops::Or(tO, tG))),
-                                Ops::And(isW, Ops::Or(tE, Ops::Or(tO, tG)))),
-                        Ops::Or(Ops::And(isO, Ops::Or(tE, tG)),
-                                Ops::And(isG, tE)));
+        V isS = Ops::eq(cur, vS), isW = Ops::eq(cur, vW), isG = Ops::eq(cur, vG),
+          isO = Ops::eq(cur, vO), isF = Ops::eq(cur, vF);
+        V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG),
+          tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF);
+        V can = Ops::Or(
+            Ops::Or(Ops::And(isS, Ops::Or(Ops::Or(tE, tW), Ops::Or(tO, Ops::Or(tG, tF)))),
+                    Ops::And(isW, Ops::Or(tE, Ops::Or(tO, Ops::Or(tG, tF))))),
+            Ops::Or(Ops::And(isO, Ops::Or(tE, Ops::Or(tG, tF))),
+                    Ops::Or(Ops::And(isF, tE), Ops::And(isG, tE))));
         V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(isS, isW), isO)
-               : (grp == SG_GAS)  ? isG
-                                  : Ops::Or(Ops::Or(isW, isO), isG);
+               : (grp == SG_GAS)  ? Ops::Or(isG, isF)
+                                  : Ops::Or(Ops::Or(isW, isO), Ops::Or(isG, isF));
         return Ops::And(Ops::And(elig, can),
                         Ops::And(Ops::eq(mc, vE), Ops::eq(mt, vE)));
     };

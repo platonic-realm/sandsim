@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, MATERIAL_COUNT = 6 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, MATERIAL_COUNT = 7 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -95,24 +95,33 @@ layout(local_size_x = 16, local_size_y = 16) in;
 layout(std430, binding = 0) buffer Cells { uint cells[]; };
 layout(std430, binding = 1) buffer Moved { uint moved[]; };
 uniform int uSW, uX0, uX1, uY0, uY1;
-uniform int uType, uDx, uDy, uParity, uGrp;
+uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
-    if (t == 1u) return false;                       // WALL
-    if (s == 2u) return t==0u||t==3u||t==4u||t==5u;  // SAND  -> E,W,G,O
-    if (s == 3u) return t==0u||t==4u||t==5u;         // WATER -> E,G,O
-    if (s == 5u) return t==0u||t==4u;                // OIL   -> E,G  (floats on water)
-    if (s == 4u) return t==0u;                       // GAS   -> E
+    if (t == 1u) return false;                              // WALL
+    if (s == 2u) return t==0u||t==3u||t==4u||t==5u||t==6u;  // SAND  -> E,W,G,O,F
+    if (s == 3u) return t==0u||t==4u||t==5u||t==6u;         // WATER -> E,G,O,F
+    if (s == 5u) return t==0u||t==4u||t==6u;                // OIL   -> E,G,F (floats on water)
+    if (s == 6u) return t==0u;                              // FIRE  -> E (rises like flame)
+    if (s == 4u) return t==0u;                              // GAS   -> E
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==3u||s==5u;       // DOWN: sand,water,oil
-    if (uGrp == 1) return s==4u;                     // GAS
-    return s==3u||s==4u||s==5u;                       // HORIZ: water,oil,gas
+    if (uGrp == 0) return s==2u||s==3u||s==5u;              // DOWN: sand,water,oil
+    if (uGrp == 1) return s==4u||s==6u;                     // GAS/FIRE rise
+    return s==3u||s==4u||s==5u||s==6u;                       // HORIZ: water,oil,gas,fire
 }
 void main() {
     int x = uX0 + int(gl_GlobalInvocationID.x);
     int y = uY0 + int(gl_GlobalInvocationID.y);
     if (x >= uX1 || y >= uY1) return;
+    if (uType == 3) {                                       // fire burn-out (per-cell, time-varying)
+        int i = y * uSW + x;
+        if (cells[i] == 6u) {
+            uint h = (uint(x) * 167u + uint(y) * 101u + uint(uFrame) * 131u) & 0xFFu;
+            if (h < 12u) cells[i] = 0u;
+        }
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -152,6 +161,7 @@ vec3 matColor(uint m) {
     if (m == 3u) return vec3(0.267, 0.533, 1.000);
     if (m == 4u) return vec3(0.690, 0.769, 0.871);
     if (m == 5u) return vec3(0.557, 0.267, 0.678);
+    if (m == 6u) return vec3(1.000, 0.353, 0.118);
     return vec3(0.0);
 }
 void main() {
@@ -247,6 +257,7 @@ public:
         lY1 = glGetUniformLocation(prog, "uY1"); lType = glGetUniformLocation(prog, "uType");
         lDx = glGetUniformLocation(prog, "uDx"); lDy = glGetUniformLocation(prog, "uDy");
         lPar = glGetUniformLocation(prog, "uParity"); lGrp = glGetUniformLocation(prog, "uGrp");
+        lFrame = glGetUniformLocation(prog, "uFrame");
         glUniform1i(lSW, SW); glUniform1i(lX0, X0); glUniform1i(lX1, X1);
         glUniform1i(lY0, Y0); glUniform1i(lY1, Y1);
     }
@@ -296,10 +307,17 @@ public:
             glDispatchCompute(LW / 16, LH / 16, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
+        if (hasFire) {                              // fire burn-out pass (time-varying)
+            glUniform1i(lType, 3); glUniform1i(lFrame, (int)frame);
+            glDispatchCompute(LW / 16, LH / 16, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
+        ++frame;
         gpuAhead = true;
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
+        if (material == FIRE) hasFire = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -344,7 +362,9 @@ private:
     bool windowValid = false;
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
-    GLint lSW, lX0, lX1, lY0, lY1, lType, lDx, lDy, lPar, lGrp;
+    uint32_t frame = 0;
+    bool hasFire = false;                // gates the burn-out dispatch
+    GLint lSW, lX0, lX1, lY0, lY1, lType, lDx, lDy, lPar, lGrp, lFrame;
 
     void syncDown() {
         if (!gpuAhead) return;
@@ -365,8 +385,11 @@ private:
     }
     void injectChunk(int cgx, int cgy, const std::vector<uint8_t>& in) {
         for (int ly = 0; ly < CHUNK; ++ly)
-            for (int lx = 0; lx < CHUNK; ++lx)
-                shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = in[ly * CHUNK + lx];
+            for (int lx = 0; lx < CHUNK; ++lx) {
+                uint8_t v = in[ly * CHUNK + lx];
+                if (v == FIRE) hasFire = true;
+                shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
+            }
     }
     void genBox(int cx, int cy, std::vector<uint8_t>& buf) {
         for (int y = 0; y < CHUNK; ++y)
@@ -479,8 +502,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[6] = {EMPTY, WALL, SAND, WATER, GAS, OIL};
-    ui::Palette pal = ui::palette(renderW, 6);
+    static const uint8_t kSwatch[7] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE};
+    ui::Palette pal = ui::palette(renderW, 7);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -491,7 +514,7 @@ static int runInteractive(ViewCfg cfg) {
     GLint uPalSel = glGetUniformLocation(present, "uPalSel");
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 6; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 7; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -506,6 +529,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS) current = WATER;
         if (glfwGetKey(win, GLFW_KEY_4) == GLFW_PRESS) current = GAS;
         if (glfwGetKey(win, GLFW_KEY_5) == GLFW_PRESS) current = OIL;
+        if (glfwGetKey(win, GLFW_KEY_6) == GLFW_PRESS) current = FIRE;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;

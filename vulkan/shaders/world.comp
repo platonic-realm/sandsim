@@ -10,26 +10,36 @@ layout(std430, binding = 0) buffer Cells { uint cells[]; };
 layout(std430, binding = 1) buffer Moved { uint moved[]; };
 layout(push_constant) uniform PC {
     int SW, X0, X1, Y0, Y1;
-    int type, dx, dy, parity, grp;   // type: 0 vert, 1 diag, 2 horiz
+    int type, dx, dy, parity, grp;   // type: 0 vert, 1 diag, 2 horiz, 3 fire burn-out
+    int frame;
 } pc;
 
 bool canEnter(uint s, uint t) {
-    if (t == 1u) return false;                       // WALL
-    if (s == 2u) return t==0u||t==3u||t==4u||t==5u;  // SAND  -> E,W,G,O
-    if (s == 3u) return t==0u||t==4u||t==5u;         // WATER -> E,G,O
-    if (s == 5u) return t==0u||t==4u;                // OIL   -> E,G  (floats on water)
-    if (s == 4u) return t==0u;                       // GAS   -> E
+    if (t == 1u) return false;                              // WALL
+    if (s == 2u) return t==0u||t==3u||t==4u||t==5u||t==6u;  // SAND  -> E,W,G,O,F
+    if (s == 3u) return t==0u||t==4u||t==5u||t==6u;         // WATER -> E,G,O,F
+    if (s == 5u) return t==0u||t==4u||t==6u;                // OIL   -> E,G,F (floats on water)
+    if (s == 6u) return t==0u;                              // FIRE  -> E (rises like flame)
+    if (s == 4u) return t==0u;                              // GAS   -> E
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==3u||s==5u;     // DOWN: sand,water,oil
-    if (pc.grp == 1) return s==4u;                   // GAS
-    return s==3u||s==4u||s==5u;                       // HORIZ: water,oil,gas
+    if (pc.grp == 0) return s==2u||s==3u||s==5u;            // DOWN: sand,water,oil
+    if (pc.grp == 1) return s==4u||s==6u;                   // GAS/FIRE rise
+    return s==3u||s==4u||s==5u||s==6u;                       // HORIZ: water,oil,gas,fire
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
     int y = pc.Y0 + int(gl_GlobalInvocationID.y);
     if (x >= pc.X1 || y >= pc.Y1) return;
+    if (pc.type == 3) {                                    // fire burn-out (per-cell, time-varying)
+        int i = y * pc.SW + x;
+        if (cells[i] == 6u) {
+            uint h = (uint(x) * 167u + uint(y) * 101u + uint(pc.frame) * 131u) & 0xFFu;
+            if (h < 12u) cells[i] = 0u;
+        }
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

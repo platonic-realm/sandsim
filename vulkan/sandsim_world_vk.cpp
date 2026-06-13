@@ -33,14 +33,14 @@
 #include <unistd.h>
 #include "../ui.h"       // on-screen material palette
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, MATERIAL_COUNT = 6 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, MATERIAL_COUNT = 7 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -90,7 +90,7 @@ static const Pass kPasses[16] = {
     {2,  1,  0, 0, SG_HORIZ},{2,  1,  0, 1, SG_HORIZ},
 };
 
-struct PushConsts { int32_t SW, X0, X1, Y0, Y1, type, dx, dy, parity, grp; };
+struct PushConsts { int32_t SW, X0, X1, Y0, Y1, type, dx, dy, parity, grp, frame; };
 
 static void vkCheck(VkResult r, const char* msg) { if (r != VK_SUCCESS) throw std::runtime_error(msg); }
 
@@ -179,6 +179,7 @@ public:
         while (n > 0) {
             int b = (n < kBatch) ? n : kBatch;
             beginCmd(); recordFrames(b); endSubmitWait();
+            frame += (uint32_t)b;
             n -= b;
         }
         gpuAhead = true;                           // device grid is now ahead of staging
@@ -199,10 +200,12 @@ public:
         barrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
         endSubmitWait();
+        frame += 1;
         gpuAhead = false;          // staging now matches the device
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
+        if (material == FIRE) hasFire = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -250,6 +253,8 @@ private:
     bool windowValid = false;
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
+    uint32_t frame = 0;
+    bool hasFire = false;             // gates the burn-out dispatch
 
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice phys = VK_NULL_HANDLE;
@@ -407,7 +412,14 @@ private:
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
             for (int i = 0; i < 16; ++i) {
                 const Pass& p = kPasses[i];
-                PushConsts pc{SW, X0, X1, Y0, Y1, p.type, p.dx, p.dy, p.parity, p.grp};
+                PushConsts pc{SW, X0, X1, Y0, Y1, p.type, p.dx, p.dy, p.parity, p.grp, 0};
+                vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
+                barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            }
+            if (hasFire) {                          // fire burn-out pass (time-varying in frame)
+                PushConsts pc{SW, X0, X1, Y0, Y1, 3, 0, 0, 0, 0, (int)(frame + (uint32_t)f)};
                 vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
                 barrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
@@ -452,8 +464,11 @@ private:
     }
     void injectChunk(int gx, int gy, const std::vector<uint8_t>& in) {
         for (int ly = 0; ly < CHUNK; ++ly)
-            for (int lx = 0; lx < CHUNK; ++lx)
-                stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = in[ly * CHUNK + lx];
+            for (int lx = 0; lx < CHUNK; ++lx) {
+                uint8_t v = in[ly * CHUNK + lx];
+                if (v == FIRE) hasFire = true;
+                stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = v;
+            }
     }
     void genBox(int cx, int cy, std::vector<uint8_t>& buf) {
         for (int y = 0; y < CHUNK; ++y)
@@ -562,13 +577,13 @@ static int runInteractive(ViewCfg cfg) {
             "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
             renderW, renderH, outW, outH, ri.name, PIXEL, gw, gh, LW, LH, cfg.simHz);
 
-    static const uint8_t kSwatch[6] = {EMPTY, WALL, SAND, WATER, GAS, OIL};
-    uint32_t swatchCol[6];
-    for (int i = 0; i < 6; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 6);
+    static const uint8_t kSwatch[7] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE};
+    uint32_t swatchCol[7];
+    for (int i = 0; i < 7; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 7);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 6; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 7; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false; int mouseX = 0, mouseY = 0; SDL_Event e;
@@ -591,6 +606,7 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_2: current = SAND;  break; case SDLK_3: current = WATER; break;
                 case SDLK_4: current = GAS;   break;
                 case SDLK_5: current = OIL;   break;
+                case SDLK_6: current = FIRE;  break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                 case SDLK_LEFT:  if (camCx > 0) camCx--; break;
