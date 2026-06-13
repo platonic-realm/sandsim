@@ -1,0 +1,14 @@
+[package]
+name = "sandsim"
+version = "0.1.0"
+edition = "2021"
+description = "Falling-sand simulation (Rust, std-only, SDL2 via FFI)"
+license = "MIT"
+
+[[bin]]
+name = "sandsim"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
