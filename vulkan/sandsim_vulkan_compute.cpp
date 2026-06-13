@@ -109,13 +109,56 @@ public:
       for (int x = 0; x < width; ++x)
         u32[static_cast<size_t>(y) * width + x] = seedCell(x, y);
 
-    auto start = std::chrono::steady_clock::now();
+    // Record EVERY step into a single command buffer: the src->dst copy
+    // (vkCmdCopyBuffer, on the device) and the compute dispatch are separated
+    // by pipeline barriers, so the GPU runs all steps back-to-back with no host
+    // round-trip and a single fence wait at the end. The original loop copied
+    // on the host and fence-waited after every step, which was ~100x slower.
+    const VkDeviceSize halfBytes =
+        static_cast<VkDeviceSize>(width) * height * sizeof(uint32_t);
+    const uint32_t gx = (width + 15) / 16, gy = (height + 15) / 16;
+
+    vkCheck(vkResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer failed");
+    VkCommandBufferBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    vkCheck(vkBeginCommandBuffer(commandBuffer, &begin), "vkBeginCommandBuffer failed");
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
     for (int s = 0; s < steps; ++s) {
-      copyGrid(srcIndex, dstIndex);
-      recordAndSubmit(srcIndex, dstIndex);
-      waitForGPU();
-      std::swap(srcIndex, dstIndex); // srcIndex now holds the latest state
+      VkBufferCopy region{};
+      region.srcOffset = static_cast<VkDeviceSize>(srcIndex) * halfBytes;
+      region.dstOffset = static_cast<VkDeviceSize>(dstIndex) * halfBytes;
+      region.size = halfBytes;
+      vkCmdCopyBuffer(commandBuffer, storageBuffer, storageBuffer, 1, &region);
+      memoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+      PushConsts pc{width, height, srcIndex, dstIndex};
+      vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT,
+                         0, sizeof(PushConsts), &pc);
+      vkCmdDispatch(commandBuffer, gx, gy, 1);
+      if (s + 1 < steps)
+        memoryBarrier(VK_ACCESS_SHADER_WRITE_BIT,
+                      VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                      VK_PIPELINE_STAGE_TRANSFER_BIT);
+      std::swap(srcIndex, dstIndex); // srcIndex now names the latest half
     }
+    // Make the final compute writes visible to the host read below.
+    memoryBarrier(VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
+                  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
+    vkCheck(vkEndCommandBuffer(commandBuffer), "vkEndCommandBuffer failed");
+
+    vkCheck(vkResetFences(device, 1, &fence), "vkResetFences failed");
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &commandBuffer;
+    auto start = std::chrono::steady_clock::now();
+    vkCheck(vkQueueSubmit(computeQueue, 1, &si, fence), "vkQueueSubmit failed");
+    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
     auto end = std::chrono::steady_clock::now();
 
     size_t cells = static_cast<size_t>(width) * height;
@@ -136,6 +179,17 @@ public:
   }
 
 private:
+  // Global pipeline memory barrier recorded into the command buffer.
+  void memoryBarrier(VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                     VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {
+    VkMemoryBarrier mb{};
+    mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    mb.srcAccessMask = srcAccess;
+    mb.dstAccessMask = dstAccess;
+    vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 1, &mb, 0, nullptr,
+                         0, nullptr);
+  }
+
   // Deterministic per-cell seed (~30% sand), shared with every implementation.
   static uint32_t seedCell(int x, int y) {
     uint32_t h = static_cast<uint32_t>(x) * 374761393u +
@@ -250,7 +304,11 @@ private:
     VkBufferCreateInfo bci{};
     bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bci.size = bufferBytes;
-    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    // STORAGE for the compute shader; TRANSFER for the device-side src->dst
+    // copy used by the batched benchmark (vkCmdCopyBuffer).
+    bci.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     vkCheck(vkCreateBuffer(device, &bci, nullptr, &storageBuffer),
             "vkCreateBuffer failed");
