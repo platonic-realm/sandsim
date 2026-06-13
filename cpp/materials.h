@@ -21,11 +21,13 @@
 // blasts the soft cells around it and chain-detonates neighbouring TNT. ASH is a
 // light-grey powder (it falls and piles like SAND) left behind as some FIRE burns
 // out -- the soot of a dying flame. VOLCANO is SPRING's hot twin: an inert vent
-// that never depletes but SOURCES LAVA into the empty cells around it.
+// that never depletes but SOURCES LAVA into the empty cells around it. VOID is the
+// sink to those sources: a black hole that CONSUMES everything around it to EMPTY
+// (only WALL contains it), never depleting.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, MATERIAL_COUNT = 19
+    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MATERIAL_COUNT = 20
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -303,6 +305,27 @@ inline void emitVolcano(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = LAVA;
+        }
+}
+
+// Void (sink): a black hole that swallows whatever it touches. Any cell next to a
+// VOID -- except WALL (which contains it) and another VOID -- is consumed to EMPTY.
+// The VOID never moves or depletes, so with gravity feeding it, material flows in
+// and vanishes: a drain. Two-pass snapshot (mark consumed cells, then clear them),
+// so it's order-independent and GPU-identical -- the sink twin of the spring/volcano
+// sources.
+inline void consumeVoid(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i];
+            bool nearVoid = grid[i-1]==VOID || grid[i+1]==VOID || grid[i-SW]==VOID || grid[i+SW]==VOID;
+            scratch[i] = (c != EMPTY && c != WALL && c != VOID && nearVoid) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = EMPTY;
         }
 }
 

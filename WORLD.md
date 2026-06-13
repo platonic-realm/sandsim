@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -78,6 +78,10 @@ GPU and produce a **bit-identical** world.
     the rules that create mass from nothing and keep long-running worlds in motion
     instead of settling (a volcano in particular feeds every heat reaction). The
     generated world buries a few of each, so the streaming benchmark covers them.
+    Their opposite is the `VOID` **sink** — a black hole that consumes any neighbour
+    (mark/apply snapshot; everything but `WALL` and `VOID` is cleared to `EMPTY`),
+    so material flows in under gravity and vanishes. It's paint-only (kept out of
+    the generated world), verified bit-identical by seeding it into `worldgen.h`.
   - **detonation** — `TNT` touched by `FIRE`/`LAVA` bursts into `FIRE` across its
     8-neighbourhood and chain-detonates adjacent `TNT`. The two passes are unusual:
     pass 1 marks the *detonators* (TNT next to something hot) into the scratch

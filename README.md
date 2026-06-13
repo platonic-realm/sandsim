@@ -21,11 +21,12 @@ builds them, asserts the checksums match, and prints a throughput table.
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
-`TNT`, `ASH` (powder), `VOLCANO`. Movement is a density swap — heaviest to lightest
-is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`, with `STEAM`/`SMOKE` the
-lightest — so sand sinks through lava, acid sinks below water, oil floats on water,
-and gas/fire/steam/smoke rise. `ASH` falls and piles like sand. `WALL`, `WOOD`,
-`PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, and `VOLCANO` are solids that don't move.
+`TNT`, `ASH` (powder), `VOLCANO`, `VOID`. Movement is a density swap — heaviest to
+lightest is `SAND > LAVA > ACID > WATER > OIL > air > GAS > FIRE`, with
+`STEAM`/`SMOKE` the lightest — so sand sinks through lava, acid sinks below water,
+oil floats on water, and gas/fire/steam/smoke rise. `ASH` falls and piles like
+sand. `WALL`, `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, and
+`VOID` are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -68,6 +69,11 @@ CPU and GPU:
   chaos engine — its flow ignites oil and gas, fuses sand to glass, melts ice,
   flashes water to steam, and sets off TNT. The generated world buries a few deep
   down, so caverns near them slowly flood with lava.
+- `VOID` is the **sink** to those sources: a black hole that **consumes whatever it
+  touches** down to `EMPTY` and never depletes, so with gravity feeding it, material
+  flows in and vanishes — a drain. Only `WALL` resists it, so you box a void in with
+  stone; everything else (even lava, glass, or another source) is swallowed. Pair a
+  `VOLCANO` with a `VOID` and you have an endless lava-disposal pit.
 - `TNT` is an **explosive**: touch it with `FIRE` or `LAVA` and it detonates,
   bursting into a ball of `FIRE` that consumes the soft stuff around it (sand, oil,
   wood, plant, gas) and **chain-detonates neighbouring `TNT`** — so a packed block
@@ -81,7 +87,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void); `[` / `]` size the brush. The palette
 is the same on all three backends, and every rule — movement, the time-varying
 transforms, and the neighbour reactions — is bit-identical across CPU SIMD,
 OpenGL, and Vulkan.

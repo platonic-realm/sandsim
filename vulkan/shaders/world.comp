@@ -208,6 +208,20 @@ void main() {
         if (moved[i] == 1u) cells[i] = 7u;
         return;
     }
+    if (pc.type == 24) {                                  // void: mark cells touching a void (19), except wall/void
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c != 0u && c != 1u && c != 19u) {
+            bool nv = cells[i-1]==19u||cells[i+1]==19u||cells[i-pc.SW]==19u||cells[i+pc.SW]==19u;
+            r = nv ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 25) {                                  // void: apply -> empty (consumed)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 0u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

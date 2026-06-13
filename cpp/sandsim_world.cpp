@@ -38,7 +38,7 @@
 
 static StepFn g_step = nullptr;   // selected at startup (AVX2 or SSE)
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u,
 };
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
@@ -121,12 +121,13 @@ public:
             emitSpring(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
             detonateTnt(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
             emitVolcano(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);  // pass 22/23 (after tnt)
+            consumeVoid(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);         // pass 24/25
         }
         ++frame;
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID) hasReactive = true;
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
                 int nx = lx + dx, ny = ly + dy;
@@ -181,7 +182,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID) hasReactive = true;
                 grid[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
@@ -291,13 +292,13 @@ static int runInteractive(ViewCfg cfg) {
     world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
-    static const uint8_t kSwatch[19] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO};
-    uint32_t swatchCol[19];
-    for (int i = 0; i < 19; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 19);
+    static const uint8_t kSwatch[20] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID};
+    uint32_t swatchCol[20];
+    for (int i = 0; i < 20; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 20);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 19; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 20; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
@@ -350,6 +351,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_t: current = TNT; break;
                     case SDLK_h: current = ASH; break;
                     case SDLK_v: current = VOLCANO; break;
+                    case SDLK_x: current = VOID; break;
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_LEFT:  if (camCx > 0) camCx--; break;
