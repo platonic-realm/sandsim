@@ -216,6 +216,10 @@ fn run_interactive(width: usize, height: usize) {
             render_w as i32, render_h as i32, 0,
         );
         let renderer = sdl::SDL_CreateRenderer(window, -1, sdl::RENDERER_ACCELERATED);
+        // Map rendering and the cursor through a fixed logical size, so painting
+        // lands under the pointer even when a tiling compositor (e.g. niri)
+        // resizes the window away from the requested size.
+        sdl::SDL_RenderSetLogicalSize(renderer, render_w as i32, render_h as i32);
         let texture = sdl::SDL_CreateTexture(
             renderer, sdl::PIXELFORMAT_ARGB8888, sdl::TEXTUREACCESS_STREAMING,
             render_w as i32, render_h as i32,
@@ -247,7 +251,9 @@ fn run_interactive(width: usize, height: usize) {
                 }
             }
             if mouse_down {
-                sim.paint(mx, my, current, 4);
+                let (mut lx, mut ly) = (0f32, 0f32);
+                sdl::SDL_RenderWindowToLogical(renderer, mx, my, &mut lx, &mut ly);
+                sim.paint(lx as i32, ly as i32, current, 4);
             }
             sim.update(frame);
             frame = frame.wrapping_add(1);

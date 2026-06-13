@@ -168,6 +168,10 @@ static int run_interactive(int width, int height) {
         "Materials Sand Simulation - [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, rw, rh, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    /* Map rendering and the cursor through a fixed logical size, so painting
+       lands under the pointer even when a tiling compositor (e.g. niri) resizes
+       the window away from the requested size. */
+    SDL_RenderSetLogicalSize(renderer, rw, rh);
     SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, rw, rh);
 
@@ -192,7 +196,11 @@ static int run_interactive(int width, int height) {
                 }
             }
         }
-        if (mouse_down) paint(&s, mx, my, current, 4);
+        if (mouse_down) {
+            float lx, ly;
+            SDL_RenderWindowToLogical(renderer, mx, my, &lx, &ly);
+            paint(&s, (int)lx, (int)ly, current, 4);
+        }
         update(&s, frame++);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x) {

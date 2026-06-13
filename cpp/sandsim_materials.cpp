@@ -247,6 +247,10 @@ static int runInteractive(int width, int height) {
     SDL_Window* window = SDL_CreateWindow("Materials Sand Simulation - [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
                                           SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    // Map rendering and the cursor through a fixed logical size, so painting
+    // lands under the pointer even when a tiling compositor (e.g. niri) resizes
+    // the window away from the requested size.
+    SDL_RenderSetLogicalSize(renderer, renderW, renderH);
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
 
@@ -285,7 +289,11 @@ static int runInteractive(int width, int height) {
                 SDL_SetWindowTitle(window, title);
             }
         }
-        if (mouseDown) sim.paint(mouseX, mouseY, current, 4, PIXEL);
+        if (mouseDown) {
+            float lx, ly;
+            SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &lx, &ly);
+            sim.paint((int)lx, (int)ly, current, 4, PIXEL);
+        }
 
         sim.update(frame++);
 

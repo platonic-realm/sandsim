@@ -216,6 +216,10 @@ fn runInteractive(allocator: std.mem.Allocator, width: usize, height: usize) !vo
     defer c.SDL_DestroyWindow(window);
     const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED);
     defer c.SDL_DestroyRenderer(renderer);
+    // Map rendering and the cursor through a fixed logical size, so painting
+    // lands under the pointer even when a tiling compositor (e.g. niri) resizes
+    // the window away from the requested size.
+    _ = c.SDL_RenderSetLogicalSize(renderer, @as(c_int, @intCast(render_w)), @as(c_int, @intCast(render_h)));
     const texture = c.SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, c.SDL_TEXTUREACCESS_STREAMING, @as(c_int, @intCast(render_w)), @as(c_int, @intCast(render_h)));
     defer c.SDL_DestroyTexture(texture);
 
@@ -245,7 +249,12 @@ fn runInteractive(allocator: std.mem.Allocator, width: usize, height: usize) !vo
                 else => {},
             }
         }
-        if (mouse_down) sim.paint(mx, my, current, 4);
+        if (mouse_down) {
+            var lx: f32 = 0;
+            var ly: f32 = 0;
+            c.SDL_RenderWindowToLogical(renderer, mx, my, &lx, &ly);
+            sim.paint(@intFromFloat(lx), @intFromFloat(ly), current, 4);
+        }
         sim.update(frame);
         frame +%= 1;
 

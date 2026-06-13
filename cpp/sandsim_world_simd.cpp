@@ -277,6 +277,10 @@ static int runInteractive() {
     SDL_Window* window = SDL_CreateWindow("SIMD Multi-Box Streamed World - arrows pan, mouse paints sand",
                                           SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    // Map rendering and the cursor through a fixed logical size, so painting
+    // lands under the pointer even when a tiling compositor (e.g. niri) resizes
+    // the window away from the requested size.
+    SDL_RenderSetLogicalSize(renderer, renderW, renderH);
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
     bool quit = false, mouseDown = false;
@@ -297,9 +301,13 @@ static int runInteractive() {
         }
         world.streamWindow(camCx, camCy);
         if (mouseDown) {
-            int vx = mouseX / PIXEL, vy = mouseY / PIXEL;       // view cell
-            int lane = (vy / BOX) * GRIDW + (vx / BOX);
-            world.paintLane(lane, vx % BOX, vy % BOX, 4);
+            float flx, fly;
+            SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &flx, &fly);
+            int vx = (int)flx / PIXEL, vy = (int)fly / PIXEL;   // view cell
+            if (vx >= 0 && vx < GRIDW * BOX && vy >= 0 && vy < GRIDH * BOX) {
+                int lane = (vy / BOX) * GRIDW + (vx / BOX);
+                world.paintLane(lane, vx % BOX, vy % BOX, 4);
+            }
         }
         world.step();
 

@@ -224,7 +224,13 @@ def run_interactive(width, height):
 
         if mouse_down:
             mx, my = pygame.mouse.get_pos()
-            sim.paint(mx // PIXEL, my // PIXEL, current, 4)
+            # Map the cursor from the actual window size (a tiling compositor
+            # such as niri may resize it) to the logical surface.
+            ww, wh = pygame.display.get_window_size()
+            lw, lh = width * PIXEL, height * PIXEL
+            lx = mx * lw // ww if ww else mx
+            ly = my * lh // wh if wh else my
+            sim.paint(lx // PIXEL, ly // PIXEL, current, 4)
 
         sim.update(frame)
         frame += 1

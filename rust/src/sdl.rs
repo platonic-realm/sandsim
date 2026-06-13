@@ -55,6 +55,9 @@ extern "C" {
         flags: u32,
     ) -> *mut Window;
     pub fn SDL_CreateRenderer(w: *mut Window, index: c_int, flags: u32) -> *mut Renderer;
+    pub fn SDL_RenderSetLogicalSize(r: *mut Renderer, w: c_int, h: c_int) -> c_int;
+    pub fn SDL_RenderWindowToLogical(r: *mut Renderer, window_x: c_int, window_y: c_int,
+                                     logical_x: *mut f32, logical_y: *mut f32);
     pub fn SDL_CreateTexture(
         r: *mut Renderer,
         format: u32,
