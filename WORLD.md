@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -72,11 +72,12 @@ GPU and produce a **bit-identical** world.
     dropped on lava melts and then quenches the lava to stone.
   - **corrosion** — `ACID` dissolves the solids it touches (`WALL`/`SAND`/`WOOD`/
     `PLANT` → `EMPTY`) and slowly evaporates; same two-pass snapshot shape.
-  - **sourcing** — a `SPRING` solid wells `WATER` up into the empty cells around it
-    (the empty cell decides from a snapshot, like plant growth). It never depletes,
-    so it's an endless generator — the one rule that creates mass from nothing, which
-    keeps long-running worlds in motion instead of settling. The generated world
-    buries a few, so the streaming benchmark's bit-identity check covers it too.
+  - **sourcing** — a `SPRING` solid wells `WATER`, and a `VOLCANO` solid wells
+    `LAVA`, up into the empty cells around it (the empty cell decides from a
+    snapshot, like plant growth). Neither depletes, so they're endless generators —
+    the rules that create mass from nothing and keep long-running worlds in motion
+    instead of settling (a volcano in particular feeds every heat reaction). The
+    generated world buries a few of each, so the streaming benchmark covers them.
   - **detonation** — `TNT` touched by `FIRE`/`LAVA` bursts into `FIRE` across its
     8-neighbourhood and chain-detonates adjacent `TNT`. The two passes are unusual:
     pass 1 marks the *detonators* (TNT next to something hot) into the scratch
@@ -97,7 +98,8 @@ GPU and produce a **bit-identical** world.
   they're needed from a single deterministic, hash-based seed shared by all three
   backends (`worldgen.h`) — an open sky over rolling ground, a sandy crust, and an
   underground of rock veined with caverns and clustered pools of every liquid and
-  gas, lava welling up from the deep, and the rare buried spring or TNT cache.
+  gas, lava welling up from the deep, and the rare buried spring, TNT cache or
+  deep lava-spewing volcano.
 - **Live window.** A `gw × gh` box of chunks around the camera is kept resident in
   **one contiguous grid** with a `PAD`-cell `WALL` border (the border keeps
   material from falling into the void and gives the GPU/SIMD offset accesses a

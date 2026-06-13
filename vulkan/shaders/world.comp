@@ -193,6 +193,21 @@ void main() {
         if (moved[i]==1u || (nearBlast && soft)) cells[i] = 6u;
         return;
     }
+    if (pc.type == 22) {                                  // volcano: mark empty (0) touching volcano (18)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 0u) {
+            bool src = cells[i-1]==18u||cells[i+1]==18u||cells[i-pc.SW]==18u||cells[i+pc.SW]==18u;
+            uint h = (uint(x)*109u + uint(y)*241u + uint(pc.frame)*67u) & 0xFFu;
+            r = (src && h < 16u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 23) {                                  // volcano: apply -> lava (7)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 7u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

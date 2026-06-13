@@ -20,11 +20,12 @@
 // TNT is an explosive solid: FIRE/LAVA detonates it into a burst of FIRE that
 // blasts the soft cells around it and chain-detonates neighbouring TNT. ASH is a
 // light-grey powder (it falls and piles like SAND) left behind as some FIRE burns
-// out -- the soot of a dying flame.
+// out -- the soot of a dying flame. VOLCANO is SPRING's hot twin: an inert vent
+// that never depletes but SOURCES LAVA into the empty cells around it.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    SPRING = 15, TNT = 16, ASH = 17, MATERIAL_COUNT = 18
+    SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, MATERIAL_COUNT = 19
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -86,6 +87,11 @@ static constexpr uint32_t SPRING_FLOW = 20;    // of 256/frame -> empty cells by
 inline bool springFlows(int x, int y, uint32_t frame) {
     uint32_t h = ((uint32_t)x * 89u + (uint32_t)y * 223u + frame * 47u) & 0xFFu;
     return h < SPRING_FLOW;
+}
+static constexpr uint32_t VOLCANO_FLOW = 16;   // of 256/frame -> empty cells by a vent ooze lava
+inline bool volcanoFlows(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 109u + (uint32_t)y * 241u + frame * 67u) & 0xFFu;
+    return h < VOLCANO_FLOW;
 }
 
 // Per-cell time-varying transforms over the live interior (scalar; identical on
@@ -279,6 +285,24 @@ inline void emitSpring(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = WATER;
+        }
+}
+
+// Volcano (lava source): an EMPTY cell touching a VOLCANO wells up with LAVA --
+// the hot mirror of emitSpring (same order-independent mark/apply snapshot). The
+// VOLCANO never moves or depletes, so it is a perpetual lava vent, and the lava it
+// oozes then drives every heat reaction: ignition, glassmaking, steam, melt, blast.
+inline void emitVolcano(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool src = grid[i-1]==VOLCANO || grid[i+1]==VOLCANO || grid[i-SW]==VOLCANO || grid[i+SW]==VOLCANO;
+            scratch[i] = (grid[i] == EMPTY && src && volcanoFlows(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = LAVA;
         }
 }
 

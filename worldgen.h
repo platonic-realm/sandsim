@@ -59,10 +59,11 @@ static inline uint8_t seedMat(int gx, int gy) {
     if (depth > 150 || (depth > 90 && (hashCoord((gx >> 4) + 5, (gy >> 4) + 9) % 1000u) < 320u))
         pool = LAVA;
 
-    // rare buried features: a water spring or a cache of tnt
+    // rare buried features: a water spring, a cache of tnt, or a deep lava vent
     uint32_t rare = cell % 100000u;
     if (rare < 6u)  return SPRING;
     if (rare < 16u) return TNT;
+    if (rare < 19u && depth > 110) return VOLCANO;   // volcanoes only well down deep
 
     // caves: a coarse hash opens roomy caverns, textured by a fine hash
     bool cave = (hashCoord((gx >> 4) + 808, (gy >> 4) + 909) % 1000u) < 340u && (cell % 1000u) < 800u;

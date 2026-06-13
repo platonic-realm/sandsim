@@ -11,7 +11,7 @@ all: sandsim_world
 sandsim_world: sandsim_world.o world_step_sse.o world_step_avx.o
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDLIBS)
 
-sandsim_world.o: sandsim_world.cpp materials.h world_step.h
+sandsim_world.o: sandsim_world.cpp materials.h world_step.h ../worldgen.h ../ui.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 world_step_sse.o: world_step_sse.cpp simd_core.h world_step.h materials.h
 	$(CXX) $(CXXFLAGS) -msse4.1 -c $< -o $@

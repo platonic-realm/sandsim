@@ -10,7 +10,7 @@ all: sandsim_world_vk
 shaders/world.comp.spv: shaders/world.comp
 	$(GLSLC) $< -o $@
 
-sandsim_world_vk: sandsim_world_vk.cpp shaders/world.comp.spv
+sandsim_world_vk: sandsim_world_vk.cpp shaders/world.comp.spv ../worldgen.h ../ui.h
 	$(CXX) $(CXXFLAGS) sandsim_world_vk.cpp -o $@ $(LDLIBS)
 
 .PHONY: all shaders run bench clean

@@ -4,7 +4,7 @@ PKGS     := glew glfw3 gl
 CXXFLAGS += $(shell pkg-config --cflags $(PKGS) 2>/dev/null)
 LDLIBS   := $(shell pkg-config --libs $(PKGS) 2>/dev/null || echo -lGLEW -lglfw -lGL)
 
-sandsim_world_gl: sandsim_world_gl.cpp
+sandsim_world_gl: sandsim_world_gl.cpp ../worldgen.h ../ui.h
 	$(CXX) $(CXXFLAGS) sandsim_world_gl.cpp -o sandsim_world_gl $(LDLIBS)
 
 .PHONY: run bench clean
