@@ -433,14 +433,22 @@ static int runInteractive(ViewCfg cfg) {
     world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
+    // The actual framebuffer can differ from the requested window size under a
+    // HiDPI / fractional-scaling compositor; map cells across the real pixels so
+    // the grid fills the window exactly like the SDL builds' logical-size scaling.
+    int fbW = renderW, fbH = renderH;
+    glfwGetFramebufferSize(win, &fbW, &fbH);
     glUseProgram(present);
     glUniform1i(glGetUniformLocation(present, "uSW"), world.stride());
     glUniform1i(glGetUniformLocation(present, "uX0"), world.originX());
     glUniform1i(glGetUniformLocation(present, "uY0"), world.originY());
     glUniform1i(glGetUniformLocation(present, "uLW"), world.cellsW());
     glUniform1i(glGetUniformLocation(present, "uLH"), world.cellsH());
-    glUniform1i(glGetUniformLocation(present, "uRW"), renderW);
-    glUniform1i(glGetUniformLocation(present, "uRH"), renderH);
+    GLint uRW = glGetUniformLocation(present, "uRW"), uRH = glGetUniformLocation(present, "uRH");
+    glUniform1i(uRW, fbW); glUniform1i(uRH, fbH);
+    fprintf(stderr, "sandsim [opengl]: window %dx%d (framebuffer %dx%d), scale %d, "
+            "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
+            renderW, renderH, fbW, fbH, PIXEL, gw, gh, gw * CHUNK, gh * CHUNK, cfg.simHz);
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -478,9 +486,11 @@ static int runInteractive(ViewCfg cfg) {
         for (int n = 0; acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
 
+        int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH);
+        if (cfbW != fbW || cfbH != fbH) { fbW = cfbW; fbH = cfbH; glUniform1i(uRW, fbW); glUniform1i(uRH, fbH); }
         glUseProgram(present);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, world.buffer());
-        glViewport(0, 0, renderW, renderH);
+        glViewport(0, 0, fbW, fbH);
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glfwSwapBuffers(win);

@@ -550,8 +550,12 @@ static int runInteractive(ViewCfg cfg) {
     // that shows up as severe slowdown and flicker. A CPU blit of one texture is
     // cheap and fully decoupled from the compute device.
     SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
-    SDL_RenderSetLogicalSize(ren, renderW, renderH);
+    SDL_RenderSetLogicalSize(ren, renderW, renderH);        // scales content to the actual output
     SDL_Texture* tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
+    int outW = renderW, outH = renderH; SDL_GetRendererOutputSize(ren, &outW, &outH);
+    fprintf(stderr, "sandsim [vulkan]: window %dx%d (output %dx%d), scale %d, "
+            "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
+            renderW, renderH, outW, outH, PIXEL, gw, gh, LW, LH, cfg.simHz);
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false, mouseDown = false; int mouseX = 0, mouseY = 0; SDL_Event e;
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step

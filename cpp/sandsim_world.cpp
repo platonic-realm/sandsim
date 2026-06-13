@@ -290,9 +290,13 @@ static int runInteractive(ViewCfg cfg) {
         "Connected SIMD World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    SDL_RenderSetLogicalSize(renderer, renderW, renderH);
+    SDL_RenderSetLogicalSize(renderer, renderW, renderH);    // scales content to the actual output
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
+    int outW = renderW, outH = renderH; SDL_GetRendererOutputSize(renderer, &outW, &outH);
+    fprintf(stderr, "sandsim [cpp_%s]: window %dx%d (output %dx%d), scale %d, "
+            "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
+            simdName(), renderW, renderH, outW, outH, PIXEL, gw, gh, LW, LH, cfg.simHz);
     bool quit = false, mouseDown = false;
     int mouseX = 0, mouseY = 0;
     SDL_Event e;
