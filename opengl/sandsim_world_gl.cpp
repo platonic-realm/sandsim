@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, MATERIAL_COUNT = 14 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, MATERIAL_COUNT = 15 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -210,6 +210,22 @@ void main() {
         if (moved[i] == 1u) cells[i] = 13u;
         return;
     }
+    if (uType == 14) {                                    // ice: mark ice (14) touching fire(6)/lava(7)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 14u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-uSW]==6u||cells[i-uSW]==7u||cells[i+uSW]==6u||cells[i+uSW]==7u;
+            uint h = (uint(x)*127u + uint(y)*163u + uint(uFrame)*41u) & 0xFFu;
+            r = (hot && h < 18u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 15) {                                    // ice: apply -> water (3)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 3u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -257,6 +273,7 @@ vec3 matColor(uint m) {
     if (m == 11u) return vec3(0.722, 0.941, 0.000);
     if (m == 12u) return vec3(0.345, 0.345, 0.376);
     if (m == 13u) return vec3(0.682, 0.878, 0.910);
+    if (m == 14u) return vec3(0.804, 0.922, 1.0);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -412,7 +429,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 13; ++t) {         // + glass (sand+lava)
+            for (int t = 3; t <= 15; ++t) {         // + glass (sand+lava), ice melt
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -608,8 +625,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[14] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS};
-    ui::Palette pal = ui::palette(renderW, 14);
+    static const uint8_t kSwatch[15] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE};
+    ui::Palette pal = ui::palette(renderW, 15);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -622,7 +639,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 14; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 15; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -645,6 +662,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) current = ACID;
         if (glfwGetKey(win, GLFW_KEY_M) == GLFW_PRESS) current = SMOKE;
         if (glfwGetKey(win, GLFW_KEY_G) == GLFW_PRESS) current = GLASS;
+        if (glfwGetKey(win, GLFW_KEY_I) == GLFW_PRESS) current = ICE;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;

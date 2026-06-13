@@ -128,6 +128,22 @@ void main() {
         if (moved[i] == 1u) cells[i] = 13u;
         return;
     }
+    if (pc.type == 14) {                                  // ice: mark ice (14) touching fire(6)/lava(7)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 14u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            uint h = (uint(x)*127u + uint(y)*163u + uint(pc.frame)*41u) & 0xFFu;
+            r = (hot && h < 18u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 15) {                                  // ice: apply -> water (3)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 3u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

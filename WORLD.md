@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -63,6 +63,9 @@ GPU and produce a **bit-identical** world.
     the first rule that *creates* material rather than moving or transforming it.
   - **glassmaking** — `SAND` touching `LAVA` sets into `GLASS`, an inert solid
     (another mark/apply snapshot pair), so sand poured into a lava pool fuses.
+  - **melting** — `ICE` touching `FIRE`/`LAVA` thaws to `WATER` (frame-hashed,
+    same snapshot shape) — the inverse of glassmaking. The meltwater then feeds the
+    existing water rules, so ice dropped on lava melts and quenches it to stone.
   - **corrosion** — `ACID` dissolves the solids it touches (`WALL`/`SAND`/`WOOD`/
     `PLANT` → `EMPTY`) and slowly evaporates; same two-pass snapshot shape.
 
