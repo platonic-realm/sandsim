@@ -108,6 +108,26 @@ It is implemented identically in C, C++, Python, Rust, and Zig, and the five
 agree on a bit-for-bit checksum and conserved per-material counts. See
 [MATERIALS.md](MATERIALS.md) for the rules, controls, and verification details.
 
+## Big world (streaming, Noita-style)
+
+To simulate a world far larger than memory or the screen, sandsim adds a
+**chunked, disk-streamed world** modeled on Noita's engine: the world is split
+into 64×64 chunks, only a few "live boxes" around the camera are kept resident
+and simulated, settled chunks **sleep**, and everything else is **saved to disk**
+and reloaded on demand.
+
+```sh
+make world            # build the chunked-world implementations
+cpp/sandsim_world     # interactive: WASD/arrows pan the camera, number keys paint
+make bench-world      # deterministic cross-language streaming cross-check
+```
+
+It is implemented in C, C++, Python, Rust, and Zig (all five agree on a
+whole-world checksum and conserve every material across the streaming
+round-trip), plus a **SIMD multi-box** variant (`cpp/sandsim_world_simd.cpp`)
+that reuses the multi-buffer technique to advance 16 live boxes per SSE
+instruction. See [WORLD.md](WORLD.md) for the Noita research and the design.
+
 ## Getting Started
 
 1. Clone this repository:
