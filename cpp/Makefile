@@ -8,7 +8,10 @@ SSE    := sandsim_sse_sb sandsim_sse_mb
 AVX    := sandsim_avx_sb sandsim_avx_mb
 
 # Default builds the x86-friendly variants (NEON is ARM-only; see `make neon`).
-all: $(SCALAR) $(SSE) $(AVX)
+all: $(SCALAR) $(SSE) $(AVX) sandsim_materials
+
+sandsim_materials: sandsim_materials.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
 
 sandsim_scalar_%: sandsim_scalar_%.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
@@ -27,4 +30,4 @@ bench: sandsim_scalar_sb
 	./sandsim_scalar_sb --bench 1000 400 300
 
 clean:
-	rm -f $(SCALAR) $(SSE) $(AVX) sandsim_neon_mb
+	rm -f $(SCALAR) $(SSE) $(AVX) sandsim_neon_mb sandsim_materials

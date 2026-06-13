@@ -110,6 +110,13 @@ It prints a single `RESULT` line whose checksum (`31128ca3d1fcadc6` at the
 default 1000 steps / 400×300) every other scalar-rule implementation must match.
 See [BENCHMARKS.md](../BENCHMARKS.md).
 
+## Materials variant
+
+`sandsim_materials.cpp` is the canonical reference for the Noita-style
+multi-material engine (wall, sand, water, gas with density interaction). Build it
+with `make sandsim_materials` and run `./sandsim_materials`; number keys pick a
+material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
+
 ## Implementation Details
 
 - The scalar versions use basic loop-based updates, with the multi-buffer version managing multiple simulations.
