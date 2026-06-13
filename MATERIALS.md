@@ -48,7 +48,13 @@ The engine is implemented identically in five languages:
 - [Rust](rust/src/materials.rs)
 - [Zig](zig/sandsim_materials.zig)
 
-The GPU / SIMD / Mojo ports of the base simulation are not (yet) extended: the
+There are also **SIMD** variants — [`cpp/sandsim_materials_sse.cpp`](cpp/sandsim_materials_sse.cpp)
+and `_avx.cpp` — that run the same rule on one connected grid with the single-grid
+SSE/AVX2 technique (see [`cpp/simd_core.h`](cpp/simd_core.h) and [WORLD.md](WORLD.md)).
+They use a pass-based update order, so their checksum differs from the scalar
+ports above (but SSE and AVX agree with each other and conserve every material).
+
+The GPU / Mojo ports of the base simulation are not (yet) extended: the
 GPU back-ends use an atomic single-target "claim" model that does not map
 cleanly onto liquids and gases, which need horizontal flow and density swaps.
 The model above is the reference for porting them.

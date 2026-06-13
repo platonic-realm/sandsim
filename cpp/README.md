@@ -1,153 +1,65 @@
 # SandSim C++ Implementation
 
-This directory contains the C++ implementation of the sandsim project, including scalar, SSE, and AVX versions of the sand falling simulation, in both single-buffer and multi-buffer variants. Vulkan implementations have moved to the root-level `vulkan/` directory with their own README and build instructions.
+Three falling-sand engines, each in three SIMD tiers:
 
-## Versions
+| Engine | scalar | SSE (16-wide) | AVX2 (32-wide) |
+|--------|--------|---------------|----------------|
+| **sand** (single material) | `sandsim_scalar_sb.cpp` | `sandsim_sse_sb.cpp` | `sandsim_avx_sb.cpp` |
+| **materials** (sand/water/gas/wall) | `sandsim_materials.cpp` | `sandsim_materials_sse.cpp` | `sandsim_materials_avx.cpp` |
+| **world** (chunked, disk-streamed) | `sandsim_world.cpp` | `sandsim_world_sse.cpp` | `sandsim_world_avx.cpp` |
 
-1. **Scalar Single Buffer Version (sandsim_scalar_sb.cpp)**: Basic implementation without SIMD optimizations.
-2. **Scalar Multi-Buffer Version (sandsim_scalar_mb.cpp)**: Basic implementation with multi-buffer support.
-3. **SSE Single Buffer Version (sandsim_sse_sb.cpp)**: SSE-optimized implementation with a single buffer.
-4. **SSE Multi-Buffer Version (sandsim_sse_mb.cpp)**: SSE-optimized implementation with multi-buffer support.
-5. **AVX2 Single Buffer Version (sandsim_avx_sb.cpp)**: AVX2-optimized implementation with a single buffer.
-6. **AVX2 Multi-Buffer Version (sandsim_avx_mb.cpp)**: AVX2-optimized implementation with multi-buffer support.
-7. **NEON Multi-Buffer Version (sandsim_neon_mb.cpp)**: ARM NEON-optimized implementation with multi-buffer support.
+The SIMD materials and world share [`simd_core.h`](simd_core.h), which holds the
+**single-grid** SIMD update (lanes = adjacent cells of one connected grid)
+templated over the vector width — the SSE and AVX builds of an engine produce
+**identical** results (the width doesn't change the rule), AVX just ~2× faster.
+See [WORLD.md](../WORLD.md) for the design.
+
+> The multi-buffer (`_mb`) and NEON variants were removed: the multi-buffer
+> technique packs *independent* simulations into the lanes, which can't model a
+> connected world (lanes don't communicate).
 
 ## Requirements
 
-- C++17 compatible compiler (e.g., GCC 7+, Clang 5+, MSVC 2017+)
-- SDL2 library for visualization
-- For NEON version: ARM processor with NEON support
+- A C++17 compiler (GCC/Clang) and SDL2.
 
-## Compiling the Project
+## Building
 
-The quickest path is the Makefile, which builds every x86 variant
-(`scalar`/`sse`/`avx`, single- and multi-buffer):
-
-```
-make           # all x86 variants
-make neon      # NEON multi-buffer (ARM only)
-make bench     # build scalar_sb and run its headless benchmark
+```sh
+make                       # builds all nine variants (scalar/SSE/AVX x sand/materials/world)
+make sandsim_world_avx     # build one variant
+make bench                 # build sandsim_scalar_sb and run its headless benchmark
 make clean
 ```
 
-Or compile individual versions with GCC or Clang. Here are the commands for each
-version:
+Individual compiles follow the pattern (SSE needs `-msse4.1`, AVX2 needs `-mavx2`):
 
-### Scalar Single Buffer Version
-
-```
-g++ -std=c++17 -O3 sandsim_scalar_sb.cpp -o sandsim_scalar_sb -lSDL2
-```
-
-### Scalar Multi-Buffer Version
-
-```
-g++ -std=c++17 -O3 sandsim_scalar_mb.cpp -o sandsim_scalar_mb -lSDL2
+```sh
+g++ -std=c++17 -O3 sandsim_scalar_sb.cpp    -o sandsim_scalar_sb    $(pkg-config --cflags --libs sdl2)
+g++ -std=c++17 -O3 -msse4.1 sandsim_world_sse.cpp -o sandsim_world_sse $(pkg-config --cflags --libs sdl2)
+g++ -std=c++17 -O3 -mavx2   sandsim_world_avx.cpp -o sandsim_world_avx $(pkg-config --cflags --libs sdl2)
 ```
 
-### SSE Single Buffer Version
+## Running
 
-```
-g++ -std=c++17 -O3 -msse4.1 sandsim_sse_sb.cpp -o sandsim_sse_sb -lSDL2
-```
-
-### SSE Multi-Buffer Version
-
-```
-g++ -std=c++17 -O3 -msse4.1 sandsim_sse_mb.cpp -o sandsim_sse_mb -lSDL2
+```sh
+./sandsim_scalar_sb            # sand, interactive (left-drag adds sand, C clear, R randomize)
+./sandsim_materials_sse        # materials, interactive (number keys pick material, mouse paints)
+./sandsim_world_avx            # streamed world (arrows pan, number keys paint)
 ```
 
-### AVX2 Single Buffer Version
+Each also has a headless `--bench` (and the materials/world SIMD variants a
+`--ppm <file>` snapshot mode).
 
-```
-g++ -std=c++17 -O3 -mavx2 sandsim_avx_sb.cpp -o sandsim_avx_sb -lSDL2
-```
+## Benchmark / verification
 
-### AVX2 Multi-Buffer Version
-
-```
-g++ -std=c++17 -O3 -mavx2 sandsim_avx_mb.cpp -o sandsim_avx_mb -lSDL2
-```
-
-### NEON Multi-Buffer Version (for ARM processors)
-
-```
-g++ -std=c++17 -O3 -march=armv8-a+simd sandsim_neon_mb.cpp -o sandsim_neon_mb -lSDL2
-```
-
-## Running the Simulations
-
-After compiling, you can run each version by executing the corresponding binary:
-
-```
-./sandsim_scalar_sb
-./sandsim_scalar_mb
-./sandsim_sse_sb
-./sandsim_sse_mb
-./sandsim_avx_sb
-./sandsim_avx_mb
-./sandsim_neon_mb
-```
-
-## Controls
-
-- Left mouse click and drag: Add sand
-- 'C' key: Clear the simulation
-- 'R' key: Randomize the sand distribution
-- Space bar: Cycle through buffers (multi-buffer versions only)
-- Number keys 0-9: Switch to a specific buffer (multi-buffer versions only)
-
-## Benchmark
-
-`sandsim_scalar_sb` is the project's golden reference for the cross-language
-benchmark. Run it headless:
-
-```
-./sandsim_scalar_sb --bench 1000 400 300
-```
-
-It prints a single `RESULT` line whose checksum (`31128ca3d1fcadc6` at the
-default 1000 steps / 400×300) every other scalar-rule implementation must match.
-See [BENCHMARKS.md](../BENCHMARKS.md).
-
-## Materials variant
-
-`sandsim_materials.cpp` is the canonical reference for the Noita-style
-multi-material engine (wall, sand, water, gas with density interaction). Build it
-with `make sandsim_materials` and run `./sandsim_materials`; number keys pick a
-material and the mouse paints. See [MATERIALS.md](../MATERIALS.md).
-
-## Streaming world variant
-
-`sandsim_world.cpp` is the canonical chunked, disk-streamed "big world"
-(Noita-style: live boxes around a camera, the rest saved to disk).
-`sandsim_world_simd.cpp` advances 16 live boxes per SSE instruction using the
-multi-buffer technique. Build with `make sandsim_world sandsim_world_simd` (or
-`make world` from the repo root). See [WORLD.md](../WORLD.md).
-
-## Implementation Details
-
-- The scalar versions use basic loop-based updates, with the multi-buffer version managing multiple simulations.
-- The single buffer SIMD versions (SSE, AVX2) use SIMD instructions to process multiple particles in parallel within a single simulation.
-- The multi-buffer SIMD versions (SSE, AVX2, NEON) simulate multiple sand buffers simultaneously, allowing for increased performance and the ability to switch between different simulations.
-- Each sand particle is rendered as a 2x2 pixel block for better visibility.
-
-## Performance Considerations
-
-- The SIMD versions should generally offer better performance than the scalar versions, especially for larger simulation sizes.
-- Single buffer versions process one simulation at a time, with SIMD versions parallelizing particle updates.
-- Multi-buffer versions process multiple entire simulations in parallel:
-  - Scalar multi-buffer version simulates multiple buffers sequentially
-  - SSE version processes 16 buffers simultaneously
-  - AVX2 version processes 32 buffers simultaneously
-  - NEON version processes 16 buffers simultaneously
-
-## Notes
-
-- The NEON version is designed for ARM processors and will not compile on x86 systems.
-- For best performance, compile with optimization flags and run on hardware that supports the corresponding SIMD instruction set.
-- The multi-buffer versions allow for interesting effects by switching between buffers or viewing multiple simulations at once.
+`sandsim_scalar_sb` is the golden reference for the cross-language sand checksum
+(`31128ca3d1fcadc6` at 1000 steps / 400×300; see [BENCHMARKS.md](../BENCHMARKS.md)).
+The SIMD engines verify against each other instead: SSE and AVX of the same
+engine print the same checksum and conserve every material. The scalar materials
+and world are the cross-language references in [MATERIALS.md](../MATERIALS.md)
+and [WORLD.md](../WORLD.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file in the root directory for details.
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE)
+file in the root directory for details.

@@ -61,7 +61,7 @@ bench:
 # no build). The single-material benchmark above is unaffected.
 materials:
 	@if command -v cc    >/dev/null 2>&1; then $(MAKE) -C c sandsim_materials;     else echo "skip c    (no cc)";    fi
-	@if command -v g++   >/dev/null 2>&1; then $(MAKE) -C cpp sandsim_materials;   else echo "skip cpp  (no g++)";   fi
+	@if command -v g++   >/dev/null 2>&1; then $(MAKE) -C cpp sandsim_materials sandsim_materials_sse sandsim_materials_avx; else echo "skip cpp  (no g++)"; fi
 	@if command -v cargo >/dev/null 2>&1; then cd rust && cargo build --release --offline; else echo "skip rust (no cargo)"; fi
 	@if command -v zig   >/dev/null 2>&1; then cd zig && $(ZIG_BUILD_MAT);         else echo "skip zig  (no zig)";   fi
 
@@ -71,7 +71,7 @@ bench-materials:
 # --- chunked streaming world (Noita-style) ----------------------------------
 world:
 	@if command -v cc    >/dev/null 2>&1; then $(MAKE) -C c sandsim_world;   else echo "skip c    (no cc)";    fi
-	@if command -v g++   >/dev/null 2>&1; then $(MAKE) -C cpp sandsim_world sandsim_world_simd; else echo "skip cpp  (no g++)"; fi
+	@if command -v g++   >/dev/null 2>&1; then $(MAKE) -C cpp sandsim_world sandsim_world_sse sandsim_world_avx; else echo "skip cpp  (no g++)"; fi
 	@if command -v cargo >/dev/null 2>&1; then cd rust && cargo build --release --offline; else echo "skip rust (no cargo)"; fi
 	@if command -v zig   >/dev/null 2>&1; then cd zig && $(ZIG_BUILD_WORLD);  else echo "skip zig  (no zig)";   fi
 

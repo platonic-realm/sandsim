@@ -69,8 +69,9 @@ noted as further refinements.
 
 ### What the SIMD variant does
 
-`cpp/sandsim_world_simd.cpp` keeps the world **connected** while doing the
-parallelism entirely in SIMD — no scalar border pass. It uses the **single-grid**
+`cpp/sandsim_world_sse.cpp` (and its 32-wide twin `cpp/sandsim_world_avx.cpp`,
+sharing `cpp/simd_core.h`) keep the world **connected** while doing the
+parallelism entirely in SIMD — no scalar border pass. They use the **single-grid**
 SIMD technique of `cpp/sandsim_sse_sb.cpp`: the lanes are **16 adjacent cells of
 one contiguous grid**, not independent boxes, so material flows freely across the
 whole region. (The earlier multi-buffer approach packed independent boxes into

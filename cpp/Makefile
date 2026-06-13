@@ -3,37 +3,42 @@ CXXFLAGS ?= -std=c++17 -O3 -Wall
 CXXFLAGS += $(shell pkg-config --cflags sdl2 2>/dev/null)
 LDLIBS   := $(shell pkg-config --libs sdl2 2>/dev/null || echo -lSDL2)
 
-SCALAR := sandsim_scalar_sb sandsim_scalar_mb
-SSE    := sandsim_sse_sb sandsim_sse_mb
-AVX    := sandsim_avx_sb sandsim_avx_mb
+# Three physics engines (sand / materials / world), each in three SIMD tiers
+# (scalar / SSE / AVX2). The SIMD materials and world share simd_core.h.
+SAND      := sandsim_scalar_sb sandsim_sse_sb sandsim_avx_sb
+MATERIALS := sandsim_materials sandsim_materials_sse sandsim_materials_avx
+WORLD     := sandsim_world sandsim_world_sse sandsim_world_avx
 
-# Default builds the x86-friendly variants (NEON is ARM-only; see `make neon`).
-all: $(SCALAR) $(SSE) $(AVX) sandsim_materials sandsim_world sandsim_world_simd
+all: $(SAND) $(MATERIALS) $(WORLD)
 
-sandsim_materials: sandsim_materials.cpp
+# --- sand (single material) -------------------------------------------------
+sandsim_scalar_sb: sandsim_scalar_sb.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
-
-sandsim_world: sandsim_world.cpp
-	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
-
-sandsim_world_simd: sandsim_world_simd.cpp
+sandsim_sse_sb: sandsim_sse_sb.cpp
 	$(CXX) $(CXXFLAGS) -msse4.1 $< -o $@ $(LDLIBS)
-
-sandsim_scalar_%: sandsim_scalar_%.cpp
-	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
-sandsim_sse_%: sandsim_sse_%.cpp
-	$(CXX) $(CXXFLAGS) -msse4.1 $< -o $@ $(LDLIBS)
-sandsim_avx_%: sandsim_avx_%.cpp
+sandsim_avx_sb: sandsim_avx_sb.cpp
 	$(CXX) $(CXXFLAGS) -mavx2 $< -o $@ $(LDLIBS)
 
-# NEON multi-buffer: only on ARM (armv8-a+simd).
-neon: sandsim_neon_mb.cpp
-	$(CXX) $(CXXFLAGS) -march=armv8-a+simd sandsim_neon_mb.cpp -o sandsim_neon_mb $(LDLIBS)
+# --- materials (multi-material, fixed grid) ---------------------------------
+sandsim_materials: sandsim_materials.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
+sandsim_materials_sse: sandsim_materials_sse.cpp simd_core.h
+	$(CXX) $(CXXFLAGS) -msse4.1 $< -o $@ $(LDLIBS)
+sandsim_materials_avx: sandsim_materials_avx.cpp simd_core.h
+	$(CXX) $(CXXFLAGS) -mavx2 $< -o $@ $(LDLIBS)
 
-.PHONY: all neon bench clean
+# --- world (chunked, disk-streamed) -----------------------------------------
+sandsim_world: sandsim_world.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDLIBS)
+sandsim_world_sse: sandsim_world_sse.cpp simd_core.h
+	$(CXX) $(CXXFLAGS) -msse4.1 $< -o $@ $(LDLIBS)
+sandsim_world_avx: sandsim_world_avx.cpp simd_core.h
+	$(CXX) $(CXXFLAGS) -mavx2 $< -o $@ $(LDLIBS)
+
+.PHONY: all bench clean
 # scalar_sb is the golden reference for the cross-language --bench checksum.
 bench: sandsim_scalar_sb
 	./sandsim_scalar_sb --bench 1000 400 300
 
 clean:
-	rm -f $(SCALAR) $(SSE) $(AVX) sandsim_neon_mb sandsim_materials sandsim_world sandsim_world_simd
+	rm -f $(SAND) $(MATERIALS) $(WORLD)

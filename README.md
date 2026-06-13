@@ -124,11 +124,11 @@ make bench-world      # deterministic cross-language streaming cross-check
 
 It is implemented in C, C++, Python, Rust, and Zig (all five agree on a
 whole-world checksum and conserve every material across the streaming
-round-trip), plus a **connected SIMD** variant (`cpp/sandsim_world_simd.cpp`)
-that simulates one contiguous grid with the single-grid SSE technique (16
-adjacent cells per instruction) and the full materials rule — material flows
-across the whole region, no scalar border pass. See [WORLD.md](WORLD.md) for the
-Noita research and the design.
+round-trip), plus **connected SIMD** variants
+(`cpp/sandsim_world_sse.cpp` and `_avx.cpp`) that simulate one contiguous grid
+with the single-grid SIMD technique (16/32 adjacent cells per instruction) and
+the full materials rule — material flows across the whole region, no scalar
+border pass. See [WORLD.md](WORLD.md) for the Noita research and the design.
 
 ## Getting Started
 
