@@ -1,6 +1,8 @@
 # Compiled binaries (one per implementation directory)
 /c/sandsim
+/c/sandsim_materials
 /zig/sandsim
+/zig/sandsim_materials
 /opengl/sandsim_gl
 /hip/sandsim_hip
 /cuda/sandsim_cuda
