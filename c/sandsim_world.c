@@ -239,11 +239,18 @@ static void world_step(World *w) {
     w->frame++;
 }
 
+/* The world border (generated as WALL) is the indestructible solid shell,
+   including the bottom floor: painting never modifies it. */
+static int indestructible(World *w, int gx, int gy) {
+    return gx == 0 || gy == 0 || gx == w->wcells - 1 || gy == w->hcells - 1;
+}
+
 static void world_paint(World *w, int gx, int gy, uint8_t material, int radius) {
     for (int dy = -radius; dy <= radius; ++dy)
         for (int dx = -radius; dx <= radius; ++dx) {
             int nx = gx + dx, ny = gy + dy;
             if (dx * dx + dy * dy > radius * radius) continue;
+            if (indestructible(w, nx, ny)) continue;
             Chunk *c = resident_at(w, nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT);
             if (!c) continue;
             c->cells[(ny & CHUNK_MASK) * CHUNK + (nx & CHUNK_MASK)] = material;
@@ -324,6 +331,10 @@ static int run_interactive(void) {
         "Streamed World (C) - WASD/arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, rw, rh, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    /* Map rendering and the cursor through a fixed logical size, so painting
+       lands under the pointer even when a tiling compositor (e.g. niri) resizes
+       the window away from the requested size. */
+    SDL_RenderSetLogicalSize(renderer, rw, rh);
     SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, rw, rh);
     int quit = 0, mouse_down = 0, mx = 0, my = 0;
@@ -349,7 +360,11 @@ static int run_interactive(void) {
             }
         }
         stream_around(w, (camX + VIEW_W / 2) >> CHUNK_SHIFT, (camY + VIEW_H / 2) >> CHUNK_SHIFT, 3);
-        if (mouse_down) world_paint(w, camX + mx / PIXEL_SIZE, camY + my / PIXEL_SIZE, current, 4);
+        if (mouse_down) {
+            float lx, ly;
+            SDL_RenderWindowToLogical(renderer, mx, my, &lx, &ly);
+            world_paint(w, camX + (int)lx / PIXEL_SIZE, camY + (int)ly / PIXEL_SIZE, current, 4);
+        }
         world_step(w);
         for (int vy = 0; vy < VIEW_H; ++vy)
             for (int vx = 0; vx < VIEW_W; ++vx) {

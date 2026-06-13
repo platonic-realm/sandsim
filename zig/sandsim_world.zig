@@ -277,6 +277,12 @@ const World = struct {
         self.frame += 1;
     }
 
+    // The world border (generated as WALL) is the indestructible solid shell,
+    // including the bottom floor: painting never modifies it.
+    fn indestructible(self: *World, gx: i32, gy: i32) bool {
+        return gx == 0 or gy == 0 or gx == self.wcells - 1 or gy == self.hcells - 1;
+    }
+
     fn paint(self: *World, gx: i32, gy: i32, material: u8, radius: i32) void {
         var dy: i32 = -radius;
         while (dy <= radius) : (dy += 1) {
@@ -285,6 +291,7 @@ const World = struct {
                 const nx = gx + dx;
                 const ny = gy + dy;
                 if (dx * dx + dy * dy > radius * radius) continue;
+                if (self.indestructible(nx, ny)) continue;
                 if (self.residentAt(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT)) |ch| {
                     ch.cells[@intCast((ny & CHUNK_MASK) * CHUNK + (nx & CHUNK_MASK))] = material;
                     self.wake(nx, ny);
@@ -379,6 +386,10 @@ fn runInteractive(alloc: std.mem.Allocator) !void {
     defer c.SDL_DestroyWindow(window);
     const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED);
     defer c.SDL_DestroyRenderer(renderer);
+    // Map rendering and the cursor through a fixed logical size, so painting
+    // lands under the pointer even when a tiling compositor (e.g. niri) resizes
+    // the window away from the requested size.
+    _ = c.SDL_RenderSetLogicalSize(renderer, @as(c_int, @intCast(render_w)), @as(c_int, @intCast(render_h)));
     const texture = c.SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, c.SDL_TEXTUREACCESS_STREAMING, @as(c_int, @intCast(render_w)), @as(c_int, @intCast(render_h)));
     defer c.SDL_DestroyTexture(texture);
 
@@ -410,7 +421,12 @@ fn runInteractive(alloc: std.mem.Allocator) !void {
             }
         }
         try world.streamAround((camX + @divTrunc(VIEW_W, 2)) >> CHUNK_SHIFT, (camY + @divTrunc(VIEW_H, 2)) >> CHUNK_SHIFT, 3);
-        if (mouse_down) world.paint(camX + @divTrunc(mx, @as(c_int, PIXEL_SIZE)), camY + @divTrunc(my, @as(c_int, PIXEL_SIZE)), current, 4);
+        if (mouse_down) {
+            var lx: f32 = 0;
+            var ly: f32 = 0;
+            c.SDL_RenderWindowToLogical(renderer, mx, my, &lx, &ly);
+            world.paint(camX + @divTrunc(@as(c_int, @intFromFloat(lx)), @as(c_int, PIXEL_SIZE)), camY + @divTrunc(@as(c_int, @intFromFloat(ly)), @as(c_int, PIXEL_SIZE)), current, 4);
+        }
         world.step();
         var vy: i32 = 0;
         while (vy < VIEW_H) : (vy += 1) {

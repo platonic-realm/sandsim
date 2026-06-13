@@ -243,11 +243,18 @@ class World:
                 c.commit_next()
         self.frame += 1
 
+    def indestructible(self, gx, gy):
+        # The world border (generated as WALL) is the indestructible solid
+        # shell, including the bottom floor: painting never modifies it.
+        return gx == 0 or gy == 0 or gx == self.wcells - 1 or gy == self.hcells - 1
+
     def paint(self, gx, gy, material, radius):
         for dy in range(-radius, radius + 1):
             for dx in range(-radius, radius + 1):
                 nx, ny = gx + dx, gy + dy
                 if dx * dx + dy * dy > radius * radius:
+                    continue
+                if self.indestructible(nx, ny):
                     continue
                 c = self.resident_at(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT)
                 if c is None:
@@ -336,7 +343,14 @@ def run_interactive():
         world.stream_around((camX + VIEW_W // 2) >> CHUNK_SHIFT, (camY + VIEW_H // 2) >> CHUNK_SHIFT, 3)
         if mouse_down:
             mx, my = pygame.mouse.get_pos()
-            world.paint(camX + mx // PIXEL, camY + my // PIXEL, current, 4)
+            # Map the cursor from the actual window size (a tiling compositor
+            # such as niri may resize it) to the logical surface, so painting
+            # lands under the pointer.
+            ww, wh = pygame.display.get_window_size()
+            lw, lh = VIEW_W * PIXEL, VIEW_H * PIXEL
+            lx = mx * lw // ww if ww else mx
+            ly = my * lh // wh if wh else my
+            world.paint(camX + lx // PIXEL, camY + ly // PIXEL, current, 4)
         world.step()
 
         for vy in range(VIEW_H):

@@ -288,11 +288,18 @@ impl World {
         self.frame += 1;
     }
 
+    // The world border (generated as WALL) is the indestructible solid shell,
+    // including the bottom floor: painting never modifies it.
+    fn indestructible(&self, gx: i32, gy: i32) -> bool {
+        gx == 0 || gy == 0 || gx == self.wcells - 1 || gy == self.hcells - 1
+    }
+
     fn paint(&mut self, gx: i32, gy: i32, material: u8, radius: i32) {
         for dy in -radius..=radius {
             for dx in -radius..=radius {
                 let (nx, ny) = (gx + dx, gy + dy);
                 if dx * dx + dy * dy > radius * radius { continue; }
+                if self.indestructible(nx, ny) { continue; }
                 if let Some(s) = self.slot(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT) {
                     if self.chunks[s].is_some() {
                         let i = ((ny & CHUNK_MASK) * CHUNK + (nx & CHUNK_MASK)) as usize;
@@ -373,6 +380,10 @@ fn run_interactive() {
         let window = sdl::SDL_CreateWindow(title, sdl::WINDOWPOS_UNDEFINED, sdl::WINDOWPOS_UNDEFINED,
                                            render_w as i32, render_h as i32, 0);
         let renderer = sdl::SDL_CreateRenderer(window, -1, sdl::RENDERER_ACCELERATED);
+        // Map rendering and the cursor through a fixed logical size, so painting
+        // lands under the pointer even when a tiling compositor (e.g. niri)
+        // resizes the window away from the requested size.
+        sdl::SDL_RenderSetLogicalSize(renderer, render_w as i32, render_h as i32);
         let texture = sdl::SDL_CreateTexture(renderer, sdl::PIXELFORMAT_ARGB8888,
                                              sdl::TEXTUREACCESS_STREAMING, render_w as i32, render_h as i32);
         let mut quit = false;
@@ -403,7 +414,9 @@ fn run_interactive() {
             }
             world.stream_around((cam_x + VIEW_W / 2) >> CHUNK_SHIFT, (cam_y + VIEW_H / 2) >> CHUNK_SHIFT, 3);
             if mouse_down {
-                world.paint(cam_x + mx / PIXEL as i32, cam_y + my / PIXEL as i32, current, 4);
+                let (mut lx, mut ly) = (0f32, 0f32);
+                sdl::SDL_RenderWindowToLogical(renderer, mx, my, &mut lx, &mut ly);
+                world.paint(cam_x + lx as i32 / PIXEL as i32, cam_y + ly as i32 / PIXEL as i32, current, 4);
             }
             world.step();
             for vy in 0..VIEW_H {

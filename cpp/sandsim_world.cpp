@@ -207,11 +207,18 @@ public:
         ++frame;
     }
 
+    // The world border (generated as WALL) is the indestructible solid shell,
+    // including the bottom floor: painting never modifies it.
+    bool indestructible(int gx, int gy) const {
+        return gx == 0 || gy == 0 || gx == wcells - 1 || gy == hcells - 1;
+    }
+
     void paint(int gx, int gy, uint8_t material, int radius) {
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
                 int nx = gx + dx, ny = gy + dy;
                 if (dx * dx + dy * dy > radius * radius) continue;
+                if (indestructible(nx, ny)) continue;
                 Chunk* c = residentAt(nx >> CHUNK_SHIFT, ny >> CHUNK_SHIFT);
                 if (!c) continue;
                 c->cells[(ny & CHUNK_MASK) * CHUNK + (nx & CHUNK_MASK)] = material;
@@ -443,6 +450,10 @@ static int runInteractive() {
         "Streamed World - WASD/arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [0]Eraser",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    // Map rendering and the cursor through a fixed logical size, so painting
+    // lands under the pointer even when a tiling compositor (e.g. niri) resizes
+    // the window away from the requested size.
+    SDL_RenderSetLogicalSize(renderer, renderW, renderH);
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                              SDL_TEXTUREACCESS_STREAMING, renderW, renderH);
 
@@ -479,7 +490,11 @@ static int runInteractive() {
         int camCy = (camY + VIEW_H / 2) >> CHUNK_SHIFT;
         world.streamAround(camCx, camCy, 3);
 
-        if (mouseDown) world.paint(camX + mouseX / PIXEL, camY + mouseY / PIXEL, current, 4);
+        if (mouseDown) {
+            float lx, ly;
+            SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &lx, &ly);
+            world.paint(camX + (int)lx / PIXEL, camY + (int)ly / PIXEL, current, 4);
+        }
         world.step();
 
         for (int vy = 0; vy < VIEW_H; ++vy)
