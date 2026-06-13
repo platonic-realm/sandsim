@@ -2,7 +2,9 @@
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <random>
@@ -29,10 +31,11 @@ static std::vector<char> readFile(const char *path) {
 class VulkanSandSim {
 public:
   static constexpr int PIXEL_SIZE = 2;
-  VulkanSandSim(int w, int h)
+  VulkanSandSim(int w, int h, bool headless = false)
       : width(w), height(h), renderWidth(w * PIXEL_SIZE),
         renderHeight(h * PIXEL_SIZE), rng(std::random_device{}()) {
-    initSDL();
+    if (!headless)
+      initSDL();
     initVulkan();
     createBuffers();
     createDescriptorSetLayout();
@@ -95,7 +98,52 @@ public:
     }
   }
 
+  // Headless benchmark: deterministic seed, time N GPU steps, print one RESULT
+  // line. This is the "gpu" rule group (atomic contention => the checksum may
+  // vary run to run; the conserved sand count is the deterministic check).
+  void runBench(int steps) {
+    int srcIndex = 0, dstIndex = 1;
+    uint32_t *u32 = reinterpret_cast<uint32_t *>(mappedPtr);
+    std::memset(mappedPtr, 0, bufferBytes);
+    for (int y = 0; y < height; ++y)
+      for (int x = 0; x < width; ++x)
+        u32[static_cast<size_t>(y) * width + x] = seedCell(x, y);
+
+    auto start = std::chrono::steady_clock::now();
+    for (int s = 0; s < steps; ++s) {
+      copyGrid(srcIndex, dstIndex);
+      recordAndSubmit(srcIndex, dstIndex);
+      waitForGPU();
+      std::swap(srcIndex, dstIndex); // srcIndex now holds the latest state
+    }
+    auto end = std::chrono::steady_clock::now();
+
+    size_t cells = static_cast<size_t>(width) * height;
+    size_t off = (srcIndex == 0 ? 0 : cells);
+    uint64_t c = 14695981039346656037ull, sand = 0;
+    for (size_t i = 0; i < cells; ++i) {
+      uint32_t v = u32[off + i] & 1u;
+      sand += v;
+      c = (c ^ static_cast<uint64_t>(v)) * 1099511628211ull;
+    }
+    double elapsedMs = std::chrono::duration<double, std::milli>(end - start).count();
+    double total = static_cast<double>(cells) * steps;
+    double mcells = (elapsedMs > 0.0) ? total / (elapsedMs / 1000.0) / 1e6 : 0.0;
+    printf("RESULT impl=vulkan rule=gpu width=%d height=%d steps=%d "
+           "elapsed_ms=%.3f mcells_per_s=%.2f checksum=%016llx sand=%llu\n",
+           width, height, steps, elapsedMs, mcells,
+           (unsigned long long)c, (unsigned long long)sand);
+  }
+
 private:
+  // Deterministic per-cell seed (~30% sand), shared with every implementation.
+  static uint32_t seedCell(int x, int y) {
+    uint32_t h = static_cast<uint32_t>(x) * 374761393u +
+                 static_cast<uint32_t>(y) * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return (h % 100u) < 30u ? 1u : 0u;
+  }
+
   SDL_Window *window = nullptr;
   SDL_Renderer *renderer = nullptr;
   SDL_Texture *texture = nullptr;
@@ -410,10 +458,18 @@ private:
   }
 };
 
-int main() {
+int main(int argc, char **argv) {
   try {
-    VulkanSandSim sim(400, 300);
-    sim.run();
+    if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) {
+      int steps = (argc > 2) ? std::atoi(argv[2]) : 1000;
+      int width = (argc > 3) ? std::atoi(argv[3]) : 400;
+      int height = (argc > 4) ? std::atoi(argv[4]) : 300;
+      VulkanSandSim sim(width, height, /*headless=*/true);
+      sim.runBench(steps);
+    } else {
+      VulkanSandSim sim(400, 300);
+      sim.run();
+    }
   } catch (const std::exception &ex) {
     std::cerr << "Error: " << ex.what() << std::endl;
     return 1;
