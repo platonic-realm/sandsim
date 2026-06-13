@@ -17,13 +17,13 @@ builds them, asserts the checksums match, and prints a throughput table.
 ## The simulation
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
-`FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`.
-Movement is a density swap — heaviest to lightest is `SAND > LAVA > ACID > WATER >
-OIL > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
-lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise.
-`WALL`, `WOOD`, `PLANT`, `GLASS`, `ICE`, and `SPRING` are solids that don't move.
-On top of movement there are reactions, all order-independent and bit-identical on
-CPU and GPU:
+`FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
+`TNT`. Movement is a density swap — heaviest to lightest is `SAND > LAVA > ACID >
+WATER > OIL > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks
+through lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke
+rise. `WALL`, `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, and `TNT` are solids that
+don't move. On top of movement there are reactions, all order-independent and
+bit-identical on CPU and GPU:
 
 - `FIRE` rises like flame and **burns out over time** (a deterministic per-cell,
   frame-varying transform — the same hash on CPU and GPU), some of it wisping into
@@ -54,6 +54,12 @@ CPU and GPU:
   so it keeps the world alive: rivers keep flowing, reservoirs refill, frozen ponds
   thaw back, vines keep creeping (plant needs water), and a spring set by lava is a
   perpetual steam engine.
+- `TNT` is an **explosive**: touch it with `FIRE` or `LAVA` and it detonates,
+  bursting into a ball of `FIRE` that consumes the soft stuff around it (sand, oil,
+  wood, plant, gas) and **chain-detonates neighbouring `TNT`** — so a packed block
+  goes off as a detonation wave rolling one ring per frame. `WALL`, `GLASS`, and
+  `WATER` shrug it off, so a blast stops at a stone wall or fizzles at a waterline
+  (and the water then quenches the flames). Lay a `TNT` fuse to a powder keg.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava freezes to
   stone (`WALL`). The `STEAM` then rises and **condenses back to `WATER`**, a
@@ -61,7 +67,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt); `[` / `]` size the brush. The palette
 is the same on all three backends, and every rule — movement, the time-varying
 transforms, and the neighbour reactions — is bit-identical across CPU SIMD,
 OpenGL, and Vulkan.

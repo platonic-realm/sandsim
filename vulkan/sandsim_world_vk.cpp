@@ -33,14 +33,14 @@
 #include <unistd.h>
 #include "../ui.h"       // on-screen material palette
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, MATERIAL_COUNT = 16 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, MATERIAL_COUNT = 17 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -420,7 +420,7 @@ private:
             }
             if (hasReactive) {                      // reactions (gated): see shader pass types
                 int decay = (int)(frame + (uint32_t)f);
-                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19}) {  // + glass, ice, spring
+                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21}) {  // + glass, ice, spring, tnt
                     PushConsts pc{SW, X0, X1, Y0, Y1, t, 0, 0, 0, 0, decay};
                     vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
@@ -580,13 +580,13 @@ static int runInteractive(ViewCfg cfg) {
             "grid %dx%d chunks = %dx%d cells, %d steps/s\n",
             renderW, renderH, outW, outH, ri.name, PIXEL, gw, gh, LW, LH, cfg.simHz);
 
-    static const uint8_t kSwatch[16] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING};
-    uint32_t swatchCol[16];
-    for (int i = 0; i < 16; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 16);
+    static const uint8_t kSwatch[17] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT};
+    uint32_t swatchCol[17];
+    for (int i = 0; i < 17; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 17);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 16; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 17; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false; int mouseX = 0, mouseY = 0; SDL_Event e;
@@ -619,6 +619,7 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_g: current = GLASS; break;
                 case SDLK_i: current = ICE; break;
                 case SDLK_s: current = SPRING; break;
+                case SDLK_t: current = TNT; break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                 case SDLK_LEFT:  if (camCx > 0) camCx--; break;

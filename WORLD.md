@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -76,6 +76,14 @@ GPU and produce a **bit-identical** world.
     so it's an endless generator — the one rule that creates mass from nothing, which
     keeps long-running worlds in motion instead of settling. Only reachable when a
     spring is actually placed, so the conservation-checked benchmark is unaffected.
+  - **detonation** — `TNT` touched by `FIRE`/`LAVA` bursts into `FIRE` across its
+    8-neighbourhood and chain-detonates adjacent `TNT`. The two passes are unusual:
+    pass 1 marks the *detonators* (TNT next to something hot) into the scratch
+    buffer; pass 2 turns a cell to `FIRE` if it is a detonator **or** a blastable
+    cell next to one — so pass 2 reads the pass-1 marks of its neighbours (a stable
+    snapshot) plus its own grid cell, writing only itself. That keeps it order-
+    independent and GPU-identical even though the blast reaches a full ring outward,
+    and the wave then advances one ring per frame as the new fire reaches more TNT.
 
   All reaction passes are gated by a per-world flag set when fire/lava enters, so
   fire-free worlds (like the `--bench` seed) skip them and the cross-backend

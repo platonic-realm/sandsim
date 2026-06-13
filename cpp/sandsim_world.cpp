@@ -38,7 +38,7 @@
 
 static StepFn g_step = nullptr;   // selected at startup (AVX2 or SSE)
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u,
 };
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
@@ -131,6 +131,7 @@ public:
             meltIce(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
             freezeWater(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
             emitSpring(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
+            detonateTnt(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
         }
         ++frame;
     }
@@ -301,13 +302,13 @@ static int runInteractive(ViewCfg cfg) {
     world.setWindow(camCx, camCy);
     uint8_t current = SAND;
 
-    static const uint8_t kSwatch[16] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING};
-    uint32_t swatchCol[16];
-    for (int i = 0; i < 16; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 16);
+    static const uint8_t kSwatch[17] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT};
+    uint32_t swatchCol[17];
+    for (int i = 0; i < 17; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 17);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 16; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 17; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
@@ -357,6 +358,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_g: current = GLASS; break;
                     case SDLK_i: current = ICE; break;
                     case SDLK_s: current = SPRING; break;
+                    case SDLK_t: current = TNT; break;
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_LEFT:  if (camCx > 0) camCx--; break;

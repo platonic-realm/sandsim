@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, MATERIAL_COUNT = 16 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, MATERIAL_COUNT = 17 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -256,6 +256,25 @@ void main() {
         if (moved[i] == 1u) cells[i] = 3u;
         return;
     }
+    if (uType == 20) {                                    // tnt: mark detonators (tnt 16 touching fire/lava)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 16u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-uSW]==6u||cells[i-uSW]==7u||cells[i+uSW]==6u||cells[i+uSW]==7u;
+            r = hot ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 21) {                                    // tnt: blast detonators + blastable 8-neighbours -> fire
+        int i = y * uSW + x;
+        bool nearBlast = moved[i-1]==1u||moved[i+1]==1u||moved[i-uSW]==1u||moved[i+uSW]==1u
+                       ||moved[i-uSW-1]==1u||moved[i-uSW+1]==1u||moved[i+uSW-1]==1u||moved[i+uSW+1]==1u;
+        uint c = cells[i];
+        bool soft = c==0u||c==2u||c==5u||c==4u||c==9u||c==10u||c==12u||c==16u;  // E,SAND,OIL,GAS,WOOD,PLANT,SMOKE,TNT
+        if (moved[i]==1u || (nearBlast && soft)) cells[i] = 6u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -305,6 +324,7 @@ vec3 matColor(uint m) {
     if (m == 13u) return vec3(0.682, 0.878, 0.910);
     if (m == 14u) return vec3(0.804, 0.922, 1.0);
     if (m == 15u) return vec3(0.122, 0.710, 0.769);
+    if (m == 16u) return vec3(0.800, 0.133, 0.133);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -460,7 +480,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 19; ++t) {         // + glass, ice melt, freeze, spring
+            for (int t = 3; t <= 21; ++t) {         // + glass, ice, spring, tnt
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -656,8 +676,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[16] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING};
-    ui::Palette pal = ui::palette(renderW, 16);
+    static const uint8_t kSwatch[17] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT};
+    ui::Palette pal = ui::palette(renderW, 17);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -670,7 +690,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 16; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 17; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -695,6 +715,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_G) == GLFW_PRESS) current = GLASS;
         if (glfwGetKey(win, GLFW_KEY_I) == GLFW_PRESS) current = ICE;
         if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) current = SPRING;
+        if (glfwGetKey(win, GLFW_KEY_T) == GLFW_PRESS) current = TNT;
         static bool pL = false, pR = false, pU = false, pD = false;
         bool l = glfwGetKey(win, GLFW_KEY_LEFT) == GLFW_PRESS;
         bool r = glfwGetKey(win, GLFW_KEY_RIGHT) == GLFW_PRESS;

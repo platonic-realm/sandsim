@@ -17,10 +17,12 @@
 // back to WATER wherever it touches FIRE or LAVA, and FREEZES the WATER it touches
 // into more ICE -- a two-way phase. SPRING is an inert solid that never moves or
 // depletes but SOURCES WATER into the empty cells around it: an endless fountain.
+// TNT is an explosive solid: FIRE/LAVA detonates it into a burst of FIRE that
+// blasts the soft cells around it and chain-detonates neighbouring TNT.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
-    SPRING = 15, MATERIAL_COUNT = 16
+    SPRING = 15, TNT = 16, MATERIAL_COUNT = 17
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -270,5 +272,35 @@ inline void emitSpring(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = WATER;
+        }
+}
+
+// Which cells an explosion consumes: the soft / flammable stuff (and TNT itself,
+// so blasts chain). WALL, GLASS, WATER, LAVA, ICE, STEAM, ACID, SPRING survive --
+// a blast meeting water just stops at the waterline and gets quenched.
+inline bool blastable(uint8_t m) {
+    return m == EMPTY || m == SAND || m == OIL || m == GAS || m == WOOD || m == PLANT || m == SMOKE || m == TNT;
+}
+
+// TNT: an explosive that detonates when FIRE/LAVA touches it, bursting into FIRE
+// across its 8-neighbourhood and chain-detonating adjacent TNT. Two-pass snapshot
+// through the scratch buffer: pass 1 marks every TNT cell touching something hot
+// (the detonators); pass 2 turns each detonator -- and every blastable cell next to
+// one -- into FIRE. Pass 2 reads the pass-1 marks (in scratch) plus its own grid
+// cell, writing only itself, so it stays order-independent and GPU-identical. The
+// blast wave then expands one ring per frame as the new fire detonates the next TNT.
+inline void detonateTnt(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+            scratch[i] = (grid[i] == TNT && hot) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool nearBlast = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW] ||
+                             scratch[i-SW-1] || scratch[i-SW+1] || scratch[i+SW-1] || scratch[i+SW+1];
+            if (scratch[i] || (nearBlast && blastable(grid[i]))) grid[i] = FIRE;
         }
 }
