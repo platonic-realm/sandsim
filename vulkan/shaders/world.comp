@@ -715,6 +715,28 @@ void main() {
         }
         return;
     }
+    if (pc.type == 84) {                                  // sprout: tag tip climbing(1)/waiting(0)/crowning(2)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 60u) {
+            uint h = (uint(x)*167u + uint(y)*59u + uint(pc.frame)*233u) & 0xFFu;
+            if (h < 14u) r = 2u;
+            else if (cells[i-pc.SW] == 0u) r = 1u;
+            else if (cells[i-pc.SW] == 60u) r = 0u;
+            else r = 2u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 85) {                                  // sprout: trunk(9)/crown(10); the tip climbs / canopy unfurls
+        int i = y * pc.SW + x;
+        if (moved[i] == 2u) { cells[i] = 10u; return; }
+        if (moved[i] == 1u) { cells[i] = 9u; return; }
+        if (cells[i] == 0u) {
+            if (moved[i+pc.SW] == 1u) cells[i] = 60u;
+            else if (moved[i-1]==2u||moved[i+1]==2u||moved[i-pc.SW]==2u||moved[i+pc.SW]==2u) cells[i] = 10u;
+        }
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

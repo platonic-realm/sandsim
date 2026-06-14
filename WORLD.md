@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -407,6 +407,21 @@ GPU and produce a **bit-identical** world.
     while exercising the climb, the timed bursts and the spray — bit-identical across all three
     backends. The reaction-driven straight-up move is a clean way to add directed motion without
     touching the movement masks.
+  - **sprout** — `SPROUT` is a growing tree, and reuses `FIREWORK`'s reaction-driven climb almost
+    verbatim, but it *builds* instead of bursting. A 2-pass snapshot (passes 84/85) tags each tip
+    climbing (empty above → 1), waiting (a tip above still climbing → 0) or crowning (a frame-hash
+    fired, or it hit a ceiling → 2); pass 2 lays the trunk and raises the tip — the cell the tip
+    leaves becomes `WOOD` (rather than `EMPTY` as a rocket leaves) and the empty cell above takes
+    the tip — and on a crown turns the tip and its empty neighbours into `PLANT` leaves. So a tip
+    planted in open air rises one cell per frame, leaving a `WOOD` trunk, until it tops out into a
+    leafy crown; the result is ordinary wood and plant, so the tree then burns, petrifies and
+    spreads its leaves near water like any other greenery. It self-grows, so `SPROUT` is in the
+    `hasReactive` set, and the climb is race-free for the same reason `FIREWORK`'s is (an empty
+    cell is claimed only by the single tip below it). Verified: a unit test (a tip climbs one cell
+    per frame laying wood, a tree grows a wood trunk topped with a plant crown and the tip is
+    consumed, a tip under a ceiling crowns at once, a stacked pair climbs without the lower one
+    crowning early, deterministic) plus a `worldgen.h` chamber — a row of sprouts growing into a
+    forest, isolating the `hasReactive` edit — bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

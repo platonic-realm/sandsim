@@ -110,8 +110,8 @@ enum Material : uint8_t {
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
-    LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59,
-    MATERIAL_COUNT = 60
+    LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
+    MATERIAL_COUNT = 61
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1254,6 +1254,47 @@ inline void launchFirework(uint8_t* grid, uint8_t* scratch, int SW, int X0, int 
                 if (scratch[i+SW] == 1) grid[i] = FIREWORK;  // a rocket climbed up into here
                 else if (scratch[i-1]==2 || scratch[i+1]==2 || scratch[i-SW]==2 || scratch[i+SW]==2)
                     grid[i] = FIRE;                          // caught in a burst
+            }
+        }
+}
+
+// Sprout: a growing tree. It uses the same reaction-driven climb as FIREWORK, but builds
+// instead of bursting: a SPROUT tip rises one cell per frame, laying down a WOOD trunk in
+// the cell it leaves, until a frame-hash (or a ceiling) tells it to crown -- when it turns
+// to a PLANT leaf and sprouts a small leafy canopy into its empty neighbours. Paint a tip
+// at ground level and a tree shoots up; paint a row and a forest grows, each trunk a little
+// different height. The grown tree is ordinary WOOD and PLANT, so it burns, petrifies to
+// stone, and its leaves creep further near water like any other greenery. Two-pass snapshot:
+// pass 1 tags the tip climbing (1), waiting (0, blocked by the tip above) or crowning (2);
+// pass 2 lays the trunk, raises the tip and unfurls the crown. Race-free like FIREWORK: an
+// empty cell is claimed only by the single tip directly below it.
+static constexpr uint32_t TREE_LEAF = 14;      // of 256/frame -> trunks reach ~16-20 cells before crowning
+inline bool treeCrowns(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 167u + (uint32_t)y * 59u + frame * 233u) & 0xFFu;
+    return h < TREE_LEAF;
+}
+inline void growTree(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == SPROUT) {
+                if (treeCrowns(x, y, frame))     r = 2;   // crowns into leaves
+                else if (grid[i-SW] == EMPTY)    r = 1;   // climbs, laying down trunk
+                else if (grid[i-SW] == SPROUT)   r = 0;   // waits for the tip above
+                else                             r = 2;   // hit a ceiling -> crown here
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 2)      grid[i] = PLANT;     // crown leaf
+            else if (scratch[i] == 1) grid[i] = WOOD;      // trunk laid down as the tip climbs
+            else if (grid[i] == EMPTY) {
+                if (scratch[i+SW] == 1) grid[i] = SPROUT;  // the tip climbed up into here
+                else if (scratch[i-1]==2 || scratch[i+1]==2 || scratch[i-SW]==2 || scratch[i+SW]==2)
+                    grid[i] = PLANT;                       // leafy canopy
             }
         }
 }
