@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -191,6 +191,16 @@ GPU and produce a **bit-identical** world.
     stays quiet (a gate), and a loop of wire clocks forever. Paint-only, verified by a unit test
     (a pulse travels one cell per frame the correct way; a wire loop circulates an electron for
     60 frames) plus a `worldgen.h` clock-loop chamber that agrees bit-for-bit across all three.
+  - **ignition output** — `IGNITER` bridges the Wireworld circuits back to the physical sim: it
+    runs right after the wireworld pass and, by the same two-pass snapshot, marks every
+    `IGNITER` next to an electron head and then turns the `EMPTY` cells next to a marked one
+    into `FIRE`. The timing is the subtle part -- it detects the `EHEAD` *after* the CA pass,
+    which is exactly when the head has propagated into the wire cell touching the igniter, so a
+    pulse arriving fires a one-shot flame burst (verified by a unit test: an electron crossing
+    the igniter produces a fire burst, and the igniter is inert with no pulse). That makes a
+    clock a timed detonator and a gate a triggered one -- a circuit can light `FUMES`, set off
+    `GUNPOWDER`/`TNT` or burn a structure on cue. Verified bit-identical via a `worldgen.h`
+    clock-driven-igniter-over-gunpowder chamber.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

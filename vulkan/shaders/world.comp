@@ -460,6 +460,18 @@ void main() {
         if (moved[i] != 0u) cells[i] = moved[i];
         return;
     }
+    if (pc.type == 52) {                                  // igniter: mark each igniter(41) next to an electron head(39)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 41u)
+            r = (cells[i-1]==39u||cells[i+1]==39u||cells[i-pc.SW]==39u||cells[i+pc.SW]==39u) ? 1u : 0u;
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 53) {                                  // igniter: empty next to a triggered igniter -> fire
+        int i = y * pc.SW + x;
+        if (cells[i] == 0u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u)) cells[i] = 6u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

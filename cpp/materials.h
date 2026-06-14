@@ -82,14 +82,17 @@
 // carries electrons (an EHEAD "head" chased by an ETAIL "tail") by the classic rules, so you
 // can build working logic -- diodes, AND/OR/XOR gates, clocks -- the digital counterpart to
 // the analog SPARK. They are inert solids; only the CA rule moves the electrons along.
+// IGNITER is the bridge from those circuits to the physical world: an inert solid that does
+// nothing until a Wireworld electron (EHEAD) reaches it, then spits FIRE into the empty cells
+// around it. Wire a clock or a gate to one and you have a logic-controlled detonator.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
-    ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40,
-    MATERIAL_COUNT = 41
+    ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
+    MATERIAL_COUNT = 42
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -740,6 +743,30 @@ inline void wireWorld(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = scratch[i];
+        }
+}
+
+// Igniter: the bridge from Wireworld to the physical world. An inert solid that does nothing
+// until an electron head (EHEAD) reaches a cell next to it, at which point it spits FIRE into
+// the empty cells around it -- a logic-controlled spark plug, so a clock or a gate can fire a
+// timed/triggered detonator into gunpowder, fumes, oil or TNT. It runs right after the
+// Wireworld pass, so it sees the head exactly as the CA advances it into the adjacent wire.
+// Two-pass snapshot (mark each IGNITER next to a head, then turn the EMPTY cells next to a
+// marked igniter into FIRE), order-independent and GPU-identical -- a one-shot volcano of fire.
+inline void fireIgniter(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool e = grid[i-1]==EHEAD || grid[i+1]==EHEAD || grid[i-SW]==EHEAD || grid[i+SW]==EHEAD;
+            scratch[i] = (grid[i] == IGNITER && e) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (grid[i] == EMPTY) {
+                bool nIgn = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
+                if (nIgn) grid[i] = FIRE;
+            }
         }
 }
 

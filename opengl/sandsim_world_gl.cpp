@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, MATERIAL_COUNT = 41 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, MATERIAL_COUNT = 42 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -530,6 +530,18 @@ void main() {
         if (moved[i] != 0u) cells[i] = moved[i];
         return;
     }
+    if (uType == 52) {                                    // igniter: mark each igniter(41) next to an electron head(39)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 41u)
+            r = (cells[i-1]==39u||cells[i+1]==39u||cells[i-uSW]==39u||cells[i+uSW]==39u) ? 1u : 0u;
+        moved[i] = r;
+        return;
+    }
+    if (uType == 53) {                                    // igniter: empty next to a triggered igniter -> fire
+        int i = y * uSW + x;
+        if (cells[i] == 0u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-uSW]==1u||moved[i+uSW]==1u)) cells[i] = 6u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -605,6 +617,7 @@ vec3 matColor(uint m) {
     if (m == 38u) return vec3(0.784, 0.525, 0.180);
     if (m == 39u) return vec3(0.502, 0.878, 1.000);
     if (m == 40u) return vec3(0.227, 0.416, 0.690);
+    if (m == 41u) return vec3(0.847, 0.565, 0.125);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -763,7 +776,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 51; ++t) {         // + ... thermite, frost, coal, cloner, crystal, antimatter, moss, wireworld
+            for (int t = 3; t <= 53; ++t) {         // + ... cloner, crystal, antimatter, moss, wireworld, igniter
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -1033,6 +1046,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_PERIOD) == GLFW_PRESS) current = WIRE;
         if (glfwGetKey(win, GLFW_KEY_SLASH) == GLFW_PRESS) current = EHEAD;
         if (glfwGetKey(win, GLFW_KEY_APOSTROPHE) == GLFW_PRESS) current = ETAIL;
+        if (glfwGetKey(win, GLFW_KEY_MINUS) == GLFW_PRESS) current = IGNITER;
         // Hold an arrow to scroll the viewport over the living world (smoother than
         // the old edge-triggered chunk step; the whole world is resident so it's free).
         if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;

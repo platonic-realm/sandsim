@@ -25,7 +25,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`. Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` are the odd gas that **sinks** -- a heavy vapour that pools in the low ground).
@@ -33,7 +33,7 @@ lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
-`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, and the `WIRE`/`EHEAD`/`ETAIL` circuitry are solids that don't move.
+`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER` circuitry are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -189,6 +189,11 @@ CPU and GPU:
   clocks, memory** — so you can build working logic, even a clock that ticks forever round a
   loop, right in the middle of the falling sand. (It's a synchronous cellular automaton, which
   is exactly what the engine's two-pass snapshot computes.)
+- `IGNITER` is the **bridge from those circuits to the physical world** — a spark plug for
+  your logic. It sits inert until a Wireworld electron reaches it, then **spits `FIRE` into
+  the cells around it**. So wire a clock to one for a timed detonator, or a gate for a
+  triggered trap: a circuit can now light `FUMES`, set off `GUNPOWDER`/`TNT`, fire a cannon
+  or burn down a structure on a pulse. The output side of everything `WIRE` can compute.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid
@@ -197,7 +202,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter, `;` moss, `,` fumes, `.` wire, `/` electron-head, `'` electron-tail); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter, `;` moss, `,` fumes, `.` wire, `/` electron-head, `'` electron-tail, `-` igniter); `[` / `]` size the brush. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
