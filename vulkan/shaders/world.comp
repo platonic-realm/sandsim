@@ -16,11 +16,12 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH -> +Sm
-    if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;         // LAVA -> +Sm
-    if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                // ACID -> +Sm
-    if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                        // WATER -> +Sm
-    if (s == 5u) return t==4u||t==6u||t==8u||t==12u||t==0u;                               // OIL  -> +Sm
+    if (s == 2u || s == 17u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH -> +SNOW
+    if (s == 7u) return t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> +SNOW
+    if (s == 11u) return t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> +SNOW
+    if (s == 3u) return t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> +SNOW
+    if (s == 5u) return t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> +SNOW
+    if (s == 25u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -28,7 +29,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==17u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,lava,acid,water,oil
+    if (pc.grp == 0) return s==2u||s==17u||s==25u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,snow,lava,acid,water,oil
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u;             // GAS/FIRE/STEAM/SMOKE rise
     return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
 }
@@ -128,9 +129,9 @@ void main() {
         if (moved[i] == 1u) cells[i] = 13u;
         return;
     }
-    if (pc.type == 14) {                                  // ice: mark ice (14) touching fire(6)/lava(7)
+    if (pc.type == 14) {                                  // ice/snow: mark ice(14)/snow(25) touching fire(6)/lava(7)
         int i = y * pc.SW + x; uint r = 0u;
-        if (cells[i] == 14u) {
+        if (cells[i] == 14u || cells[i] == 25u) {
             bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
                      ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
             uint h = (uint(x)*127u + uint(y)*163u + uint(pc.frame)*41u) & 0xFFu;

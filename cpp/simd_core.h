@@ -80,7 +80,8 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
     const int W = Ops::W;
     const V vE = Ops::zero(), vS = Ops::set1(SAND), vW = Ops::set1(WATER),
             vG = Ops::set1(GAS), vO = Ops::set1(OIL), vF = Ops::set1(FIRE), vL = Ops::set1(LAVA),
-            vSt = Ops::set1(STEAM), vA = Ops::set1(ACID), vSm = Ops::set1(SMOKE), vAsh = Ops::set1(ASH);
+            vSt = Ops::set1(STEAM), vA = Ops::set1(ACID), vSm = Ops::set1(SMOKE), vAsh = Ops::set1(ASH),
+            vSnow = Ops::set1(SNOW);
 
     // move mask: which lanes hold an eligible mover whose target is enterable and
     // where neither cell has already moved this frame. Density SAND>LAVA>ACID>
@@ -89,22 +90,26 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
         V isS = Ops::eq(cur, vS), isW = Ops::eq(cur, vW), isG = Ops::eq(cur, vG),
           isO = Ops::eq(cur, vO), isF = Ops::eq(cur, vF), isL = Ops::eq(cur, vL),
           isSt = Ops::eq(cur, vSt), isA = Ops::eq(cur, vA), isSm = Ops::eq(cur, vSm),
-          isAsh = Ops::eq(cur, vAsh);
+          isAsh = Ops::eq(cur, vAsh), isSnow = Ops::eq(cur, vSnow);
         V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG),
           tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF), tL = Ops::eq(tgt, vL),
-          tSt = Ops::eq(tgt, vSt), tA = Ops::eq(tgt, vA), tSm = Ops::eq(tgt, vSm);
+          tSt = Ops::eq(tgt, vSt), tA = Ops::eq(tgt, vA), tSm = Ops::eq(tgt, vSm),
+          tSnow = Ops::eq(tgt, vSnow);
         V lightGas   = Ops::Or(Ops::Or(tG, tF), Ops::Or(tSt, Ops::Or(tSm, tE)));            // G,F,STEAM,SMOKE,E
-        V belowAcid  = Ops::Or(Ops::Or(tW, tO), lightGas);                                  // W,O,+light
-        V belowSand  = Ops::Or(Ops::Or(tL, tA), belowAcid);                                 // L,A,W,O,+light
-        V belowLava  = Ops::Or(tA, belowAcid);                                              // A,W,O,+light
-        V belowWater = Ops::Or(tO, lightGas);                                               // O,+light
-        V belowOil   = lightGas;                                                            // G,F,STEAM,SMOKE,E
+        V lightSnow  = Ops::Or(lightGas, tSnow);                                            // SNOW + light (SNOW is lightest liquid-tier)
+        V belowAcid  = Ops::Or(Ops::Or(tW, tO), lightSnow);                                 // W,O,SNOW,+light
+        V belowSand  = Ops::Or(Ops::Or(tL, tA), belowAcid);                                 // L,A,W,O,SNOW,+light
+        V belowLava  = Ops::Or(tA, belowAcid);                                              // A,W,O,SNOW,+light
+        V belowWater = Ops::Or(tO, lightSnow);                                              // O,SNOW,+light
+        V belowOil   = lightSnow;                                                           // SNOW,G,F,STEAM,SMOKE,E
+        V belowSnow  = lightGas;                                                            // SNOW floats on liquids: enters only G,F,St,Sm,E
         V rise = Ops::Or(isG, Ops::Or(isF, Ops::Or(isSt, isSm)));                           // gas/fire/steam/smoke
-        V can = Ops::Or(Ops::Or(
+        V can = Ops::Or(Ops::Or(Ops::Or(
             Ops::Or(Ops::And(Ops::Or(isS, isAsh), belowSand), Ops::And(isL, belowLava)),  // SAND & ASH: heavy
             Ops::Or(Ops::And(isA, belowAcid), Ops::And(isW, belowWater))),
-            Ops::Or(Ops::And(isO, belowOil), Ops::And(rise, tE)));
-        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isL), Ops::Or(isA, Ops::Or(isW, isO)))
+            Ops::Or(Ops::And(isO, belowOil), Ops::And(rise, tE))),
+            Ops::And(isSnow, belowSnow));                                                  // SNOW: light powder
+        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isSnow), isL), Ops::Or(isA, Ops::Or(isW, isO)))
                : (grp == SG_GAS)  ? rise
                                   : Ops::Or(Ops::Or(isL, isA), Ops::Or(Ops::Or(isW, isO), rise));
         return Ops::And(Ops::And(elig, can),

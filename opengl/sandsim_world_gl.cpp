@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, MATERIAL_COUNT = 25 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MATERIAL_COUNT = 26 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -86,11 +86,12 @@ uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u) return t==7u||t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH -> L,A,W,O,G,F,St,Sm,E
-    if (s == 7u) return t==11u||t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;         // LAVA -> A,W,O,G,F,St,Sm,E
-    if (s == 11u) return t==3u||t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                // ACID -> W,O,G,F,St,Sm,E
-    if (s == 3u) return t==5u||t==4u||t==6u||t==8u||t==12u||t==0u;                        // WATER -> O,G,F,St,Sm,E
-    if (s == 5u) return t==4u||t==6u||t==8u||t==12u||t==0u;                               // OIL  -> G,F,St,Sm,E
+    if (s == 2u || s == 17u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH -> L,A,W,O,SNOW,G,F,St,Sm,E
+    if (s == 7u) return t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> A,W,O,SNOW,G,F,St,Sm,E
+    if (s == 11u) return t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> W,O,SNOW,G,F,St,Sm,E
+    if (s == 3u) return t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,G,F,St,Sm,E
+    if (s == 5u) return t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> SNOW,G,F,St,Sm,E
+    if (s == 25u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -98,7 +99,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==17u||s==7u||s==11u||s==3u||s==5u; // DOWN: sand,ash,lava,acid,water,oil
+    if (uGrp == 0) return s==2u||s==17u||s==25u||s==7u||s==11u||s==3u||s==5u; // DOWN: sand,ash,snow,lava,acid,water,oil
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u;               // GAS/FIRE/STEAM/SMOKE rise
     return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
 }
@@ -198,9 +199,9 @@ void main() {
         if (moved[i] == 1u) cells[i] = 13u;
         return;
     }
-    if (uType == 14) {                                    // ice: mark ice (14) touching fire(6)/lava(7)
+    if (uType == 14) {                                    // ice/snow: mark ice(14)/snow(25) touching fire(6)/lava(7)
         int i = y * uSW + x; uint r = 0u;
-        if (cells[i] == 14u) {
+        if (cells[i] == 14u || cells[i] == 25u) {
             bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
                      ||cells[i-uSW]==6u||cells[i-uSW]==7u||cells[i+uSW]==6u||cells[i+uSW]==7u;
             uint h = (uint(x)*127u + uint(y)*163u + uint(uFrame)*41u) & 0xFFu;
@@ -426,6 +427,7 @@ vec3 matColor(uint m) {
     if (m == 22u) return vec3(0.980, 0.941, 0.502);
     if (m == 23u) return vec3(0.165, 0.141, 0.220);
     if (m == 24u) return vec3(0.929, 0.929, 0.878);
+    if (m == 25u) return vec3(0.918, 0.957, 1.0);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -789,8 +791,8 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[25] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK, OBSIDIAN, SALT};
-    ui::Palette pal = ui::palette(renderW, 25);
+    static const uint8_t kSwatch[26] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK, OBSIDIAN, SALT, SNOW};
+    ui::Palette pal = ui::palette(renderW, 26);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -804,7 +806,7 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 25; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 26; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -838,6 +840,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) current = SPARK;
         if (glfwGetKey(win, GLFW_KEY_O) == GLFW_PRESS) current = OBSIDIAN;
         if (glfwGetKey(win, GLFW_KEY_L) == GLFW_PRESS) current = SALT;
+        if (glfwGetKey(win, GLFW_KEY_N) == GLFW_PRESS) current = SNOW;
         // Hold an arrow to scroll the viewport over the living world (smoother than
         // the old edge-triggered chunk step; the whole world is resident so it's free).
         if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;

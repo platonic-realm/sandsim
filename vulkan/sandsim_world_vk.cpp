@@ -33,14 +33,14 @@
 #include <unistd.h>
 #include "../ui.h"       // on-screen material palette
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, MATERIAL_COUNT = 25 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MATERIAL_COUNT = 26 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -575,13 +575,13 @@ static int runInteractive(ViewCfg cfg) {
             "world %dx%d chunks = %dx%d cells (all simulated), %d steps/s\n",
             renderW, renderH, outW, outH, ri.name, PIXEL, WBOX, HBOX, worldW, worldH, cfg.simHz);
 
-    static const uint8_t kSwatch[25] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK, OBSIDIAN, SALT};
-    uint32_t swatchCol[25];
-    for (int i = 0; i < 25; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 25);
+    static const uint8_t kSwatch[26] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK, OBSIDIAN, SALT, SNOW};
+    uint32_t swatchCol[26];
+    for (int i = 0; i < 26; ++i) swatchCol[i] = kColors[kSwatch[i]];
+    ui::Palette pal = ui::palette(renderW, 26);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 25; ++i) if (kSwatch[i] == current) return i; return -1; };
+    auto selectedIdx = [&]() { for (int i = 0; i < 26; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false; int mouseX = 0, mouseY = 0; SDL_Event e;
@@ -623,6 +623,7 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_e: current = SPARK; break;
                 case SDLK_o: current = OBSIDIAN; break;
                 case SDLK_l: current = SALT; break;
+                case SDLK_n: current = SNOW; break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                 case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;

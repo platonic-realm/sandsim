@@ -32,12 +32,14 @@
 // GAS/OIL it passes. OBSIDIAN is the glassy black rock LAVA forges into when WATER
 // quenches it (instead of plain stone) -- an inert, fire/acid/blast-proof solid.
 // SALT is a de-icer: it MELTS the ICE it touches to WATER (no heat needed) and then
-// DISSOLVES away in that water.
+// DISSOLVES away in that water. SNOW is a light powder -- lighter than every liquid,
+// so it falls through air but floats on water and oil -- that melts to WATER near
+// FIRE/LAVA.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
-    SPARK = 22, OBSIDIAN = 23, SALT = 24, MATERIAL_COUNT = 25
+    SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MATERIAL_COUNT = 26
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -266,17 +268,17 @@ inline void makeGlass(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
         }
 }
 
-// Melting: ICE touching FIRE or LAVA thaws back to WATER (frame-hashed, so it
-// melts over several frames). Two-pass snapshot through the scratch buffer ->
-// order-independent, GPU-identical. The inverse of glassmaking, and it feeds the
-// existing water rules: ice dropped on lava melts, and that water then quenches
-// the lava to stone.
+// Melting: ICE (and SNOW, the light powder) touching FIRE or LAVA thaws back to
+// WATER (frame-hashed, so it melts over several frames). Two-pass snapshot through
+// the scratch buffer -> order-independent, GPU-identical. The inverse of glassmaking,
+// and it feeds the existing water rules: ice dropped on lava melts, and that water
+// then quenches the lava to obsidian.
 inline void meltIce(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            scratch[i] = (grid[i] == ICE && hot && iceMelts(x, y, frame)) ? 1 : 0;
+            scratch[i] = ((grid[i] == ICE || grid[i] == SNOW) && hot && iceMelts(x, y, frame)) ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
