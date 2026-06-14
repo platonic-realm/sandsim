@@ -1507,6 +1507,7 @@ static int runInteractive(ViewCfg cfg) {
     double acc = 0.0;
     auto last = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(win)) {
+        auto frameStart = std::chrono::steady_clock::now();
         glfwPollEvents();
         if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) break;
         if (glfwGetKey(win, GLFW_KEY_0) == GLFW_PRESS) current = EMPTY;
@@ -1674,6 +1675,7 @@ static int runInteractive(ViewCfg cfg) {
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glfwSwapBuffers(win);
+        hud::frameCap(frameStart, 60.0);            // backstop 60 fps cap (in addition to vsync)
     }
     std::filesystem::remove_all(dir);
     glfwDestroyWindow(win); glfwTerminate();

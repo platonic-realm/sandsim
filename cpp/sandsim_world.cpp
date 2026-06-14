@@ -421,6 +421,7 @@ static int runInteractive(ViewCfg cfg) {
     double fpsEMA = 0.0;                             // smoothed render frame rate for the HUD
     auto last = std::chrono::steady_clock::now();
     while (!quit) {
+        auto frameStart = std::chrono::steady_clock::now();
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) quit = true;
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
@@ -589,7 +590,7 @@ static int runInteractive(ViewCfg cfg) {
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
-        SDL_Delay(16);
+        hud::frameCap(frameStart, 60.0);            // pace to 60 fps (sleep only the time left)
     }
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);

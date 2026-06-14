@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <chrono>
+#include <thread>
 
 namespace hud {
 
@@ -42,6 +44,15 @@ struct State {
     const char* toast = nullptr;      // transient centred message (e.g. "SCENE: VOLCANO")
     bool paletteCollapsed = false;    // hide the palette grid, leaving just its tab
 };
+
+// Frame limiter: sleep only the time left to hit the target frame rate (instead of a fixed
+// delay added on top of the work, which can never reach the target). Pass the time captured
+// at the very start of the frame.
+inline void frameCap(std::chrono::steady_clock::time_point frameStart, double fps) {
+    double target = 1.0 / fps;
+    double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - frameStart).count();
+    if (used < target) std::this_thread::sleep_for(std::chrono::duration<double>(target - used));
+}
 
 // Precompute the radial bloom falloff kernel for a given radius into kern (size (2r+1)^2).
 inline void buildGlowKernel(float* kern, int GR) {

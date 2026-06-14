@@ -683,6 +683,7 @@ static int runInteractive(ViewCfg cfg) {
     double acc = 0.0;
     auto last = std::chrono::steady_clock::now();
     while (!quit) {
+        auto frameStart = std::chrono::steady_clock::now();
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) quit = true;
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
@@ -845,7 +846,7 @@ static int runInteractive(ViewCfg cfg) {
         hud::drawHud(pixels.data(), view, hs, cell);
         SDL_UpdateTexture(tex, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
-        SDL_Delay(16);
+        hud::frameCap(frameStart, 60.0);            // pace to 60 fps (sleep only the time left)
     }
     SDL_DestroyTexture(tex); SDL_DestroyRenderer(ren); SDL_DestroyWindow(win); SDL_Quit();
     std::filesystem::remove_all(dir);
