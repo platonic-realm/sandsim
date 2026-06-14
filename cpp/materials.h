@@ -110,8 +110,8 @@ enum Material : uint8_t {
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
-    LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58,
-    MATERIAL_COUNT = 59
+    LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59,
+    MATERIAL_COUNT = 60
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of

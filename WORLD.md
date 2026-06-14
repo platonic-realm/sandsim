@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -54,8 +54,18 @@ GPU and produce a **bit-identical** world.
   rises through a liquid instead of being trapped beneath it) to gather at the ceiling,
   again touching only its own target set. `FUMES` are the odd gas out: a heavy vapour in
   the `SNOW` density tier (heavier than air, floats on every liquid) that *sinks* and pools
-  in the low ground while spreading flat like a gas — the mirror of `GAS`, which rises. The
-  reactions:
+  in the low ground while spreading flat like a gas — the mirror of `GAS`, which rises. `LEVITON`
+  is the most literal mirror of all: anti-gravity dust that is the exact inverse of `SAND`. It is
+  added to the *up* movement groups (the vertical-up and diagonal-up passes) but deliberately left
+  out of the horizontal pass — precisely how `SAND` is in the down and diagonal-down passes but not
+  the horizontal one — so it rises and slides up the sides of a heap, piling into inverted dunes
+  against the ceiling instead of dispersing flat like a gas. It sits in the lightest (`GAS`) target
+  tier, so everything heavier sinks straight through it, and it costs no reaction at all — purely a
+  movement-mask material. Verified to be the *exact vertical mirror* of a `SAND` pile (a CPU test
+  flips gravity and the dunes match cell-for-cell), with the default world unchanged (the rise-group
+  edits leave `GAS` undisturbed) and a `worldgen.h` chamber — leviton rising past falling sand —
+  bit-identical across all three backends.
+  The reactions:
   - **time-varying transforms** — `FIRE` burning out to `EMPTY` and `STEAM`
     condensing back to `WATER` are per-cell passes that are pure functions of
     `(x, y, frame)` (no neighbour reads), so the GPU computes the identical hash.
