@@ -56,13 +56,18 @@
 // pile, RADIATES FIRE into the empty cells around it (igniting nearby fuel) for a while,
 // and finally burns down to ASH. So a heap of coal lit at one corner becomes a lasting
 // campfire/forge, unlike oil/gas which flash away in a frame. EMBER also falls like sand.
+// CLONER is an inert solid duplicator: it copies whatever material sits directly on top
+// of it into the empty cell directly below, so feeding it one drop of ANY material turns
+// it into an endless faucet of that material (the generic source -- SPRING/VOLCANO well a
+// fixed material; CLONER wells whatever you give it). It is the first rule to carry a
+// material id through the scratch buffer rather than a bare flag.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
-    THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32,
-    MATERIAL_COUNT = 33
+    THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33,
+    MATERIAL_COUNT = 34
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -557,6 +562,33 @@ inline void smoulderCoal(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1
                 bool litN = scratch[i-1]==2 || scratch[i+1]==2 || scratch[i-SW]==2 || scratch[i+SW]==2;
                 if (litN && coalFlames(x, y, frame)) grid[i] = FIRE;
             }
+        }
+}
+
+// Cloner: an inert duplicator. It copies the material directly ABOVE it into the empty
+// cell directly BELOW it, so a single drop of anything on top becomes an endless faucet
+// of that material (the top cell is only read, never consumed). Two-pass snapshot, but
+// the scratch carries a MATERIAL ID rather than a flag: pass 1 stores, for each CLONER,
+// the cloneable material sitting above it (skip EMPTY/WALL/CLONER, so it can't extrude
+// structure or replicate itself into grey goo); pass 2 fills any EMPTY cell whose upper
+// neighbour is such a loaded cloner with that stored material. Pass 2 reads only the
+// pass-1 scratch of its neighbour plus its own grid cell -- never a neighbour's live grid
+// cell -- so it stays order-independent and GPU-identical (no read/write race).
+inline void cloneMaterial(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == CLONER) {
+                uint8_t above = grid[i-SW];
+                if (above != EMPTY && above != WALL && above != CLONER) r = above;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (grid[i] == EMPTY && scratch[i-SW] != 0) grid[i] = scratch[i-SW];
         }
 }
 

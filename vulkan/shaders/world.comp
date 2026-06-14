@@ -378,6 +378,20 @@ void main() {
         }
         return;
     }
+    if (pc.type == 42) {                                  // cloner: store the cloneable material above each cloner (33) in scratch
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 33u) {
+            uint above = cells[i-pc.SW];
+            if (above != 0u && above != 1u && above != 33u) r = above;  // skip EMPTY/WALL/CLONER
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 43) {                                  // cloner: fill EMPTY below a loaded cloner with the stored material
+        int i = y * pc.SW + x;
+        if (cells[i] == 0u && moved[i-pc.SW] != 0u) cells[i] = moved[i-pc.SW];
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
