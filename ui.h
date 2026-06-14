@@ -86,4 +86,90 @@ inline void draw(uint32_t* px, int W, int H, const Palette& p,
     }
 }
 
+// ---- tiny embedded 5x7 bitmap font (no deps) so every viewer can draw labels ----
+// Each glyph is 7 rows; the low 5 bits of each row are the pixels, bit 4 = leftmost.
+inline const uint8_t* glyph5x7(char c) {
+    if (c >= 'a' && c <= 'z') c -= 32;                 // fold to uppercase
+    static const uint8_t SP[7] = {0,0,0,0,0,0,0};
+    switch (c) {
+        case 'A': { static const uint8_t g[7]={0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001}; return g; }
+        case 'B': { static const uint8_t g[7]={0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110}; return g; }
+        case 'C': { static const uint8_t g[7]={0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110}; return g; }
+        case 'D': { static const uint8_t g[7]={0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110}; return g; }
+        case 'E': { static const uint8_t g[7]={0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111}; return g; }
+        case 'F': { static const uint8_t g[7]={0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000}; return g; }
+        case 'G': { static const uint8_t g[7]={0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01111}; return g; }
+        case 'H': { static const uint8_t g[7]={0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001}; return g; }
+        case 'I': { static const uint8_t g[7]={0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110}; return g; }
+        case 'J': { static const uint8_t g[7]={0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100}; return g; }
+        case 'K': { static const uint8_t g[7]={0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001}; return g; }
+        case 'L': { static const uint8_t g[7]={0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111}; return g; }
+        case 'M': { static const uint8_t g[7]={0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001}; return g; }
+        case 'N': { static const uint8_t g[7]={0b10001,0b10001,0b11001,0b10101,0b10011,0b10001,0b10001}; return g; }
+        case 'O': { static const uint8_t g[7]={0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110}; return g; }
+        case 'P': { static const uint8_t g[7]={0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000}; return g; }
+        case 'Q': { static const uint8_t g[7]={0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101}; return g; }
+        case 'R': { static const uint8_t g[7]={0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001}; return g; }
+        case 'S': { static const uint8_t g[7]={0b01111,0b10000,0b10000,0b01110,0b00001,0b00001,0b11110}; return g; }
+        case 'T': { static const uint8_t g[7]={0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100}; return g; }
+        case 'U': { static const uint8_t g[7]={0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110}; return g; }
+        case 'V': { static const uint8_t g[7]={0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100}; return g; }
+        case 'W': { static const uint8_t g[7]={0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001}; return g; }
+        case 'X': { static const uint8_t g[7]={0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001}; return g; }
+        case 'Y': { static const uint8_t g[7]={0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100}; return g; }
+        case 'Z': { static const uint8_t g[7]={0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111}; return g; }
+        case '0': { static const uint8_t g[7]={0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110}; return g; }
+        case '1': { static const uint8_t g[7]={0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110}; return g; }
+        case '2': { static const uint8_t g[7]={0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111}; return g; }
+        case '3': { static const uint8_t g[7]={0b11111,0b00010,0b00100,0b00010,0b00001,0b10001,0b01110}; return g; }
+        case '4': { static const uint8_t g[7]={0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010}; return g; }
+        case '5': { static const uint8_t g[7]={0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110}; return g; }
+        case '6': { static const uint8_t g[7]={0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110}; return g; }
+        case '7': { static const uint8_t g[7]={0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000}; return g; }
+        case '8': { static const uint8_t g[7]={0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110}; return g; }
+        case '9': { static const uint8_t g[7]={0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100}; return g; }
+        case ':': { static const uint8_t g[7]={0b00000,0b01100,0b01100,0b00000,0b01100,0b01100,0b00000}; return g; }
+        case '.': { static const uint8_t g[7]={0b00000,0b00000,0b00000,0b00000,0b00000,0b01100,0b01100}; return g; }
+        case ',': { static const uint8_t g[7]={0b00000,0b00000,0b00000,0b00000,0b01100,0b00100,0b01000}; return g; }
+        case '-': { static const uint8_t g[7]={0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000}; return g; }
+        case '+': { static const uint8_t g[7]={0b00000,0b00100,0b00100,0b11111,0b00100,0b00100,0b00000}; return g; }
+        case '/': { static const uint8_t g[7]={0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000}; return g; }
+        case '[': { static const uint8_t g[7]={0b01110,0b01000,0b01000,0b01000,0b01000,0b01000,0b01110}; return g; }
+        case ']': { static const uint8_t g[7]={0b01110,0b00010,0b00010,0b00010,0b00010,0b00010,0b01110}; return g; }
+        case '(': { static const uint8_t g[7]={0b00010,0b00100,0b01000,0b01000,0b01000,0b00100,0b00010}; return g; }
+        case ')': { static const uint8_t g[7]={0b01000,0b00100,0b00010,0b00010,0b00010,0b00100,0b01000}; return g; }
+        case '!': { static const uint8_t g[7]={0b00100,0b00100,0b00100,0b00100,0b00100,0b00000,0b00100}; return g; }
+        case '%': { static const uint8_t g[7]={0b11001,0b11010,0b00100,0b01011,0b10011,0b00000,0b00000}; return g; }
+        case '*': { static const uint8_t g[7]={0b00000,0b01010,0b00100,0b11111,0b00100,0b01010,0b00000}; return g; }
+        default: return SP;
+    }
+}
+
+// Width in render pixels of a string drawn with text() at the given scale.
+inline int textWidth(const char* s, int scale) {
+    int n = 0; for (const char* p = s; *p; ++p) ++n;
+    return n > 0 ? (n * 6 - 1) * scale : 0;          // 5px glyph + 1px gap, minus trailing gap
+}
+
+// Draw a string of the 5x7 font at (x,y) in render pixels, `scale`x magnified.
+inline void text(uint32_t* px, int W, int H, int x, int y, const char* s, int scale, uint32_t color) {
+    int cx = x;
+    for (; *s; ++s) {
+        const uint8_t* g = glyph5x7(*s);
+        for (int row = 0; row < 7; ++row)
+            for (int col = 0; col < 5; ++col)
+                if (g[row] & (1u << (4 - col)))
+                    fillRect(px, W, H, cx + col * scale, y + row * scale, scale, scale, color);
+        cx += 6 * scale;                              // advance one glyph + gap
+    }
+}
+
+// Draw text with a soft dark backing box for legibility over any background.
+inline void label(uint32_t* px, int W, int H, int x, int y, const char* s, int scale, uint32_t color) {
+    int w = textWidth(s, scale), h = 7 * scale, pad = 2 * scale;
+    fillRect(px, W, H, x - pad, y - pad, w + 2 * pad, h + 2 * pad, 0xE0101014u);
+    outline(px, W, H, x - pad, y - pad, w + 2 * pad, h + 2 * pad, 1, 0xFF3A3A44u);
+    text(px, W, H, x, y, s, scale, color);
+}
+
 }  // namespace ui

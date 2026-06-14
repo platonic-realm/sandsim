@@ -41,6 +41,17 @@ static const uint32_t kColors[MATERIAL_COUNT] = {
     0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u, 0xFFCDA0FFu, 0xFF6E8B3Du, 0xFFCBC75Au, 0xFFC8862Eu, 0xFF80E0FFu, 0xFF3A6AB0u, 0xFFD89020u, 0xFFB0E040u, 0xFF50FF90u, 0xFF5090A0u, 0xFFC8E8D0u, 0xFFD7D0B0u, 0xFFFF8C69u, 0xFFEFE8A0u, 0xFF7E8C99u, 0xFFB6E03Au, 0xFFFFCC22u, 0xFF9A8050u, 0xFFFFD030u, 0xFF88D0F8u, 0xFF4A4030u, 0xFFFFF0A0u, 0xFFB098A8u, 0xFFFF50C0u, 0xFFB060FFu, 0xFF70D838u, 0xFF454C50u, 0xFF5878B8u, 0xFF788088u, 0xFFC8E070u, 0xFFA85020u, 0xFFB5832Eu, 0xFF901818u, 0xFFFF3030u, 0xFFE8F8FFu,
 };
 
+// Display names for the HUD/tooltips -- one per material id, in enum order.
+static const char* kNames[MATERIAL_COUNT] = {
+    "ERASER", "WALL", "SAND", "WATER", "GAS", "OIL", "FIRE", "LAVA", "STEAM", "WOOD",
+    "PLANT", "ACID", "SMOKE", "GLASS", "ICE", "SPRING", "TNT", "ASH", "VOLCANO", "VOID",
+    "MUD", "VIRUS", "SPARK", "OBSIDIAN", "SALT", "SNOW", "MERCURY", "GUNPOWDER", "THERMITE", "FROST",
+    "WISP", "COAL", "EMBER", "CLONER", "CRYSTAL", "ANTIMATTER", "MOSS", "FUMES", "WIRE", "E-HEAD",
+    "E-TAIL", "IGNITER", "SENSOR", "LIFE", "GEYSER", "LYE", "SODIUM", "CORAL", "PHOSPHORUS", "CEMENT",
+    "CHLORINE", "BATTERY", "FUSE", "BURN-FUSE", "CRYO", "LAMP", "LAMP-LIT", "PETRIFY", "FIREWORK", "LEVITON",
+    "SPROUT", "BELT", "MAGNET", "IRON", "NITRO", "RUST", "SEED", "LASER", "BEAM", "ICICLE",
+};
+
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
 static constexpr int PAD = 16;     // WALL border / SIMD halo
 
@@ -350,11 +361,12 @@ static int runInteractive(ViewCfg cfg) {
     ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
     int brushRadius = 4;
     bool painting = false;
+    bool paused = false;
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
-        "Connected SIMD World - arrows pan  [1]Wall [2]Sand [3]Water [4]Gas [5]Oil [0]Eraser",
+        "sandsim - paint with the mouse, pick from the palette, hover to identify, SPACE to pause",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, renderW, renderH, 0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_RenderSetLogicalSize(renderer, renderW, renderH);    // scales content to the actual output
@@ -430,6 +442,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_BACKQUOTE: current = GEYSER; break;
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
+                    case SDLK_SPACE: paused = !paused; break;        // freeze/resume the simulation
                     case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
                     case SDLK_RIGHT: viewX += PAN; if (viewX > worldW - LWv) viewX = worldW - LWv; break;
                     case SDLK_UP:    viewY -= PAN; if (viewY < 0) viewY = 0; break;
@@ -447,7 +460,7 @@ static int runInteractive(ViewCfg cfg) {
         auto nowT = std::chrono::steady_clock::now();
         acc += std::chrono::duration<double>(nowT - last).count();
         last = nowT;
-        for (int n = 0; acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
+        for (int n = 0; !paused && acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
         for (int y = 0; y < LHv; ++y)
@@ -461,6 +474,60 @@ static int runInteractive(ViewCfg cfg) {
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
             }
         ui::draw(pixels.data(), renderW, renderH, pal, kColors, current);
+
+        // ---- mouse hover: brush cursor ring on the canvas + a material tooltip ----
+        float hlx_f, hly_f;
+        SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &hlx_f, &hly_f);
+        int hlx = (int)hlx_f, hly = (int)hly_f;
+        int hov = ui::hit(pal, hlx, hly);
+        bool onCanvas = (hlx >= 0 && hly >= 0 && hlx < renderW && hly < renderH);
+        if (hov < 0 && onCanvas) {
+            int ccx = hlx / PIXEL, ccy = hly / PIXEL, r = brushRadius;
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx) {
+                    if (dx*dx + dy*dy > r*r) continue;                       // inside the circular brush
+                    bool edge = (dx-1)*(dx-1)+dy*dy > r*r || (dx+1)*(dx+1)+dy*dy > r*r
+                              || dx*dx+(dy-1)*(dy-1) > r*r || dx*dx+(dy+1)*(dy+1) > r*r;
+                    if (!edge) continue;                                    // keep only the ring
+                    int cx = ccx + dx, cy = ccy + dy;
+                    if (cx >= 0 && cy >= 0 && cx < LWv && cy < LHv)
+                        ui::fillRect(pixels.data(), renderW, renderH, cx*PIXEL, cy*PIXEL, PIXEL, PIXEL, 0xFFFFFFFFu);
+                }
+        }
+        { // tooltip naming whatever is under the cursor (a palette swatch, or a cell)
+            const char* tip = nullptr;
+            if (hov >= 0) tip = kNames[hov];
+            else if (onCanvas) tip = kNames[world.viewCell(viewX + hlx / PIXEL, viewY + hly / PIXEL)];
+            if (tip && *tip) {
+                int tx = hlx + 16, ty = hly + 16, tw = ui::textWidth(tip, 2);
+                if (tx + tw + 6 > renderW) tx = renderW - tw - 6;
+                if (ty + 22 > renderH - 26) ty = hly - 24;
+                if (tx < 4) tx = 4;
+                if (ty < 4) ty = 4;
+                ui::label(pixels.data(), renderW, renderH, tx, ty, tip, 2, 0xFFFFFFFFu);
+            }
+        }
+
+        // ---- bottom info bar: selected material swatch + name + brush + controls ----
+        {
+            int barH = 24, by = renderH - barH;
+            ui::fillRect(pixels.data(), renderW, renderH, 0, by, renderW, barH, 0xFF121218u);
+            ui::fillRect(pixels.data(), renderW, renderH, 0, by, renderW, 1, 0xFF3A3A44u);
+            ui::fillRect(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, kColors[current] | 0xFF000000u);
+            ui::outline(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, 1, 0xFF000000u);
+            char buf[96];
+            std::snprintf(buf, sizeof buf, "%s   BRUSH %d", kNames[current], brushRadius);
+            ui::text(pixels.data(), renderW, renderH, 26, by + 6, buf, 2, 0xFFFFFFFFu);
+            const char* help = "LMB PAINT  PALETTE PICK  [ ] BRUSH  SPACE PAUSE  ARROWS PAN";
+            int hw = ui::textWidth(help, 1);
+            ui::text(pixels.data(), renderW, renderH, renderW - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
+        }
+        if (paused) {  // centred banner so it's unmistakable
+            const char* pw = "PAUSED  -  SPACE TO RESUME";
+            int s = 3, w = ui::textWidth(pw, s);
+            ui::label(pixels.data(), renderW, renderH, (renderW - w) / 2, renderH / 2 - 10, pw, s, 0xFFFFE060u);
+        }
+
         SDL_UpdateTexture(texture, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);
