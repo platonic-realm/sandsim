@@ -39,6 +39,7 @@ struct State {
     bool chalSolved = false;
     int chalSecs = 0;
     float chalProgress = 0.0f;        // 0..1 toward the goal (drawn as a bar)
+    const char* toast = nullptr;      // transient centred message (e.g. "SCENE: VOLCANO")
 };
 
 // Precompute the radial bloom falloff kernel for a given radius into kern (size (2r+1)^2).
@@ -155,7 +156,7 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
         std::snprintf(buf, sizeof buf, "%s  %s   BRUSH %d   %d FPS",
                       kNames[s.current], kCatNames[kSlotCat[s.slotOf[s.current]]], s.brushRadius, s.fps);
         ui::text(px, W, H, 26, by + 6, buf, 2, 0xFFFFFFFFu);
-        const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  DEL CLEAR  ENTER CHALLENGE";
+        const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  DEL CLEAR  ENTER CHALLENGE  F1 SCENE";
         int hw = ui::textWidth(help, 1);
         ui::text(px, W, H, W - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
     }
@@ -185,6 +186,10 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
             int sc = 3, w = ui::textWidth(sv, sc);
             ui::label(px, W, H, (W - w) / 2, H / 2, sv, sc, 0xFF70FF90u);
         }
+    }
+    if (s.toast && *s.toast) {                     // transient centred toast
+        int sc = 3, w = ui::textWidth(s.toast, sc);
+        ui::label(px, W, H, (W - w) / 2, H / 3, s.toast, sc, 0xFF8FD8FFu);
     }
 }
 

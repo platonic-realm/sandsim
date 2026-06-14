@@ -401,6 +401,13 @@ the Lake* (chill a pool solid with frost or cryo). The challenge definitions liv
 are shared by all three viewers, so any backend can be played, and adding one is a single
 line.
 
+**Freeplay scenes** are ready-made sandboxes to drop in and play with — press `F1` to cycle
+through them. There's no goal; they just stamp a fun, living scene that shows off the
+materials: a **Volcano** (lava wells up a vent and erupts), a **Fireworks** volley, and an
+**Aquarium** (a glass tank of water with coral and plants). They live in `scenes.h` (each
+just fills a flat cell buffer) and are loaded with the same `loadView` the challenges use,
+so all three viewers share them.
+
 In the interactive view the simulated area is a little **larger than what you can
 see** — the viewport plus a one-chunk **live border** all around it, all of it
 stepping every frame. So panning with the arrows reveals an edge that has gone on

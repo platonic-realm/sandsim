@@ -71,6 +71,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
 #include "../hud_meta.h"   // material names, categorised palette layout, glow strengths
 #include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
 #include "../challenges.h" // challenge-mode mini-puzzles
+#include "../scenes.h"     // freeplay ready-made scenes
 
 // The 16 sub-passes, in the exact order of cpp/simd_core.h.
 struct Pass { int type, dx, dy, parity, grp; };   // type: 0 vert, 1 diag, 2 horiz
@@ -1495,6 +1496,7 @@ static int runInteractive(ViewCfg cfg) {
     int chalIdx = -1, chalSecs = 0; bool chalSolved = false, pEnter = false;   // challenge mode
     std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
     auto chalStart = std::chrono::steady_clock::now();
+    int sceneIdx = 0, toastFrames = 0; const char* toastMsg = nullptr; bool pF1 = false;   // freeplay scenes (F1)
     glfwSetScrollCallback(win, scrollCB);
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
@@ -1579,7 +1581,16 @@ static int runInteractive(ViewCfg cfg) {
                 chalSolved = false; chalSecs = 0; chalStart = std::chrono::steady_clock::now();
             } else world.clearView();
         }
-        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter;
+        bool kF1 = glfwGetKey(win, GLFW_KEY_F1) == GLFW_PRESS;
+        if (kF1 && !pF1) {                                          // load a fun freeplay scene
+            chalIdx = -1; chalSolved = false;
+            std::fill(chalBuf.begin(), chalBuf.end(), (uint8_t)EMPTY);
+            scene::kScenes[sceneIdx].build(chalBuf.data(), LWv, LHv);
+            world.loadView(chalBuf.data(), LWv, LHv, viewX, viewY);
+            toastMsg = scene::kScenes[sceneIdx].name; toastFrames = 120;
+            sceneIdx = (sceneIdx + 1) % scene::kNumScenes;
+        }
+        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter; pF1 = kF1;
 
         // Mouse: left paints, right erases, middle eyedrops; clicks on the palette pick.
         double mx, my; glfwGetCursorPos(win, &mx, &my);
@@ -1626,6 +1637,7 @@ static int runInteractive(ViewCfg cfg) {
         hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
         hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
         hs.chalProgress = chalSolved ? 1.0f : chalP;
+        if (toastFrames > 0) { hs.toast = toastMsg; --toastFrames; }
         hud::drawHud(pixels.data(), view, hs, cell);
 
         int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH); fbW = cfbW; fbH = cfbH;

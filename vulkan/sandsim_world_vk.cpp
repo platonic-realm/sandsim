@@ -68,6 +68,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
 #include "../hud_meta.h"   // material names, categorised palette layout, glow strengths
 #include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
 #include "../challenges.h" // challenge-mode mini-puzzles
+#include "../scenes.h"     // freeplay ready-made scenes
 
 struct Pass { int32_t type, dx, dy, parity, grp; };
 static const Pass kPasses[16] = {
@@ -668,6 +669,7 @@ static int runInteractive(ViewCfg cfg) {
     int chalIdx = -1, chalSecs = 0; bool chalSolved = false;   // challenge mode (-1 = free sandbox)
     std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
     auto chalStart = std::chrono::steady_clock::now();
+    int sceneIdx = 0, toastFrames = 0; const char* toastMsg = nullptr;   // freeplay scenes (F1)
     // Emissive-bloom scratch buffers + radial falloff kernel (shared with the CPU viewer).
     const int GR = 3; const float GLOW = 0.85f;
     std::vector<float> glowR((size_t)LWv * LHv), glowG((size_t)LWv * LHv), glowB((size_t)LWv * LHv);
@@ -761,6 +763,15 @@ static int runInteractive(ViewCfg cfg) {
                         chalSolved = false; chalSecs = 0; chalStart = std::chrono::steady_clock::now();
                     } else world.clearView();
                     break;
+                case SDLK_F1: {                                  // load a fun freeplay scene
+                    chalIdx = -1; chalSolved = false;
+                    std::fill(chalBuf.begin(), chalBuf.end(), (uint8_t)EMPTY);
+                    scene::kScenes[sceneIdx].build(chalBuf.data(), LWv, LHv);
+                    world.loadView(chalBuf.data(), LWv, LHv, viewX, viewY);
+                    toastMsg = scene::kScenes[sceneIdx].name; toastFrames = 120;
+                    sceneIdx = (sceneIdx + 1) % scene::kNumScenes;
+                    break;
+                }
                 case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
                 case SDLK_RIGHT: viewX += PAN; if (viewX > worldW - LWv) viewX = worldW - LWv; break;
                 case SDLK_UP:    viewY -= PAN; if (viewY < 0) viewY = 0; break;
@@ -807,6 +818,7 @@ static int runInteractive(ViewCfg cfg) {
         hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
         hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
         hs.chalProgress = chalSolved ? 1.0f : chalP;
+        if (toastFrames > 0) { hs.toast = toastMsg; --toastFrames; }
         hud::drawHud(pixels.data(), view, hs, cell);
         SDL_UpdateTexture(tex, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
