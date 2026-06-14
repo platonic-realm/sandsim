@@ -29,6 +29,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <chrono>
+#include <cmath>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -51,6 +52,25 @@ static const char* kNames[MATERIAL_COUNT] = {
     "CHLORINE", "BATTERY", "FUSE", "BURN-FUSE", "CRYO", "LAMP", "LAMP-LIT", "PETRIFY", "FIREWORK", "LEVITON",
     "SPROUT", "BELT", "MAGNET", "IRON", "NITRO", "RUST", "SEED", "LASER", "BEAM", "ICICLE",
 };
+
+// Render-only: how brightly each material glows. Emissive cells cast a soft additive
+// bloom into their surroundings so fire, lava, lasers and lamps light up the scene.
+static float emissionStrength(uint8_t m) {
+    switch (m) {
+        case FIRE:       return 1.00f;
+        case BEAM:       return 1.00f;
+        case SPARK:      return 0.90f;
+        case LAVA:       return 0.85f;
+        case LAMPLIT:    return 0.80f;
+        case EMBER:      return 0.70f;
+        case FIREWORK:   return 0.70f;
+        case BURNFUSE:   return 0.70f;
+        case LASER:      return 0.60f;
+        case ANTIMATTER: return 0.60f;
+        case EHEAD:      return 0.50f;
+        default:         return 0.00f;
+    }
+}
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
 static constexpr int PAD = 16;     // WALL border / SIMD halo
@@ -372,6 +392,17 @@ static int runInteractive(ViewCfg cfg) {
     uint8_t paintMat = SAND;      // material laid down while dragging (current, or EMPTY when erasing)
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
+
+    // Emissive-bloom buffers (cell resolution) + a precomputed radial falloff kernel.
+    const int GR = 3;                                   // glow radius in cells
+    const float GLOW = 0.85f;                           // how strongly the bloom is added
+    std::vector<float> glowR((size_t)LWv * LHv), glowG((size_t)LWv * LHv), glowB((size_t)LWv * LHv);
+    float kern[(2 * GR + 1) * (2 * GR + 1)];
+    for (int dy = -GR; dy <= GR; ++dy)
+        for (int dx = -GR; dx <= GR; ++dx) {
+            float w = 1.0f - std::sqrt((float)(dx * dx + dy * dy)) / (GR + 1);
+            kern[(dy + GR) * (2 * GR + 1) + (dx + GR)] = (w > 0.0f) ? w * w : 0.0f;
+        }
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
         "sandsim - paint with the mouse, pick from the palette, hover to identify, SPACE to pause",
@@ -481,12 +512,45 @@ static int runInteractive(ViewCfg cfg) {
         for (int n = 0; !paused && acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
+
+        // Scatter each emissive cell's light into a cell-resolution bloom buffer.
+        std::fill(glowR.begin(), glowR.end(), 0.0f);
+        std::fill(glowG.begin(), glowG.end(), 0.0f);
+        std::fill(glowB.begin(), glowB.end(), 0.0f);
+        for (int y = 0; y < LHv; ++y)
+            for (int x = 0; x < LWv; ++x) {
+                float s = emissionStrength(world.viewCell(viewX + x, viewY + y));
+                if (s <= 0.0f) continue;
+                uint32_t c = kColors[world.viewCell(viewX + x, viewY + y)];
+                float cr = (c >> 16) & 0xFF, cg = (c >> 8) & 0xFF, cb = c & 0xFF;
+                for (int dy = -GR; dy <= GR; ++dy) {
+                    int ny = y + dy; if (ny < 0 || ny >= LHv) continue;
+                    for (int dx = -GR; dx <= GR; ++dx) {
+                        int nx = x + dx; if (nx < 0 || nx >= LWv) continue;
+                        float w = kern[(dy + GR) * (2 * GR + 1) + (dx + GR)] * s;
+                        if (w <= 0.0f) continue;
+                        size_t ni = (size_t)ny * LWv + nx;
+                        glowR[ni] += cr * w; glowG[ni] += cg * w; glowB[ni] += cb * w;
+                    }
+                }
+            }
+
         for (int y = 0; y < LHv; ++y)
             for (int x = 0; x < LWv; ++x) {
                 int wxc = viewX + x, wyc = viewY + y;       // world cell under this viewport pixel
                 uint8_t m = world.viewCell(wxc, wyc);
                 uint32_t color = kColors[m];
                 if (m == FIRE || m == LAVA) color = ui::flicker(color, wxc, wyc, tick);
+                size_t gi = (size_t)y * LWv + x;            // add the accumulated bloom (additive, clamped)
+                if (glowR[gi] + glowG[gi] + glowB[gi] > 0.0f) {
+                    int rr = (int)((color >> 16) & 0xFF) + (int)(glowR[gi] * GLOW);
+                    int gg = (int)((color >> 8)  & 0xFF) + (int)(glowG[gi] * GLOW);
+                    int bb = (int)( color        & 0xFF) + (int)(glowB[gi] * GLOW);
+                    if (rr > 255) rr = 255;
+                    if (gg > 255) gg = 255;
+                    if (bb > 255) bb = 255;
+                    color = 0xFF000000u | ((uint32_t)rr << 16) | ((uint32_t)gg << 8) | (uint32_t)bb;
+                }
                 for (int dy = 0; dy < PIXEL; ++dy)
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;

@@ -365,7 +365,11 @@ CPU and GPU:
   back to `WATER`**, a little boil → rise → rain water cycle.
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
-doesn't touch the simulation). Paint with the mouse and pick a material from the
+doesn't touch the simulation), and emissive materials — fire, lava, embers, sparks,
+lit lamps, lasers and beams, fireworks, burning fuses, electron heads — cast a soft
+**additive bloom/glow** into their surroundings, so a flame lights up the cave around
+it and a laser leaves a luminous streak. (Both effects are render-only in the CPU/SDL
+viewer; the simulation is untouched.) Paint with the mouse and pick a material from the
 on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter, `;` moss, `,` fumes, `.` wire, `/` electron-head, `'` electron-tail, `-` igniter, `=` sensor, `\` life, ``` geyser; `LYE` and any newer material are palette-click only, as every single-character key is now taken). **Left-click paints, right-click erases**, `[` / `]` size the brush, `SPACE` pauses/resumes, and `DEL`/`BACKSPACE` clears the canvas to empty air. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
