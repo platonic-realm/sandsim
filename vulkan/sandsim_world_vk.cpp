@@ -33,14 +33,14 @@
 #include <unistd.h>
 #include "../ui.h"       // on-screen material palette
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, MATERIAL_COUNT = 47 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, MATERIAL_COUNT = 48 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u, 0xFFCDA0FFu, 0xFF6E8B3Du, 0xFFCBC75Au, 0xFFC8862Eu, 0xFF80E0FFu, 0xFF3A6AB0u, 0xFFD89020u, 0xFFB0E040u, 0xFF50FF90u, 0xFF5090A0u, 0xFFC8E8D0u, 0xFFD7D0B0u,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u, 0xFFCDA0FFu, 0xFF6E8B3Du, 0xFFCBC75Au, 0xFFC8862Eu, 0xFF80E0FFu, 0xFF3A6AB0u, 0xFFD89020u, 0xFFB0E040u, 0xFF50FF90u, 0xFF5090A0u, 0xFFC8E8D0u, 0xFFD7D0B0u, 0xFFFF8C69u,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -271,6 +271,7 @@ private:
             case 58: case 59: return seen[GEYSER];
             case 60: case 61: return seen[LYE];
             case 62: case 63: return seen[SODIUM];
+            case 64: case 65: return seen[CORAL];
             case 52: case 53: return seen[IGNITER];
             default: return true;   // 3-17, 26-27: always-on core reactions
         }
@@ -440,7 +441,7 @@ private:
             }
             if (hasReactive) {                      // reactions (gated): see shader pass types
                 int decay = (int)(frame + (uint32_t)f);
-                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63}) {  // + ... life, geyser, lye, sodium
+                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65}) {  // + ... geyser, lye, sodium, coral
                     if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                     PushConsts pc{SW, X0, X1, Y0, Y1, t, 0, 0, 0, 0, decay};
                     vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

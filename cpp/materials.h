@@ -108,8 +108,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46,
-    MATERIAL_COUNT = 47
+    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47,
+    MATERIAL_COUNT = 48
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -921,6 +921,41 @@ inline void reactSodium(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
             if (grid[i] == WATER &&
                 (scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW]))
                 grid[i] = STEAM;
+        }
+}
+
+// Coral grows slowly, branching like a crystal -- but UNDERWATER. Where CRYSTAL
+// crystallises into bare air and PLANT creeps along the waterline, CORAL spreads
+// through WATER itself: a water cell turns to coral when EXACTLY ONE of its eight
+// neighbours is coral (a frame-hash gates the rate, so reefs branch dendritically
+// instead of flooding solid -- cells flanked by two arms lock, exactly as crystal
+// does). It is a living reef, so heat bleaches it: a coral cell touching FIRE/LAVA
+// dies to ASH. The first growth bound to a LIQUID substrate -- seed one grain in a
+// pool and a branching reef fills it, consuming the water as it goes.
+static constexpr uint32_t CORAL_GROW = 8;      // of 256/frame -> reefs branch slowly
+inline bool coralGrows(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 151u + (uint32_t)y * 101u + frame * 181u) & 0xFFu;
+    return h < CORAL_GROW;
+}
+inline void growCoral(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == WATER) {
+                int n = (grid[i-1]==CORAL) + (grid[i+1]==CORAL) + (grid[i-SW]==CORAL) + (grid[i+SW]==CORAL)
+                      + (grid[i-SW-1]==CORAL) + (grid[i-SW+1]==CORAL) + (grid[i+SW-1]==CORAL) + (grid[i+SW+1]==CORAL);
+                if (n == 1 && coralGrows(x, y, frame)) r = 1;          // grow into water
+            } else if (grid[i] == CORAL) {
+                if (isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW])) r = 2;  // bleach to ash
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = CORAL;
+            else if (scratch[i] == 2) grid[i] = ASH;
         }
 }
 

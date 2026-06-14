@@ -547,6 +547,26 @@ void main() {
         if (cells[i] == 3u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u)) cells[i] = 8u;
         return;
     }
+    if (pc.type == 64) {                                  // coral: mark WATER(3) with exactly one coral(47) of 8 (frame-hashed) -> 1; coral by fire/lava -> 2 (ash)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 3u) {
+            int n = int(cells[i-1]==47u)+int(cells[i+1]==47u)+int(cells[i-pc.SW]==47u)+int(cells[i+pc.SW]==47u)
+                  + int(cells[i-pc.SW-1]==47u)+int(cells[i-pc.SW+1]==47u)+int(cells[i+pc.SW-1]==47u)+int(cells[i+pc.SW+1]==47u);
+            uint h = (uint(x)*151u + uint(y)*101u + uint(pc.frame)*181u) & 0xFFu;
+            if (n == 1 && h < 8u) r = 1u;
+        } else if (cells[i] == 47u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            if (hot) r = 2u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 65) {                                  // coral: apply (1 -> coral 47, 2 -> ash 17)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 47u; else if (moved[i] == 2u) cells[i] = 17u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
