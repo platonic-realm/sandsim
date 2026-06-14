@@ -665,6 +665,20 @@ void main() {
         if (moved[i] == 1u) cells[i] = 14u; else if (moved[i] == 2u) cells[i] = 0u; else if (moved[i] == 3u) cells[i] = 23u;
         return;
     }
+    if (pc.type == 78) {                                  // lamp: mark LAMP(55) lit by adjacent electron -> 1, LAMPLIT(56) no longer beside one -> 2
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        bool nearE = cells[i-1]==39u||cells[i+1]==39u||cells[i-pc.SW]==39u||cells[i+pc.SW]==39u
+                   ||cells[i-1]==40u||cells[i+1]==40u||cells[i-pc.SW]==40u||cells[i+pc.SW]==40u;
+        if (c == 55u) { if (nearE) r = 1u; }
+        else if (c == 56u) { if (!nearE) r = 2u; }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 79) {                                  // lamp: apply (1 -> lamplit 56, 2 -> lamp 55)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 56u; else if (moved[i] == 2u) cells[i] = 55u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

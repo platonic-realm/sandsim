@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -354,6 +354,19 @@ GPU and produce a **bit-identical** world.
     the default bench is unchanged, a WALL-bordered CPU test confirms `CRYO` moves *bit-identically*
     to `OIL` over 150 frames, a reaction unit test covers freeze/snuff/chill/boil-off, and two
     `worldgen.h` chambers (cryo-only, and cryo + water + lava) agree across all three backends.
+  - **lamp** — `LAMP` is the Wireworld kit's visual output: a dark bulb that glows (`LAMPLIT`) when
+    an electron passes a neighbouring cell and dims back when the pulse leaves. A 2-pass snapshot
+    (passes 78/79) marks each `LAMP` beside an `EHEAD`/`ETAIL` (→ `LAMPLIT`) and each `LAMPLIT` no
+    longer beside one (→ `LAMP`), then applies. It only *reads* the circuit — electrons travel on
+    `WIRE`, so a lamp never alters a signal — which means a row of lamps beside a wire lights in
+    sequence as a pulse runs past (a marquee), and a battery-clocked wire makes a lamp blink. `LAMP`
+    is driven by electrons (which are reactive), so like `WIRE` it is not in `hasReactive`;
+    `LAMPLIT` dims on its own, so it is (the reaction is gated on `present[LAMP] || present[LAMPLIT]`).
+    Verified: a unit test (a lamp lights beside a head or a tail, a lit lamp dims when the pulse
+    leaves but stays lit while it's adjacent, the lamp never disturbs the electron, a full
+    light→dim blink cycle, deterministic) plus two `worldgen.h` chambers — a `LAMPLIT`-only block
+    isolating the `hasReactive` edit, and a battery → wire marquee with a row of lamps —
+    bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

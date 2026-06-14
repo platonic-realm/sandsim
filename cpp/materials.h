@@ -110,7 +110,8 @@ enum Material : uint8_t {
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
-    MATERIAL_COUNT = 55
+    LAMP = 55, LAMPLIT = 56,
+    MATERIAL_COUNT = 57
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1155,6 +1156,34 @@ inline void reactCryo(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
             if (scratch[i] == 1) grid[i] = ICE;
             else if (scratch[i] == 2) grid[i] = EMPTY;
             else if (scratch[i] == 3) grid[i] = OBSIDIAN;
+        }
+}
+
+// Lamp: a circuit-driven light -- the WIREWORLD kit's visual OUTPUT (it already had the
+// input SENSOR, the WIRE/EHEAD/ETAIL logic, the physical output IGNITER and the power
+// source BATTERY, but no way to SEE a signal). A LAMP is a dark bulb that glows (becomes
+// LAMPLIT) whenever an electron -- an EHEAD or ETAIL -- passes a cell next to it, and dims
+// back the instant the pulse leaves. It never touches the circuit (electrons travel on
+// WIRE; the lamp only watches), so a row of lamps beside a wire lights in sequence as a
+// pulse runs past -- a marquee -- and a battery-clocked wire makes a lamp blink. Build
+// glowing signs, bar displays, running lights. Two-pass snapshot: pass 1 marks each LAMP a
+// passing electron lights and each LAMPLIT no longer beside one (which dims); pass 2 applies.
+inline void lampLogic(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            bool nearE = grid[i-1]==EHEAD || grid[i+1]==EHEAD || grid[i-SW]==EHEAD || grid[i+SW]==EHEAD
+                      || grid[i-1]==ETAIL || grid[i+1]==ETAIL || grid[i-SW]==ETAIL || grid[i+SW]==ETAIL;
+            if (c == LAMP) { if (nearE) r = 1; }            // lit by a passing electron
+            else if (c == LAMPLIT) { if (!nearE) r = 2; }   // dims when the pulse leaves
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = LAMPLIT;
+            else if (scratch[i] == 2) grid[i] = LAMP;
         }
 }
 
