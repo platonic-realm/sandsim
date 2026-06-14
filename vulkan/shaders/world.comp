@@ -16,7 +16,7 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE
     if (s == 7u) return t==11u||t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> +SNOW,FUMES
     if (s == 11u) return t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> +SNOW,FUMES
     if (s == 3u) return t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> +SNOW,FUMES
@@ -32,7 +32,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==25u||s==37u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,gunpowder,thermite,coal,ember,snow,fumes,mercury,lava,acid,water,oil
+    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==25u||s==37u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: +lye
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;     // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
@@ -516,6 +516,18 @@ void main() {
     if (pc.type == 59) {                                  // geyser: apply (1 -> steam 8)
         int i = y * pc.SW + x;
         if (moved[i] == 1u) cells[i] = 8u;
+        return;
+    }
+    if (pc.type == 60) {                                  // lye: mark LYE(45) touching acid(11) -> 1 (salt), ACID touching lye -> 2 (water)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 45u) r = (cells[i-1]==11u||cells[i+1]==11u||cells[i-pc.SW]==11u||cells[i+pc.SW]==11u) ? 1u : 0u;
+        else if (c == 11u) r = (cells[i-1]==45u||cells[i+1]==45u||cells[i-pc.SW]==45u||cells[i+pc.SW]==45u) ? 2u : 0u;
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 61) {                                  // lye: apply (1 -> salt 24, 2 -> water 3)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 24u; else if (moved[i] == 2u) cells[i] = 3u;
         return;
     }
     int cx = x - pc.X0;

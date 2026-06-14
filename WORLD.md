@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -233,6 +233,16 @@ GPU and produce a **bit-identical** world.
     determinism the time-varying transforms use, so it stays bit-identical (verified: a unit test
     shows it erupts exactly the 60-of-300 expected frames and emits *nothing* in all 240 dormant
     frames, plus a `worldgen.h` geyser chamber agrees across all three over multiple cycles).
+  - **neutralisation** — `LYE` is the caustic counterpart of `ACID`, and where the two touch
+    they cancel into products: acid + base → salt + water, so a 2-pass mark/apply turns each
+    `ACID` cell adjacent to lye into `WATER` and each `LYE` cell adjacent to acid into `SALT`.
+    It's the first reaction where *two reactive materials destroy one another* rather than one
+    consuming the other -- both inputs are spent, both outputs are pre-existing materials. Because
+    lye *creates* `SALT`, it breaks the "no gated input is made by another reaction" invariant, so
+    the salt-cycle pass is gated on `present[SALT] || present[LYE]` (else the freshly minted brine
+    would never dissolve). Verified: a unit test (an acid pool drizzled with lye neutralises at the
+    interface, acid→water and lye→salt, conserved) plus a `worldgen.h` lye-on-acid chamber that
+    agrees bit-for-bit across CPU SIMD, OpenGL and Vulkan over 300 frames.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

@@ -97,6 +97,10 @@
 // material constantly, a geyser ERUPTS on a cycle: for a window of every period it puffs STEAM
 // into the empty cells around it (a rising plume the water cycle later rains back), then falls
 // dormant. So the world gets periodic gushes instead of a steady trickle.
+// LYE is a caustic powder (it falls and piles like SAND) -- the chemical counter to ACID. Where
+// the two meet they NEUTRALISE each other: the acid is spent to harmless WATER and the lye to
+// SALT (acid + base -> salt + water), so a sprinkle of lye stops an acid spill dead. The first
+// rule where two reactive materials cancel each other into products.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
@@ -104,8 +108,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    SENSOR = 42, LIFE = 43, GEYSER = 44,
-    MATERIAL_COUNT = 45
+    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45,
+    MATERIAL_COUNT = 46
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -867,6 +871,30 @@ inline void eruptGeyser(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = STEAM;
+        }
+}
+
+// Lye: the chemical counter to acid. Where LYE and ACID touch they neutralise -- acid + base
+// -> salt + water -- so the ACID is spent to WATER and the LYE to SALT, both existing materials.
+// Two-pass snapshot: pass 1 marks each LYE that touches acid (-> 1, becomes SALT) and each ACID
+// that touches lye (-> 2, becomes WATER); pass 2 applies. Order-independent / GPU-identical.
+inline void neutraliseLye(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == LYE) {
+                if (grid[i-1]==ACID || grid[i+1]==ACID || grid[i-SW]==ACID || grid[i+SW]==ACID) r = 1;
+            } else if (c == ACID) {
+                if (grid[i-1]==LYE || grid[i+1]==LYE || grid[i-SW]==LYE || grid[i+SW]==LYE) r = 2;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = SALT;
+            else if (scratch[i] == 2) grid[i] = WATER;
         }
 }
 
