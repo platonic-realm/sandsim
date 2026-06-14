@@ -21,6 +21,13 @@ There is one engine, with a single implementation per platform:
 All three produce the **same world from the same seed** — `make benchmark`
 builds them, asserts the checksums match, and prints a throughput table.
 
+It is also a **playable game**, not just an engine: an interactive viewer (on every
+backend) where you paint and erase **70 materials** with the mouse, watch them react,
+and that runs at a steady **60 fps**. On top of the sandbox it has a polished on-screen
+HUD with a searchable categorised palette, **challenge puzzles** with live progress
+bars, ready-made **freeplay scenes** (a volcano, a fireworks show, an aquarium) and
+**save/load** — see [Playing it](#playing-it).
+
 ## The simulation
 
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
@@ -364,6 +371,8 @@ CPU and GPU:
   you can farm wherever lava meets water). The `STEAM` then rises and **condenses
   back to `WATER`**, a little boil → rise → rain water cycle.
 
+## Playing it
+
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation), and emissive materials — fire, lava, embers, sparks,
 lit lamps, lasers and beams, fireworks, burning fuses, electron heads — cast a soft
@@ -434,21 +443,24 @@ massively-parallel GPU backends reproduce the CPU result **bit-for-bit**. See
 ## Build & run
 
 ```sh
-make            # build all platforms
-make cpp        # just the C++ SIMD world
-./cpp/sandsim_world                       # interactive: arrows pan, number keys paint
-./cpp/sandsim_world --res 1280x800 --scale 3   # window resolution + virtual-pixel size
-./cpp/sandsim_world --bench 600 6 6       # headless: whole-world checksum + material counts
+make                       # build all platforms
+make cpp                   # just the C++ SIMD world (also: make opengl / make vulkan)
+./cpp/sandsim_world        # interactive: paint with the mouse, ENTER for challenges, F1 for scenes
+./opengl/sandsim_world_gl  # the OpenGL viewer    (same controls, GPU compute)
+./vulkan/sandsim_world_vk  # the Vulkan viewer    (same controls, GPU compute)
+./cpp/sandsim_world --res 1280x800 --scale 3      # window resolution + virtual-pixel size
+./cpp/sandsim_world --bench 600 6 6               # headless: whole-world checksum + material counts
 SANDSIM_SIMD=sse ./cpp/sandsim_world --bench 600 6 6   # force SSE (default: widest the CPU has)
-make benchmark  # build all three, verify identical output, print a throughput table
+make benchmark             # build all three, verify identical output, print a throughput table
 ```
 
 The interactive view renders each cell as a **virtual pixel** of `scale × scale`
-screen pixels, so the viewport is `winW/scale × winH/scale` cells (the simulated
-world is twice that in each direction, and all of it runs). The
-**physics rate is decoupled from rendering** (a fixed-timestep accumulator keyed
-to real time), so the simulation runs at the same wall-clock speed on every
-backend, whatever the frame rate. All configurable the same way on all three —
+screen pixels, so the viewport is `winW/scale × winH/scale` cells (plus a one-chunk
+**live border** all around it that keeps simulating, so panning reveals a world that
+has gone on bubbling rather than frozen edges). The **physics rate is decoupled from
+rendering** (a fixed-timestep accumulator keyed to real time) and each viewer is
+**paced to 60 fps**, so the simulation runs at the same wall-clock speed on every
+backend, whatever the display. All configurable the same way on all three —
 `--res WxH` / `--scale N` / `--sps STEPS_PER_SEC`, or `SANDSIM_RES` /
 `SANDSIM_SCALE` / `SANDSIM_SPS` (default **1024×768, 3×3, 60 steps/s**).
 
