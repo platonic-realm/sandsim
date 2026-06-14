@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, MATERIAL_COUNT = 44 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, MATERIAL_COUNT = 45 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -573,6 +573,21 @@ void main() {
         if (moved[i] == 1u) cells[i] = 43u; else if (moved[i] == 2u) cells[i] = 0u;
         return;
     }
+    if (uType == 58) {                                    // geyser: while erupting, mark EMPTY next to a geyser(44) -> steam (frame-hashed)
+        int i = y * uSW + x; uint r = 0u;
+        if ((uint(uFrame) % 150u) < 30u) {                // global eruption window
+            bool src = cells[i-1]==44u||cells[i+1]==44u||cells[i-uSW]==44u||cells[i+uSW]==44u;
+            uint h = (uint(x)*151u + uint(y)*47u + uint(uFrame)*199u) & 0xFFu;
+            if (cells[i] == 0u && src && h < 90u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 59) {                                    // geyser: apply (1 -> steam 8)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 8u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -651,6 +666,7 @@ vec3 matColor(uint m) {
     if (m == 41u) return vec3(0.847, 0.565, 0.125);
     if (m == 42u) return vec3(0.690, 0.878, 0.251);
     if (m == 43u) return vec3(0.314, 1.000, 0.565);
+    if (m == 44u) return vec3(0.314, 0.565, 0.627);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -809,7 +825,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 57; ++t) {         // + ... wireworld, igniter, sensor, life
+            for (int t = 3; t <= 59; ++t) {         // + ... igniter, sensor, life, geyser
                 if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
@@ -894,6 +910,7 @@ private:
             case 50: case 51: return present[EHEAD] || present[ETAIL] || present[SENSOR];  // sensor can create electrons
             case 54: case 55: return present[SENSOR];
             case 56: case 57: return present[LIFE];
+            case 58: case 59: return present[GEYSER];
             case 52: case 53: return present[IGNITER];
             default: return true;   // 3-17, 26-27: always-on core reactions
         }
@@ -1114,6 +1131,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_MINUS) == GLFW_PRESS) current = IGNITER;
         if (glfwGetKey(win, GLFW_KEY_EQUAL) == GLFW_PRESS) current = SENSOR;
         if (glfwGetKey(win, GLFW_KEY_BACKSLASH) == GLFW_PRESS) current = LIFE;
+        if (glfwGetKey(win, GLFW_KEY_GRAVE_ACCENT) == GLFW_PRESS) current = GEYSER;
         // Hold an arrow to scroll the viewport over the living world (smoother than
         // the old edge-triggered chunk step; the whole world is resident so it's free).
         if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;

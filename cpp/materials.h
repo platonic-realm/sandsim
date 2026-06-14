@@ -93,6 +93,10 @@
 // Wireworld. A live cell with 2 or 3 live neighbours survives, an empty cell with exactly 3 is
 // born; everything else dies/stays empty. Gliders and oscillators weave through the falling
 // sand (which blocks births where it lands), a CA colliding with a physics sim.
+// GEYSER is a geothermal vent -- the first RHYTHMIC source. Where SPRING/VOLCANO well their
+// material constantly, a geyser ERUPTS on a cycle: for a window of every period it puffs STEAM
+// into the empty cells around it (a rising plume the water cycle later rains back), then falls
+// dormant. So the world gets periodic gushes instead of a steady trickle.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
@@ -100,8 +104,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    SENSOR = 42, LIFE = 43,
-    MATERIAL_COUNT = 44
+    SENSOR = 42, LIFE = 43, GEYSER = 44,
+    MATERIAL_COUNT = 45
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -833,6 +837,36 @@ inline void conwayLife(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = LIFE;
             else if (scratch[i] == 2) grid[i] = EMPTY;
+        }
+}
+
+static constexpr uint32_t GEYSER_PERIOD = 150;  // frames per eruption cycle
+static constexpr uint32_t GEYSER_DUTY   = 30;   // of those, frames it is erupting (then dormant)
+static constexpr uint32_t GEYSER_SPRAY  = 90;   // of 256/frame -> density of the steam puff while erupting
+inline bool geyserErupts(uint32_t frame) { return (frame % GEYSER_PERIOD) < GEYSER_DUTY; }
+inline bool geyserSprays(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 151u + (uint32_t)y * 47u + frame * 199u) & 0xFFu;
+    return h < GEYSER_SPRAY;
+}
+
+// Geyser: a periodic geothermal vent. The whole function is gated on the global eruption
+// window (so it does nothing -- touches nothing -- while dormant, keeping it bit-identical to
+// the GPU, which writes a blank scratch and applies nothing). While erupting it puffs STEAM
+// into the empty cells around it on a frame-hash for texture; the steam rises and condenses
+// back to water through the existing cycle, so a geyser gushes and rains on a rhythm. Same
+// order-independent mark/apply snapshot as emitSpring.
+inline void eruptGeyser(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    if (!geyserErupts(frame)) return;   // dormant: leave the grid (and scratch) untouched
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool src = grid[i-1]==GEYSER || grid[i+1]==GEYSER || grid[i-SW]==GEYSER || grid[i+SW]==GEYSER;
+            scratch[i] = (grid[i] == EMPTY && src && geyserSprays(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = STEAM;
         }
 }
 

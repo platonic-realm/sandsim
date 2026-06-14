@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -222,6 +222,17 @@ GPU and produce a **bit-identical** world.
     is a deterministic clash of a cellular automaton and a falling-sand world. Paint-only,
     verified by a unit test (a blinker oscillates period-2, a block is a still life, a glider
     translates by (1,1) every 4 steps) plus a bit-identical `worldgen.h` glider+blinker chamber.
+  - **eruption** — `GEYSER` is the first *rhythmic* source: where `SPRING`/`VOLCANO` well their
+    material every frame, a geyser only erupts during a window of a global cycle (`frame % 150 <
+    30`), puffing `STEAM` into the empty cells around it on a frame-hash, then falling dormant.
+    The whole pass is gated on the eruption window -- when dormant it writes nothing (the CPU
+    early-returns leaving the grid *and* scratch untouched; the GPU writes a blank scratch and
+    applies nothing -- identical because the geyser is the last pass, so scratch is never read
+    after it). The steam rises and condenses back to water through the existing cycle, so a vent
+    drives a slow heartbeat of steam and rain. The global frame window is the same `frame`-driven
+    determinism the time-varying transforms use, so it stays bit-identical (verified: a unit test
+    shows it erupts exactly the 60-of-300 expected frames and emits *nothing* in all 240 dormant
+    frames, plus a `worldgen.h` geyser chamber agrees across all three over multiple cycles).
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

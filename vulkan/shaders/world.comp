@@ -503,6 +503,21 @@ void main() {
         if (moved[i] == 1u) cells[i] = 43u; else if (moved[i] == 2u) cells[i] = 0u;
         return;
     }
+    if (pc.type == 58) {                                  // geyser: while erupting, mark EMPTY next to a geyser(44) -> steam (frame-hashed)
+        int i = y * pc.SW + x; uint r = 0u;
+        if ((uint(pc.frame) % 150u) < 30u) {              // global eruption window
+            bool src = cells[i-1]==44u||cells[i+1]==44u||cells[i-pc.SW]==44u||cells[i+pc.SW]==44u;
+            uint h = (uint(x)*151u + uint(y)*47u + uint(pc.frame)*199u) & 0xFFu;
+            if (cells[i] == 0u && src && h < 90u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 59) {                                  // geyser: apply (1 -> steam 8)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 8u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
