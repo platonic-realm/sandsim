@@ -26,11 +26,11 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder). Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` are the odd gas that **sinks** -- a heavy vapour that pools in the low ground).
-`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER` and `LYE` fall and pile like sand;
+`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE` and `SODIUM` fall and pile like sand;
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
@@ -221,6 +221,14 @@ CPU and GPU:
   → salt + water, so the `ACID` is spent to `WATER` and the `LYE` to `SALT`. It's the first
   reaction where *two reactive materials cancel one another* rather than one consuming the
   other — drizzle lye onto an acid pool and watch the etching stop as the brine settles out.
+- `SODIUM` is a **soft alkali-metal powder — the one explosive that water *sets off* instead of
+  putting out.** It falls and piles like sand and sits inert while dry, but the instant it
+  touches `WATER` (or any flame) it **flares to `FIRE` and flashes the touching water to
+  `STEAM`** — the real *2Na + 2H₂O → 2NaOH + H₂* reaction is sharply exothermic and the
+  hydrogen it frees ignites. The fire it makes is itself hot, so a sodium pile chain-reacts
+  outward one ring per frame, and the steam rises and rains back through the water cycle.
+  Pour it freely, then add a single drop of water and stand back. (The chemical sibling of
+  `ACID`/`LYE`/`SALT` — and a violent counterpart to the inert `SAND` it resembles.)
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

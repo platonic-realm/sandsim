@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -243,6 +243,18 @@ GPU and produce a **bit-identical** world.
     would never dissolve). Verified: a unit test (an acid pool drizzled with lye neutralises at the
     interface, acid→water and lye→salt, conserved) plus a `worldgen.h` lye-on-acid chamber that
     agrees bit-for-bit across CPU SIMD, OpenGL and Vulkan over 300 frames.
+  - **water-explosion** — `SODIUM` is a sand-density alkali-metal powder and the only explosive
+    that `WATER` *triggers* rather than quenches. A 2-pass snapshot (passes 62/63) marks each
+    `SODIUM` cell touching `WATER` or something hot, then turns every marked cell into `FIRE` and
+    flashes each `WATER` beside a marked cell to `STEAM` (the exothermic *2Na + 2H₂O → 2NaOH + H₂*
+    reaction, the hydrogen igniting). Sodium is only ever *consumed* (never created by any rule),
+    so its count strictly decreases and the chain terminates; the `FIRE` it makes is hot, so a
+    pile self-propagates one ring per frame, and the steam rejoins the boil→rise→rain water cycle.
+    Like `TNT`/`GUNPOWDER` it is inert until triggered, so it is *not* in the `hasReactive` set —
+    its trigger (`WATER`/`FIRE`) already is. Verified: a unit test (sodium+water→fire+steam,
+    sodium+heat→fire, dry sodium stays inert, count strictly decreases) and a movement test
+    (rests exactly like `SAND`, sinks through water) plus a `worldgen.h` sodium-on-water chamber
+    bit-identical across all three backends over 300 frames.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

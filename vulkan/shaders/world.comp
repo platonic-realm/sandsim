@@ -16,7 +16,7 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM
     if (s == 7u) return t==11u||t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> +SNOW,FUMES
     if (s == 11u) return t==3u||t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> +SNOW,FUMES
     if (s == 3u) return t==5u||t==25u||t==37u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> +SNOW,FUMES
@@ -32,7 +32,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==25u||s==37u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: +lye
+    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==25u||s==37u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: +lye/sodium
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;     // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
@@ -528,6 +528,23 @@ void main() {
     if (pc.type == 61) {                                  // lye: apply (1 -> salt 24, 2 -> water 3)
         int i = y * pc.SW + x;
         if (moved[i] == 1u) cells[i] = 24u; else if (moved[i] == 2u) cells[i] = 3u;
+        return;
+    }
+    if (pc.type == 62) {                                  // sodium: mark SODIUM(46) touching water(3) or fire/lava -> 1
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 46u) {
+            bool trig = cells[i-1]==3u||cells[i+1]==3u||cells[i-pc.SW]==3u||cells[i+pc.SW]==3u
+                      ||cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                      ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            r = trig ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 63) {                                  // sodium: apply (marked -> fire 6; water beside a mark -> steam 8)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) { cells[i] = 6u; return; }
+        if (cells[i] == 3u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u)) cells[i] = 8u;
         return;
     }
     int cx = x - pc.X0;

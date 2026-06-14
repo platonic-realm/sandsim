@@ -108,8 +108,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45,
-    MATERIAL_COUNT = 46
+    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46,
+    MATERIAL_COUNT = 47
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -895,6 +895,32 @@ inline void neutraliseLye(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = SALT;
             else if (scratch[i] == 2) grid[i] = WATER;
+        }
+}
+
+// Sodium: a soft alkali-metal powder (it falls and piles like SAND) -- the one explosive
+// that WATER sets off instead of quenching. Where SODIUM touches WATER (or anything hot)
+// it flares to FIRE and flashes the touching water to STEAM: the real 2Na + 2H2O -> 2NaOH
+// + H2 reaction is sharply exothermic and the liberated hydrogen ignites. Two-pass snapshot
+// like detonateTnt: pass 1 marks every SODIUM cell touching water or fire/lava; pass 2 turns
+// each marked cell into FIRE and boils each WATER beside a marked cell to STEAM. The FIRE it
+// makes is itself hot, so a pile chain-reacts outward one ring per frame. The chemistry
+// counterpart to the inert SAND it resembles, and a sibling to ACID/LYE/SALT.
+inline void reactSodium(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool trig = grid[i-1]==WATER || grid[i+1]==WATER || grid[i-SW]==WATER || grid[i+SW]==WATER
+                     || isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+            scratch[i] = (grid[i] == SODIUM && trig) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) { grid[i] = FIRE; continue; }
+            if (grid[i] == WATER &&
+                (scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW]))
+                grid[i] = STEAM;
         }
 }
 
