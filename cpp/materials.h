@@ -34,12 +34,13 @@
 // SALT is a de-icer: it MELTS the ICE it touches to WATER (no heat needed) and then
 // DISSOLVES away in that water. SNOW is a light powder -- lighter than every liquid,
 // so it falls through air but floats on water and oil -- that melts to WATER near
-// FIRE/LAVA.
+// FIRE/LAVA. MERCURY is the opposite end: the HEAVIEST material, a liquid metal that
+// everything else floats on, and it's toxic -- it kills the PLANT it touches.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
-    SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MATERIAL_COUNT = 26
+    SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, MATERIAL_COUNT = 27
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -487,6 +488,28 @@ inline void saltCycle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = EMPTY;
             else if (scratch[i] == 2) grid[i] = WATER;
+        }
+}
+
+static constexpr uint32_t MERC_POISON = 20;    // of 256/frame -> plant touching mercury withers
+inline bool mercuryPoisons(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 101u + (uint32_t)y * 217u + frame * 131u) & 0xFFu;
+    return h < MERC_POISON;
+}
+// Mercury poisoning: PLANT touching the toxic liquid metal MERCURY withers to EMPTY
+// (frame-hashed, so a vine dies back gradually). Two-pass snapshot -> order-
+// independent and GPU-identical.
+inline void poisonMercury(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool merc = grid[i-1]==MERCURY || grid[i+1]==MERCURY || grid[i-SW]==MERCURY || grid[i+SW]==MERCURY;
+            scratch[i] = (grid[i] == PLANT && merc && mercuryPoisons(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = EMPTY;
         }
 }
 

@@ -22,6 +22,7 @@ bool canEnter(uint s, uint t) {
     if (s == 3u) return t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> +SNOW
     if (s == 5u) return t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> +SNOW
     if (s == 25u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
+    if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -29,9 +30,9 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==17u||s==25u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,snow,lava,acid,water,oil
+    if (pc.grp == 0) return s==2u||s==17u||s==25u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,snow,mercury,lava,acid,water,oil
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u;             // GAS/FIRE/STEAM/SMOKE rise
-    return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
+    return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + mercury, smoke
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
@@ -296,6 +297,21 @@ void main() {
     if (pc.type == 33) {                                  // salt: apply (1 -> empty, 2 -> water 3)
         int i = y * pc.SW + x; uint m = moved[i];
         if (m == 1u) cells[i] = 0u; else if (m == 2u) cells[i] = 3u;
+        return;
+    }
+    if (pc.type == 34) {                                  // mercury: mark plant(10) touching mercury(26)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 10u) {
+            bool merc = cells[i-1]==26u||cells[i+1]==26u||cells[i-pc.SW]==26u||cells[i+pc.SW]==26u;
+            uint h = (uint(x)*101u + uint(y)*217u + uint(pc.frame)*131u) & 0xFFu;
+            r = (merc && h < 20u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 35) {                                  // mercury: apply -> empty (plant poisoned)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 0u;
         return;
     }
     int cx = x - pc.X0;

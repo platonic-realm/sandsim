@@ -22,11 +22,12 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder). Movement is a density swap — heaviest to lightest is `SAND > LAVA >
-ACID > WATER > OIL > SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so
-sand sinks through lava, acid sinks below water, oil floats on water, and
-gas/fire/steam/smoke rise. `ASH` falls and piles like sand; `SNOW` is lighter than
-every liquid, so it falls through air but **floats on water and oil**. `WALL`,
+`SNOW` (powder), `MERCURY`. Movement is a density swap — heaviest to lightest is
+`MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, with
+`STEAM`/`SMOKE` the lightest — so sand sinks through lava, acid sinks below water,
+oil floats on water, and gas/fire/steam/smoke rise. `ASH` falls and piles like sand;
+`SNOW` is lighter than every liquid, so it falls through air but **floats on water
+and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**. `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
 `OBSIDIAN`, and `SALT` are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
@@ -70,6 +71,10 @@ CPU and GPU:
   but **floats** on water and oil instead of sinking (sand and the rest pour straight
   through it). Like ice, it **melts to `WATER` next to `FIRE` or `LAVA`**, so a
   snowdrift slumps into a puddle at the first spark.
+- `MERCURY` is the opposite extreme: the **heaviest** material, a liquid metal that
+  sinks below everything and pools at the very bottom, so sand, water and oil all
+  **float on top of it** (the mirror of snow). It's also **toxic** — the `PLANT` it
+  touches withers to nothing — so a silver puddle is both a curiosity and a hazard.
 - `SPRING` is an inert solid that **sources `WATER`** — it never moves or depletes,
   but the empty cells around it well up with water, so it's an **endless fountain**.
   Where plant only grows where water already is, a spring needs nothing but space,
@@ -111,7 +116,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury); `[` / `]` size the brush. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.

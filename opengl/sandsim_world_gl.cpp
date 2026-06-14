@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MATERIAL_COUNT = 26 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, MATERIAL_COUNT = 27 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -92,6 +92,7 @@ bool canEnter(uint s, uint t) {
     if (s == 3u) return t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,G,F,St,Sm,E
     if (s == 5u) return t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> SNOW,G,F,St,Sm,E
     if (s == 25u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
+    if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -99,9 +100,9 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==17u||s==25u||s==7u||s==11u||s==3u||s==5u; // DOWN: sand,ash,snow,lava,acid,water,oil
+    if (uGrp == 0) return s==2u||s==17u||s==25u||s==26u||s==7u||s==11u||s==3u||s==5u; // DOWN: sand,ash,snow,mercury,lava,acid,water,oil
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u;               // GAS/FIRE/STEAM/SMOKE rise
-    return s==7u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + smoke
+    return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + mercury, smoke
 }
 void main() {
     int x = uX0 + int(gl_GlobalInvocationID.x);
@@ -368,6 +369,21 @@ void main() {
         if (m == 1u) cells[i] = 0u; else if (m == 2u) cells[i] = 3u;
         return;
     }
+    if (uType == 34) {                                    // mercury: mark plant(10) touching mercury(26)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 10u) {
+            bool merc = cells[i-1]==26u||cells[i+1]==26u||cells[i-uSW]==26u||cells[i+uSW]==26u;
+            uint h = (uint(x)*101u + uint(y)*217u + uint(uFrame)*131u) & 0xFFu;
+            r = (merc && h < 20u) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 35) {                                    // mercury: apply -> empty (plant poisoned)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 0u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -428,6 +444,7 @@ vec3 matColor(uint m) {
     if (m == 23u) return vec3(0.165, 0.141, 0.220);
     if (m == 24u) return vec3(0.929, 0.929, 0.878);
     if (m == 25u) return vec3(0.918, 0.957, 1.0);
+    if (m == 26u) return vec3(0.769, 0.784, 0.831);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -586,7 +603,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 33; ++t) {         // + ... virus, spark, salt
+            for (int t = 3; t <= 35; ++t) {         // + ... spark, salt, mercury
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);

@@ -44,8 +44,8 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`. Movement is a pure density swap (heavy→light:
-  `SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` lightest). On top of it
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`. Movement is a pure density swap (heavy→light:
+  `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
   - **time-varying transforms** — `FIRE` burning out to `EMPTY` and `STEAM`
@@ -111,6 +111,13 @@ GPU and produce a **bit-identical** world.
     touching salt → `WATER`, melted with no heat), then applies. Both frame-hashed, so
     a finite sprinkle melts a finite patch of ice and then dissolves into the
     meltwater. Paint-only; verified by a static unit test and a `worldgen.h` seed.
+  - **poisoning** — `MERCURY` (the heaviest material, a liquid metal everything
+    floats on) is toxic: a `PLANT` cell touching it withers to `EMPTY` (frame-hashed
+    mark/apply). The density tier is the cheap end to add — nothing is heavier than
+    mercury, so no other material's targets change; it only needed its own
+    `belowMerc` (sand + everything below) and DOWN/HORIZ eligibility. Paint-only;
+    movement verified with a standalone step test (mercury sinks below all),
+    poisoning with a unit test, bit-identity with a `worldgen.h` seed.
 
   All reaction passes are gated by a per-world flag set when a reactive material
   is present, so a world of only sand/water/rock pays nothing for them. The
