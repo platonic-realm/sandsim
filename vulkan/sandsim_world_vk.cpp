@@ -211,6 +211,16 @@ public:
     }
     uint8_t viewCell(int lx, int ly) const { return (uint8_t)(stagingPtr[(size_t)(ly + Y0) * SW + (lx + X0)] & 0xFFu); }
 
+    // The staging buffer is HOST_COHERENT (write-combined) memory: fine to write, but CPU
+    // *reads* from it are very slow, and the renderer reads every visible cell several times
+    // per frame. So snapshot it into a cached host vector once (one wide memcpy) and read
+    // that for rendering. cacheHost() must be called after each step before cachedCell().
+    void cacheHost() {
+        if (hostCache.size() != (size_t)SW * SH) hostCache.resize((size_t)SW * SH);
+        std::memcpy(hostCache.data(), stagingPtr, (size_t)SW * SH * 4);
+    }
+    uint8_t cachedCell(int lx, int ly) const { return (uint8_t)(hostCache[(size_t)(ly + Y0) * SW + (lx + X0)] & 0xFFu); }
+
     // Wipe the resident live region back to empty air (keeps the WALL halo).
     void clearView() {
         syncDown();
@@ -333,6 +343,7 @@ private:
     VkBuffer cellsBuf = VK_NULL_HANDLE, movedBuf = VK_NULL_HANDLE, stagingBuf = VK_NULL_HANDLE;
     VkDeviceMemory cellsMem = VK_NULL_HANDLE, movedMem = VK_NULL_HANDLE, stagingMem = VK_NULL_HANDLE;
     uint32_t* stagingPtr = nullptr;      // mapped host staging shadow of the live grid
+    std::vector<uint32_t> hostCache;     // cached (fast-read) copy of the staging grid for rendering
     bool gpuAhead = false;               // device cellsBuf holds newer data than staging
     VkDescriptorSetLayout descLayout = VK_NULL_HANDLE;
     VkPipelineLayout pipeLayout = VK_NULL_HANDLE;
@@ -344,8 +355,11 @@ private:
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
 
-    uint32_t findMemoryType(uint32_t bits, VkMemoryPropertyFlags props) {
+    uint32_t findMemoryType(uint32_t bits, VkMemoryPropertyFlags props, VkMemoryPropertyFlags preferred = 0) {
         VkPhysicalDeviceMemoryProperties mp; vkGetPhysicalDeviceMemoryProperties(phys, &mp);
+        if (preferred)                                  // first try required + preferred (e.g. HOST_CACHED)
+            for (uint32_t i = 0; i < mp.memoryTypeCount; ++i)
+                if ((bits & (1u << i)) && (mp.memoryTypes[i].propertyFlags & (props | preferred)) == (props | preferred)) return i;
         for (uint32_t i = 0; i < mp.memoryTypeCount; ++i)
             if ((bits & (1u << i)) && (mp.memoryTypes[i].propertyFlags & props) == props) return i;
         throw std::runtime_error("no suitable memory type");
@@ -372,13 +386,13 @@ private:
         vkGetDeviceQueue(device, qFamily, 0, &queue);
     }
     void makeBuffer(VkDeviceSize bytes, VkBufferUsageFlags usage, VkMemoryPropertyFlags props,
-                    VkBuffer& buf, VkDeviceMemory& mem, void** map) {
+                    VkBuffer& buf, VkDeviceMemory& mem, void** map, VkMemoryPropertyFlags preferred = 0) {
         VkBufferCreateInfo bci{}; bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bci.size = bytes; bci.usage = usage; bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         vkCheck(vkCreateBuffer(device, &bci, nullptr, &buf), "vkCreateBuffer");
         VkMemoryRequirements req; vkGetBufferMemoryRequirements(device, buf, &req);
         VkMemoryAllocateInfo mai{}; mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; mai.allocationSize = req.size;
-        mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, props);
+        mai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, props, preferred);
         vkCheck(vkAllocateMemory(device, &mai, nullptr, &mem), "vkAllocateMemory");
         vkCheck(vkBindBufferMemory(device, buf, mem, 0), "vkBindBufferMemory");
         if (map) vkCheck(vkMapMemory(device, mem, 0, bytes, 0, map), "vkMapMemory");
@@ -396,7 +410,8 @@ private:
         makeBuffer(gridBytes,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuf, stagingMem, (void**)&stagingPtr);
+            stagingBuf, stagingMem, (void**)&stagingPtr,
+            VK_MEMORY_PROPERTY_HOST_CACHED_BIT);   // prefer CACHED so the CPU readback/render reads are fast
     }
     void createPipeline() {
         auto code = readFile(shaderPath());
@@ -818,12 +833,13 @@ static int runInteractive(ViewCfg cfg) {
         if (paused && stepOnce) { ran = 1; stepOnce = false; }   // single-frame advance
         if (ran > 1) world.stepN(ran - 1);
         if (ran > 0) world.stepAndPresent();        // last step + readback in one submit
+        world.cacheHost();                          // snapshot staging -> fast RAM for the renderer
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
 
         float chalP = chalSolved ? 1.0f : 0.0f;     // challenge progress, evaluated on the live viewport
         if (chalIdx >= 0) {
             for (int y = 0; y < LHv; ++y)
-                for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.viewCell(viewX + x, viewY + y);
+                for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.cachedCell(viewX + x, viewY + y);
             chalP = chal::kChallenges[chalIdx].progress(chalBuf.data(), LWv, LHv);
             if (chalP >= 1.0f && !chalSolved) {
                 chalSolved = true;
@@ -833,7 +849,7 @@ static int runInteractive(ViewCfg cfg) {
 
         // Shared canvas (flicker + bloom) and HUD (categorised palette, tooltip, brush, bar).
         hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, tick };
-        auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
+        auto cell = [&](int wx, int wy) -> uint8_t { return world.cachedCell(wx, wy); };
         hud::renderCanvas(pixels.data(), view, cell, glowR, glowG, glowB, kern, GR, GLOW);
         float hlx_f, hly_f; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &hlx_f, &hly_f);
         hud::State hs{ &pal, orderedColors.data(), slotOf, current, brushRadius, paused, (int)(fpsEMA + 0.5), (int)hlx_f, (int)hly_f };
