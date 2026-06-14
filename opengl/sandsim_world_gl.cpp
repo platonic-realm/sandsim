@@ -70,6 +70,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
 #include "../worldgen.h"   // shared deterministic seedMat() (diverse world, all backends)
 #include "../hud_meta.h"   // material names, categorised palette layout, glow strengths
 #include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
+#include "../challenges.h" // challenge-mode mini-puzzles
 
 // The 16 sub-passes, in the exact order of cpp/simd_core.h.
 struct Pass { int type, dx, dy, parity, grp; };   // type: 0 vert, 1 diag, 2 horiz
@@ -1159,6 +1160,24 @@ public:
         syncUp();
     }
 
+    // Clear the resident area and stamp a w*h scene at viewport-local (atX,atY) in one sync.
+    void loadView(const uint8_t* cells, int w, int h, int atX, int atY) {
+        syncDown();
+        for (int y = 0; y < LH; ++y)
+            for (int x = 0; x < LW; ++x)
+                shadow[(size_t)(y + Y0) * SW + (x + X0)] = EMPTY;
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                int lx = atX + x, ly = atY + y;
+                if (lx < 0 || lx >= LW || ly < 0 || ly >= LH) continue;
+                uint8_t m = cells[(size_t)y * w + x];
+                shadow[(size_t)(ly + Y0) * SW + (lx + X0)] = m;
+                if (m) present[m] = true;
+            }
+        hasReactive = true;
+        syncUp();
+    }
+
     void generateAllToDisk() {
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
         for (int cy = 0; cy < hbox; ++cy)
@@ -1473,6 +1492,9 @@ static int runInteractive(ViewCfg cfg) {
     const int GR = 3; const float GLOW = 0.85f;
     std::vector<float> glowR((size_t)LWv * LHv), glowG((size_t)LWv * LHv), glowB((size_t)LWv * LHv);
     float kern[(2 * GR + 1) * (2 * GR + 1)]; hud::buildGlowKernel(kern, GR);
+    int chalIdx = -1, chalSecs = 0; bool chalSolved = false, pEnter = false;   // challenge mode
+    std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
+    auto chalStart = std::chrono::steady_clock::now();
     glfwSetScrollCallback(win, scrollCB);
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
@@ -1548,7 +1570,16 @@ static int runInteractive(ViewCfg cfg) {
         if (kSpace && !pSpace) paused = !paused;                     // pause / resume
         if (kTab && !pTab && paused) stepOnce = true;               // single frame while paused
         if (kDel && !pDel) world.clearView();                       // clear the canvas
-        pSpace = kSpace; pTab = kTab; pDel = kDel;
+        bool kEnter = glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS || glfwGetKey(win, GLFW_KEY_KP_ENTER) == GLFW_PRESS;
+        if (kEnter && !pEnter) {                                     // cycle challenge mode -> sandbox
+            chalIdx++; if (chalIdx >= chal::kNumChallenges) chalIdx = -1;
+            if (chalIdx >= 0) {
+                chal::kChallenges[chalIdx].build(chalBuf.data(), LWv, LHv);
+                world.loadView(chalBuf.data(), LWv, LHv, viewX, viewY);
+                chalSolved = false; chalSecs = 0; chalStart = std::chrono::steady_clock::now();
+            } else world.clearView();
+        }
+        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter;
 
         // Mouse: left paints, right erases, middle eyedrops; clicks on the palette pick.
         double mx, my; glfwGetCursorPos(win, &mx, &my);
@@ -1577,10 +1608,21 @@ static int runInteractive(ViewCfg cfg) {
         // Compose the frame on the CPU (shared with the SDL viewers) and blit it.
         world.refreshHost();                         // refresh the CPU mirror for colouring
         ++tick;
+        if (chalIdx >= 0 && !chalSolved) {           // challenge win check on the live viewport
+            for (int y = 0; y < LHv; ++y)
+                for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.viewCell(viewX + x, viewY + y);
+            if (chal::kChallenges[chalIdx].won(chalBuf.data(), LWv, LHv)) {
+                chalSolved = true;
+                chalSecs = (int)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - chalStart).count();
+            }
+        }
         hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, tick };
         auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
         hud::renderCanvas(pixels.data(), view, cell, glowR, glowG, glowB, kern, GR, GLOW);
         hud::State hs{ &pal, orderedColors.data(), slotOf, current, brushRadius, paused, (int)(fpsEMA + 0.5), (int)mx, (int)my };
+        hs.chalIdx = chalIdx; hs.chalCount = chal::kNumChallenges; hs.chalSolved = chalSolved; hs.chalSecs = chalSecs;
+        hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
+        hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
         hud::drawHud(pixels.data(), view, hs, cell);
 
         int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH); fbW = cfbW; fbH = cfbH;
@@ -1603,7 +1645,7 @@ static int runInteractive(ViewCfg cfg) {
 // blit it to an offscreen FBO exactly as the live viewer does, write a PPM, and verify
 // the GL upload/blit is pixel-exact against the source buffer (so the live path is proven
 // without a display). Usage: --shot <file.ppm> [steps]
-static int runShot(ViewCfg cfg, const char* path, int steps) {
+static int runShot(ViewCfg cfg, const char* path, int steps, int chalShow) {
     const int PIXEL = cfg.scale;
     const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK), vh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
     const int WBOX = vw + 2, HBOX = vh + 2;
@@ -1619,6 +1661,11 @@ static int runShot(ViewCfg cfg, const char* path, int steps) {
     world.setWindow(0, 0);
     const int worldW = world.cellsW(), worldH = world.cellsH();
     int viewX = (worldW - LWv) / 2, viewY = (worldH - LHv) / 2;
+    if (chalShow >= 0 && chalShow < chal::kNumChallenges) {   // optionally stamp a challenge scene
+        std::vector<uint8_t> cb((size_t)LWv * LHv);
+        chal::kChallenges[chalShow].build(cb.data(), LWv, LHv);
+        world.loadView(cb.data(), LWv, LHv, viewX, viewY);
+    }
     for (int s = 0; s < steps; ++s) world.step();
     world.refreshHost();
 
@@ -1633,6 +1680,10 @@ static int runShot(ViewCfg cfg, const char* path, int steps) {
     auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
     hud::renderCanvas(pixels.data(), view, cell, gR, gG, gB, kern, GR, GLOW);
     hud::State hs{ &pal, orderedColors.data(), slotOf, (uint8_t)SAND, 4, false, 60, renderW / 2, 8 };
+    if (chalShow >= 0 && chalShow < chal::kNumChallenges) {
+        hs.chalIdx = chalShow; hs.chalCount = chal::kNumChallenges;
+        hs.chalName = chal::kChallenges[chalShow].name; hs.chalGoal = chal::kChallenges[chalShow].goal;
+    }
     hud::drawHud(pixels.data(), view, hs, cell);
 
     GLuint blit = linkProgram({compileShader(GL_VERTEX_SHADER, kPresentVert), compileShader(GL_FRAGMENT_SHADER, kBlitFrag)});
@@ -1676,7 +1727,8 @@ int main(int argc, char* argv[]) {
     }
     if (argc > 2 && std::strcmp(argv[1], "--shot") == 0) {
         int steps = (argc > 3) ? std::atoi(argv[3]) : 120;
-        return runShot(parseView(argc, argv), argv[2], steps);
+        int chalShow = (argc > 4) ? std::atoi(argv[4]) : -1;     // optional challenge index to stamp
+        return runShot(parseView(argc, argv), argv[2], steps, chalShow);
     }
     return runInteractive(parseView(argc, argv));
 }

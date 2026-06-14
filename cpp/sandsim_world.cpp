@@ -45,6 +45,7 @@ static const uint32_t kColors[MATERIAL_COUNT] = {
 // the shared interactive HUD/canvas drawing -- all in headers so every viewer matches.
 #include "../hud_meta.h"
 #include "../hud.h"
+#include "../challenges.h"   // challenge-mode mini-puzzles
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
 static constexpr int PAD = 16;     // WALL border / SIMD halo
@@ -184,6 +185,21 @@ public:
         for (int y = Y0; y < Y1; ++y)
             for (int x = X0; x < X1; ++x)
                 grid[(size_t)y * SW + x] = EMPTY;
+    }
+
+    // Clear the resident area and stamp a w*h scene at viewport-local (atX,atY) -- used to
+    // load a challenge layout in one shot. Marks the materials present so reactions run.
+    void loadView(const uint8_t* cells, int w, int h, int atX, int atY) {
+        clearView();
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                int lx = atX + x, ly = atY + y;
+                if (lx < 0 || lx >= LW || ly < 0 || ly >= LH) continue;
+                uint8_t m = cells[(size_t)y * w + x];
+                grid[(size_t)(ly + Y0) * SW + (lx + X0)] = m;
+                if (m) present[m] = true;
+            }
+        hasReactive = true;
     }
 
     void summary(uint64_t& checksum, uint64_t counts[MATERIAL_COUNT]) {
@@ -369,6 +385,9 @@ static int runInteractive(ViewCfg cfg) {
     bool paused = false;
     bool stepOnce = false;        // advance exactly one frame while paused (TAB)
     uint8_t paintMat = SAND;      // material laid down while dragging (current, or EMPTY when erasing)
+    int chalIdx = -1, chalSecs = 0; bool chalSolved = false;   // challenge mode (-1 = free sandbox)
+    std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
+    auto chalStart = std::chrono::steady_clock::now();
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
 
@@ -474,6 +493,15 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_TAB: if (paused) stepOnce = true; break; // step one frame while paused
                     case SDLK_BACKSPACE:
                     case SDLK_DELETE: world.clearView(); break;      // wipe the canvas to empty air
+                    case SDLK_RETURN:
+                    case SDLK_KP_ENTER:                              // cycle challenge mode -> sandbox
+                        chalIdx++; if (chalIdx >= chal::kNumChallenges) chalIdx = -1;
+                        if (chalIdx >= 0) {
+                            chal::kChallenges[chalIdx].build(chalBuf.data(), LWv, LHv);
+                            world.loadView(chalBuf.data(), LWv, LHv, viewX, viewY);
+                            chalSolved = false; chalSecs = 0; chalStart = std::chrono::steady_clock::now();
+                        } else world.clearView();
+                        break;
                     case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
                     case SDLK_RIGHT: viewX += PAN; if (viewX > worldW - LWv) viewX = worldW - LWv; break;
                     case SDLK_UP:    viewY -= PAN; if (viewY < 0) viewY = 0; break;
@@ -498,6 +526,15 @@ static int runInteractive(ViewCfg cfg) {
         if (paused && stepOnce) { world.step(); stepOnce = false; }   // single-frame advance
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
 
+        if (chalIdx >= 0 && !chalSolved) {          // challenge win check on the live viewport
+            for (int y = 0; y < LHv; ++y)
+                for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.viewCell(viewX + x, viewY + y);
+            if (chal::kChallenges[chalIdx].won(chalBuf.data(), LWv, LHv)) {
+                chalSolved = true;
+                chalSecs = (int)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - chalStart).count();
+            }
+        }
+
         // Shared canvas (flicker + bloom) and HUD (categorised palette, tooltip, brush, bar).
         hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, tick };
         auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
@@ -505,6 +542,9 @@ static int runInteractive(ViewCfg cfg) {
         float hlx_f, hly_f;
         SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &hlx_f, &hly_f);
         hud::State hs{ &pal, orderedColors.data(), slotOf, current, brushRadius, paused, (int)(fpsEMA + 0.5), (int)hlx_f, (int)hly_f };
+        hs.chalIdx = chalIdx; hs.chalCount = chal::kNumChallenges; hs.chalSolved = chalSolved; hs.chalSecs = chalSecs;
+        hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
+        hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
         hud::drawHud(pixels.data(), view, hs, cell);
 
         SDL_UpdateTexture(texture, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));

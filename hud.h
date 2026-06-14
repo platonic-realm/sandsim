@@ -32,6 +32,12 @@ struct State {
     bool paused;
     int fps;
     int mouseLX, mouseLY;            // logical/render-space mouse position
+    // Challenge mode (chalIdx < 0 = free sandbox, no banner).
+    int chalIdx = -1, chalCount = 0;
+    const char* chalName = nullptr;
+    const char* chalGoal = nullptr;
+    bool chalSolved = false;
+    int chalSecs = 0;
 };
 
 // Precompute the radial bloom falloff kernel for a given radius into kern (size (2r+1)^2).
@@ -148,7 +154,7 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
         std::snprintf(buf, sizeof buf, "%s  %s   BRUSH %d   %d FPS",
                       kNames[s.current], kCatNames[kSlotCat[s.slotOf[s.current]]], s.brushRadius, s.fps);
         ui::text(px, W, H, 26, by + 6, buf, 2, 0xFFFFFFFFu);
-        const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  TAB STEP  DEL CLEAR  ARROWS PAN";
+        const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  DEL CLEAR  ENTER CHALLENGE";
         int hw = ui::textWidth(help, 1);
         ui::text(px, W, H, W - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
     }
@@ -156,6 +162,18 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
         const char* pw = "PAUSED  -  SPACE RESUME  TAB STEP";
         int sc = 3, w = ui::textWidth(pw, sc);
         ui::label(px, W, H, (W - w) / 2, H / 2 - 10, pw, sc, 0xFFFFE060u);
+    }
+    if (s.chalIdx >= 0) {                          // challenge banner above the info bar
+        char cb[160];
+        std::snprintf(cb, sizeof cb, "CHALLENGE %d/%d   %s:  %s",
+                      s.chalIdx + 1, s.chalCount, s.chalName ? s.chalName : "", s.chalGoal ? s.chalGoal : "");
+        ui::label(px, W, H, 6, H - 24 - 22, cb, 1, s.chalSolved ? 0xFF70FF90u : 0xFFFFE060u);
+        if (s.chalSolved) {
+            char sv[64];
+            std::snprintf(sv, sizeof sv, "SOLVED IN %ds!   ENTER = NEXT", s.chalSecs);
+            int sc = 3, w = ui::textWidth(sv, sc);
+            ui::label(px, W, H, (W - w) / 2, H / 2 + 24, sv, sc, 0xFF70FF90u);
+        }
     }
 }
 

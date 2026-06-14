@@ -389,6 +389,15 @@ CPU and blits it as a texture while the sim still runs on the GPU; its `--shot f
 mode renders one frame offscreen for a headless snapshot. UI/render polish is per-viewer
 and need not be bit-identical — only the simulation is.)
 
+**Challenge mode** turns the sandbox into a little game: press `ENTER` to cycle through
+a set of bite-size puzzles (and once more to return to free play). Each stamps a starting
+scene into the arena and shows its objective in a banner; solve it with the materials and
+the win is detected live, with a **SOLVED!** time. The built-in challenges are *Fill the
+Tank* (pour water until it's full), *Melt the Ice* (bring fire or lava to a block of ice)
+and *Breach the Wall* (blast through stone with TNT, acid or thermite). The challenge
+definitions live in `challenges.h` and are shared by all three viewers, so any backend
+can be played.
+
 In the interactive view the simulated area is a little **larger than what you can
 see** — the viewport plus a one-chunk **live border** all around it, all of it
 stepping every frame. So panning with the arrows reveals an edge that has gone on
