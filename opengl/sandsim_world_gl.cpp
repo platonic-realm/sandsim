@@ -1498,7 +1498,8 @@ static int runInteractive(ViewCfg cfg) {
     std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
     auto chalStart = std::chrono::steady_clock::now();
     int sceneIdx = 0, toastFrames = 0; const char* toastMsg = nullptr; bool pF1 = false;   // freeplay scenes (F1)
-    bool pF5 = false, pF9 = false;                                                          // save / load (F5/F9)
+    bool pF5 = false, pF9 = false, pF2 = false;                                             // save / load / palette
+    bool paletteCollapsed = false;   // hide the material palette (F2 / click the tab)
     glfwSetScrollCallback(win, scrollCB);
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
@@ -1609,7 +1610,9 @@ static int runInteractive(ViewCfg cfg) {
             } else toastMsg = "NO SAVE FILE";
             toastFrames = 120;
         }
-        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter; pF1 = kF1; pF5 = kF5; pF9 = kF9;
+        bool kF2 = glfwGetKey(win, GLFW_KEY_F2) == GLFW_PRESS;
+        if (kF2 && !pF2) paletteCollapsed = !paletteCollapsed;     // toggle the palette
+        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter; pF1 = kF1; pF5 = kF5; pF9 = kF9; pF2 = kF2;
 
         // Mouse: left paints, right erases, middle eyedrops; clicks on the palette pick.
         double mx, my; glfwGetCursorPos(win, &mx, &my);
@@ -1617,8 +1620,9 @@ static int runInteractive(ViewCfg cfg) {
         bool bl = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT)   == GLFW_PRESS;
         bool br = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT)  == GLFW_PRESS;
         bool bm = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
-        int hov = ui::hit(pal, (int)mx, (int)my);
-        if (bl && !pBL) { if (hov >= 0) current = kPaletteOrder[hov]; else { painting = true; paintMat = current; } }
+        int hov = paletteCollapsed ? -1 : ui::hit(pal, (int)mx, (int)my);
+        if (bl && !pBL && hud::paletteTabHit((int)mx, (int)my)) paletteCollapsed = !paletteCollapsed;  // tab toggles
+        else if (bl && !pBL) { if (hov >= 0) current = kPaletteOrder[hov]; else { painting = true; paintMat = current; } }
         if (br && !pBR) { if (hov < 0) { painting = true; paintMat = EMPTY; } }
         if (bm && !pBM && hov < 0) { world.refreshHost(); current = world.viewCell(cellX, cellY); }
         if (!bl && !br) painting = false;
@@ -1656,6 +1660,7 @@ static int runInteractive(ViewCfg cfg) {
         hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
         hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
         hs.chalProgress = chalSolved ? 1.0f : chalP;
+        hs.paletteCollapsed = paletteCollapsed;
         if (toastFrames > 0) { hs.toast = toastMsg; --toastFrames; }
         hud::drawHud(pixels.data(), view, hs, cell);
 

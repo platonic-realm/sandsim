@@ -40,6 +40,7 @@ struct State {
     int chalSecs = 0;
     float chalProgress = 0.0f;        // 0..1 toward the goal (drawn as a bar)
     const char* toast = nullptr;      // transient centred message (e.g. "SCENE: VOLCANO")
+    bool paletteCollapsed = false;    // hide the palette grid, leaving just its tab
 };
 
 // Precompute the radial bloom falloff kernel for a given radius into kern (size (2r+1)^2).
@@ -101,6 +102,10 @@ inline void renderCanvas(uint32_t* px, const View& v, CellFn cell,
         }
 }
 
+// The clickable tab that collapses/expands the material palette: a fixed small rect at
+// the top-left, so the host can hit-test a click against it regardless of palette state.
+inline bool paletteTabHit(int mx, int my) { return mx >= 4 && mx < 86 && my >= 2 && my < 15; }
+
 // The categorised palette + accents + hover tooltip + brush-outline cursor + bottom info
 // bar + pause banner. Draws onto px (the frame, or a transparent overlay for the GPU
 // viewer). cell(wx,wy)->id is used only to name the cell under the cursor.
@@ -108,17 +113,19 @@ template <class CellFn>
 inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
     const ui::Palette& pal = *s.pal;
     const int W = v.renderW, H = v.renderH;
-    ui::draw(px, W, H, pal, s.orderedColors, s.slotOf[s.current]);
-    int stride = pal.sw + pal.gap;                  // thin per-category accent under each swatch
-    for (int i = 0; i < pal.n; ++i) {
-        int sx = pal.x0 + (i % pal.cols) * stride, sy = pal.y0 + (i / pal.cols) * stride;
-        ui::fillRect(px, W, H, sx, sy + pal.sw + 1, pal.sw, 2, kCatAccent[kSlotCat[i]]);
+    if (!s.paletteCollapsed) {
+        ui::draw(px, W, H, pal, s.orderedColors, s.slotOf[s.current]);
+        int stride = pal.sw + pal.gap;              // thin per-category accent under each swatch
+        for (int i = 0; i < pal.n; ++i) {
+            int sx = pal.x0 + (i % pal.cols) * stride, sy = pal.y0 + (i / pal.cols) * stride;
+            ui::fillRect(px, W, H, sx, sy + pal.sw + 1, pal.sw, 2, kCatAccent[kSlotCat[i]]);
+        }
     }
 
     int hlx = s.mouseLX, hly = s.mouseLY;
-    int hov = ui::hit(pal, hlx, hly);
+    int hov = s.paletteCollapsed ? -1 : ui::hit(pal, hlx, hly);
     bool onCanvas = (hlx >= 0 && hly >= 0 && hlx < W && hly < H);
-    if (hov < 0 && onCanvas) {                       // circular brush-outline cursor
+    if (hov < 0 && onCanvas && !paletteTabHit(hlx, hly)) {   // circular brush-outline cursor
         int ccx = hlx / v.PIXEL, ccy = hly / v.PIXEL, r = s.brushRadius;
         for (int dy = -r; dy <= r; ++dy)
             for (int dx = -r; dx <= r; ++dx) {
@@ -190,6 +197,12 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
     if (s.toast && *s.toast) {                     // transient centred toast
         int sc = 3, w = ui::textWidth(s.toast, sc);
         ui::label(px, W, H, (W - w) / 2, H / 3, s.toast, sc, 0xFF8FD8FFu);
+    }
+    {   // collapse/expand tab for the palette (always drawn, on top)
+        const char* tab = s.paletteCollapsed ? "MATERIALS +" : "MATERIALS -";
+        ui::fillRect(px, W, H, 4, 2, 82, 13, 0xFF2A2A34u);
+        ui::outline(px, W, H, 4, 2, 82, 13, 1, 0xFF52525Eu);
+        ui::text(px, W, H, 8, 4, tab, 1, 0xFFD2D2E0u);
     }
 }
 

@@ -391,6 +391,7 @@ static int runInteractive(ViewCfg cfg) {
     std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
     auto chalStart = std::chrono::steady_clock::now();
     int sceneIdx = 0, toastFrames = 0; const char* toastMsg = nullptr;   // freeplay scenes (F1)
+    bool paletteCollapsed = false;   // hide the material palette (F2 / click the tab)
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
 
@@ -424,9 +425,11 @@ static int runInteractive(ViewCfg cfg) {
             if (e.type == SDL_QUIT) quit = true;
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 float flx, fly; SDL_RenderWindowToLogical(renderer, e.button.x, e.button.y, &flx, &fly);
-                int h = ui::hit(pal, (int)flx, (int)fly);
+                int h = paletteCollapsed ? -1 : ui::hit(pal, (int)flx, (int)fly);
                 int cellX = viewX + (int)flx / PIXEL, cellY = viewY + (int)fly / PIXEL;
-                if (h >= 0) {                          // over the palette
+                if (hud::paletteTabHit((int)flx, (int)fly) && e.button.button == SDL_BUTTON_LEFT) {
+                    paletteCollapsed = !paletteCollapsed;   // click the tab to collapse/expand
+                } else if (h >= 0) {                   // over the palette
                     if (e.button.button == SDL_BUTTON_LEFT) current = kPaletteOrder[h];  // left-click picks a swatch
                 } else if (e.button.button == SDL_BUTTON_MIDDLE) {
                     current = world.viewCell(cellX, cellY);    // eyedropper: pick the material under the cursor
@@ -494,6 +497,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_SPACE: paused = !paused; break;        // freeze/resume the simulation
                     case SDLK_TAB: if (paused) stepOnce = true; break; // step one frame while paused
+                    case SDLK_F2: paletteCollapsed = !paletteCollapsed; break;   // toggle the palette
                     case SDLK_BACKSPACE:
                     case SDLK_DELETE: world.clearView(); break;      // wipe the canvas to empty air
                     case SDLK_RETURN:
@@ -577,6 +581,7 @@ static int runInteractive(ViewCfg cfg) {
         hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
         hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
         hs.chalProgress = chalSolved ? 1.0f : chalP;
+        hs.paletteCollapsed = paletteCollapsed;
         if (toastFrames > 0) { hs.toast = toastMsg; --toastFrames; }
         hud::drawHud(pixels.data(), view, hs, cell);
 
