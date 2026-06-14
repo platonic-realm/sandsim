@@ -389,6 +389,7 @@ static int runInteractive(ViewCfg cfg) {
     int brushRadius = 4;
     bool painting = false;
     bool paused = false;
+    bool stepOnce = false;        // advance exactly one frame while paused (TAB)
     uint8_t paintMat = SAND;      // material laid down while dragging (current, or EMPTY when erasing)
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
@@ -428,15 +429,23 @@ static int runInteractive(ViewCfg cfg) {
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 float flx, fly; SDL_RenderWindowToLogical(renderer, e.button.x, e.button.y, &flx, &fly);
                 int h = ui::hit(pal, (int)flx, (int)fly);
+                int cellX = viewX + (int)flx / PIXEL, cellY = viewY + (int)fly / PIXEL;
                 if (h >= 0) {                          // over the palette
                     if (e.button.button == SDL_BUTTON_LEFT) current = (uint8_t)h;   // left-click picks a swatch
-                } else {                               // over the canvas: left paints, right erases
+                } else if (e.button.button == SDL_BUTTON_MIDDLE) {
+                    current = world.viewCell(cellX, cellY);    // eyedropper: pick the material under the cursor
+                } else {                               // left paints, right erases
                     painting = true;
                     paintMat = (e.button.button == SDL_BUTTON_RIGHT) ? (uint8_t)EMPTY : current;
-                    world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, paintMat, brushRadius);
+                    world.paint(cellX, cellY, paintMat, brushRadius);
                 }
             }
             else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
+            else if (e.type == SDL_MOUSEWHEEL) {       // scroll to resize the brush
+                brushRadius += e.wheel.y;
+                if (brushRadius < 0)  brushRadius = 0;
+                if (brushRadius > 32) brushRadius = 32;
+            }
             else if (e.type == SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX, &mouseY);
             else if (e.type == SDL_KEYDOWN) {
                 switch (e.key.keysym.sym) {
@@ -488,6 +497,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_SPACE: paused = !paused; break;        // freeze/resume the simulation
+                    case SDLK_TAB: if (paused) stepOnce = true; break; // step one frame while paused
                     case SDLK_BACKSPACE:
                     case SDLK_DELETE: world.clearView(); break;      // wipe the canvas to empty air
                     case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
@@ -511,6 +521,7 @@ static int runInteractive(ViewCfg cfg) {
         if (frameDt > 0.0) fpsEMA = (fpsEMA <= 0.0) ? 1.0 / frameDt : fpsEMA * 0.92 + (1.0 / frameDt) * 0.08;
         for (int n = 0; !paused && acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
+        if (paused && stepOnce) { world.step(); stepOnce = false; }   // single-frame advance
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
 
         // Scatter each emissive cell's light into a cell-resolution bloom buffer.
@@ -600,12 +611,12 @@ static int runInteractive(ViewCfg cfg) {
             char buf[96];
             std::snprintf(buf, sizeof buf, "%s   BRUSH %d   %d FPS", kNames[current], brushRadius, (int)(fpsEMA + 0.5));
             ui::text(pixels.data(), renderW, renderH, 26, by + 6, buf, 2, 0xFFFFFFFFu);
-            const char* help = "LMB PAINT  RMB ERASE  [ ] BRUSH  SPACE PAUSE  DEL CLEAR  ARROWS PAN";
+            const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  TAB STEP  DEL CLEAR  ARROWS PAN";
             int hw = ui::textWidth(help, 1);
             ui::text(pixels.data(), renderW, renderH, renderW - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
         }
         if (paused) {  // centred banner so it's unmistakable
-            const char* pw = "PAUSED  -  SPACE TO RESUME";
+            const char* pw = "PAUSED  -  SPACE RESUME  TAB STEP";
             int s = 3, w = ui::textWidth(pw, s);
             ui::label(pixels.data(), renderW, renderH, (renderW - w) / 2, renderH / 2 - 10, pw, s, 0xFFFFE060u);
         }
