@@ -47,7 +47,7 @@ static constexpr int PAD = 16;     // WALL border / SIMD halo
 // Window resolution + virtual-pixel scale + simulation rate for the interactive
 // view. simHz is steps/second, decoupled from the render rate so the physics runs
 // at the same wall-clock speed on every backend.
-struct ViewCfg { int winW = 1024, winH = 768, scale = 2, simHz = 60; };
+struct ViewCfg { int winW = 1024, winH = 768, scale = 3, simHz = 60; };
 static ViewCfg parseView(int argc, char* argv[]) {
     ViewCfg c;
     if (const char* e = getenv("SANDSIM_RES"))   std::sscanf(e, "%dx%d", &c.winW, &c.winH);
@@ -284,12 +284,13 @@ static int runInteractive(ViewCfg cfg) {
     const int PIXEL = cfg.scale;
     const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK);   // viewport, in chunks
     const int vh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
-    const int WBOX = 2 * vw, HBOX = 2 * vh;                   // the whole local world (2x the view each way)
+    const int MARGIN = 1;                                    // chunks of live border around the view
+    const int WBOX = vw + 2 * MARGIN, HBOX = vh + 2 * MARGIN; // keep the sim small: just the view + a thin alive ring
     const char* DIR = "/tmp/sandsim_world_simd_interactive";
-    // Resident window = the WHOLE local world, so all of it keeps simulating: the
-    // off-screen surroundings stay alive and panning reveals a living world instead
-    // of chunks frozen where you left them. (The disk-streamed huge world is what
-    // --bench demonstrates; here we trade size for a fully-simulated, scrollable one.)
+    // Resident window = the view plus a MARGIN-chunk live border, all simulated, so
+    // a ring around the view keeps bubbling and panning reveals a living edge -- but
+    // we don't pay to simulate the whole surroundings (that made the CPU crawl). The
+    // disk-streamed huge world is what --bench demonstrates.
     SimdWorld world(WBOX, HBOX, WBOX, HBOX, DIR);
     const int worldW = world.cellsW(), worldH = world.cellsH();
     const int LWv = vw * CHUNK, LHv = vh * CHUNK;            // viewport, in cells

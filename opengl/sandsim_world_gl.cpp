@@ -43,7 +43,7 @@ static constexpr int PAD = 16;
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
 // decoupled from the render rate so the physics runs at the same wall-clock speed
 // on every backend.
-struct ViewCfg { int winW = 1024, winH = 768, scale = 2, simHz = 60; };
+struct ViewCfg { int winW = 1024, winH = 768, scale = 3, simHz = 60; };
 static ViewCfg parseView(int argc, char* argv[]) {
     ViewCfg c;
     if (const char* e = getenv("SANDSIM_RES"))   std::sscanf(e, "%dx%d", &c.winW, &c.winH);
@@ -724,7 +724,8 @@ static int runInteractive(ViewCfg cfg) {
     const int PIXEL = cfg.scale;
     const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK);   // viewport, in chunks
     const int vh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
-    const int WBOX = 2 * vw, HBOX = 2 * vh;                   // the whole local world (2x the view each way)
+    const int MARGIN = 1;                                    // chunks of live border around the view
+    const int WBOX = vw + 2 * MARGIN, HBOX = vh + 2 * MARGIN; // keep the sim small: just the view + a thin alive ring
     const int LWv = vw * CHUNK, LHv = vh * CHUNK;            // viewport, in cells
     const int renderW = LWv * PIXEL, renderH = LHv * PIXEL;
     GLFWwindow* win = initGL(true, renderW, renderH);
@@ -736,9 +737,10 @@ static int runInteractive(ViewCfg cfg) {
 
     std::string dir = "/tmp/sandsim_world_gl_interactive";
     std::filesystem::remove_all(dir);
-    // Resident window = the WHOLE local world, so all of it keeps simulating and the
-    // off-screen surroundings stay alive -- panning reveals a living world, not chunks
-    // frozen where you left them. (The disk-streamed huge world is what --bench shows.)
+    // Resident window = the view plus a MARGIN-chunk live border, all simulated, so a
+    // ring around the view stays alive and panning reveals a living edge -- without
+    // paying to simulate the whole surroundings. (The disk-streamed huge world is what
+    // --bench shows.)
     GpuWorld world(WBOX, HBOX, WBOX, HBOX, dir, compute);
     world.generateAllToDisk();
     world.setWindow(0, 0);

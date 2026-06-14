@@ -106,12 +106,14 @@ on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
 
-In the interactive view the **whole local world keeps simulating**, not just the
-part you can see: the arrows scroll a **viewport** over a world twice its size in
-each direction, all of which stays live, so panning reveals surroundings that have
-gone on bubbling, burning and growing while off-screen rather than chunks frozen
-where you left them. (The disk-streamed *world-larger-than-memory* is what `--bench`
-demonstrates; the interactive view trades unlimited size for a fully-alive sandbox.)
+In the interactive view the simulated area is a little **larger than what you can
+see** — the viewport plus a one-chunk **live border** all around it, all of it
+stepping every frame. So panning with the arrows reveals an edge that has gone on
+bubbling, burning and growing rather than chunks frozen where you left them, without
+paying to simulate the whole surroundings (simulating a much larger region made the
+CPU crawl). For a bigger, livelier picture at the same cost, raise `--scale` (bigger
+virtual pixels = fewer cells to simulate). The disk-streamed
+*world-larger-than-memory* is what `--bench` demonstrates.
 
 The update rule is **order-independent**: each frame is a fixed sequence of
 sub-passes, and within a pass every move is between a disjoint pair of cells
@@ -139,7 +141,7 @@ world is twice that in each direction, and all of it runs). The
 to real time), so the simulation runs at the same wall-clock speed on every
 backend, whatever the frame rate. All configurable the same way on all three —
 `--res WxH` / `--scale N` / `--sps STEPS_PER_SEC`, or `SANDSIM_RES` /
-`SANDSIM_SCALE` / `SANDSIM_SPS` (default **1024×768, 2×2, 60 steps/s**).
+`SANDSIM_SCALE` / `SANDSIM_SPS` (default **1024×768, 3×3, 60 steps/s**).
 
 Dependencies: a C++17 compiler + SDL2; GLEW + GLFW (OpenGL); the Vulkan SDK +
 `glslc` (Vulkan).
