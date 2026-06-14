@@ -375,11 +375,16 @@ on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
 
+The palette in the CPU/SDL viewer is **grouped into labelled categories** — Tools, Solids,
+Powders, Liquids, Gases, Fire & Heat, Explosives, Life & Growth, Circuits, Machines and
+Sources & Magic — with a thin category-coloured accent under each swatch so related
+materials cluster and read at a glance instead of scattering in add-order.
+
 The CPU/SDL viewer also draws a small **HUD** (rendered with a built-in bitmap font, so
-no font dependency): a **bottom info bar** showing the selected material's name, the
-brush size and the key controls; a **hover tooltip** that names whatever is under the
-cursor — any palette swatch or any cell in the world, so the 70-material palette is
-finally legible — a **circular brush outline** that previews exactly what you'll paint;
+no font dependency): a **bottom info bar** showing the selected material's name and
+**category**, the brush size, FPS and the key controls; a **hover tooltip** that names
+(and categorises) whatever is under the cursor — any palette swatch or any cell in the
+world, so the 70-material palette is finally legible — a **circular brush outline** that previews exactly what you'll paint;
 a live **FPS** readout; and a centred **PAUSED** banner. (UI/UX polish like this is
 per-viewer and need not be bit-identical across backends — only the simulation is.)
 

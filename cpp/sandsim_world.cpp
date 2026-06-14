@@ -53,6 +53,44 @@ static const char* kNames[MATERIAL_COUNT] = {
     "SPROUT", "BELT", "MAGNET", "IRON", "NITRO", "RUST", "SEED", "LASER", "BEAM", "ICICLE",
 };
 
+// The palette is laid out grouped by category (a navigable toolbox) rather than in raw
+// id order. kPaletteOrder is the swatch order (material ids); kSlotCat[i] is the category
+// of swatch i; each category has a name and an accent colour drawn under its swatches.
+static const char* kCatNames[] = {
+    "TOOLS", "SOLIDS", "POWDERS", "LIQUIDS", "GASES", "FIRE & HEAT",
+    "EXPLOSIVES", "LIFE & GROWTH", "CIRCUITS", "MACHINES", "SOURCES & MAGIC",
+};
+static const uint32_t kCatAccent[] = {
+    0xFF8890A0u, 0xFF6E6E78u, 0xFFC8A060u, 0xFF4488FFu, 0xFFA6C2D2u, 0xFFFF6633u,
+    0xFFFF3344u, 0xFF44C060u, 0xFFFFCC22u, 0xFFB060FFu, 0xFF40E0C0u,
+};
+static const uint8_t kPaletteOrder[MATERIAL_COUNT] = {
+    EMPTY,                                                                       // tools
+    WALL, WOOD, GLASS, ICE, OBSIDIAN,                                            // solids
+    SAND, ASH, SALT, SNOW, MUD, COAL, LYE, CEMENT, IRON, RUST, LEVITON, SEED,    // powders
+    WATER, OIL, ACID, MERCURY, CRYO,                                            // liquids
+    GAS, STEAM, SMOKE, WISP, FUMES, CHLORINE,                                   // gases
+    FIRE, LAVA, EMBER, FROST,                                                   // fire & heat
+    TNT, GUNPOWDER, THERMITE, SODIUM, PHOSPHORUS, NITRO, FUSE, BURNFUSE,        // explosives
+    PLANT, CRYSTAL, MOSS, CORAL, SPROUT, ICICLE, VIRUS, LIFE,                   // life & growth
+    SPARK, WIRE, EHEAD, ETAIL, IGNITER, SENSOR, BATTERY, LAMP, LAMPLIT,         // circuits
+    CLONER, BELT, MAGNET, LASER, BEAM, ANTIMATTER,                             // machines
+    SPRING, VOLCANO, GEYSER, VOID, PETRIFY, FIREWORK,                          // sources & magic
+};
+static const uint8_t kSlotCat[MATERIAL_COUNT] = {
+    0,
+    1,1,1,1,1,
+    2,2,2,2,2,2,2,2,2,2,2,2,
+    3,3,3,3,3,
+    4,4,4,4,4,4,
+    5,5,5,5,
+    6,6,6,6,6,6,6,6,
+    7,7,7,7,7,7,7,7,
+    8,8,8,8,8,8,8,8,8,
+    9,9,9,9,9,9,
+    10,10,10,10,10,10,
+};
+
 // Render-only: how brightly each material glows. Emissive cells cast a soft additive
 // bloom into their surroundings so fire, lava, lasers and lamps light up the scene.
 static float emissionStrength(uint8_t m) {
@@ -386,6 +424,11 @@ static int runInteractive(ViewCfg cfg) {
     // so it's driven entirely by MATERIAL_COUNT and kColors, with no per-material
     // swatch list or counts to keep in sync as materials are added.
     ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
+    // Swatch colours in category order, and a material id -> swatch slot reverse map.
+    std::vector<uint32_t> orderedColors(MATERIAL_COUNT);
+    int slotOf[MATERIAL_COUNT];
+    for (int i = 0; i < MATERIAL_COUNT; ++i) { orderedColors[i] = kColors[kPaletteOrder[i]]; slotOf[kPaletteOrder[i]] = i; }
+    auto catOfMat = [&](uint8_t m) { return kCatNames[kSlotCat[slotOf[m]]]; };
     int brushRadius = 4;
     bool painting = false;
     bool paused = false;
@@ -431,7 +474,7 @@ static int runInteractive(ViewCfg cfg) {
                 int h = ui::hit(pal, (int)flx, (int)fly);
                 int cellX = viewX + (int)flx / PIXEL, cellY = viewY + (int)fly / PIXEL;
                 if (h >= 0) {                          // over the palette
-                    if (e.button.button == SDL_BUTTON_LEFT) current = (uint8_t)h;   // left-click picks a swatch
+                    if (e.button.button == SDL_BUTTON_LEFT) current = kPaletteOrder[h];  // left-click picks a swatch
                 } else if (e.button.button == SDL_BUTTON_MIDDLE) {
                     current = world.viewCell(cellX, cellY);    // eyedropper: pick the material under the cursor
                 } else {                               // left paints, right erases
@@ -566,7 +609,14 @@ static int runInteractive(ViewCfg cfg) {
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
             }
-        ui::draw(pixels.data(), renderW, renderH, pal, kColors, current);
+        ui::draw(pixels.data(), renderW, renderH, pal, orderedColors.data(), slotOf[current]);
+        { // a thin category-coloured accent in the gap under each swatch, so groups read at a glance
+            int stride = pal.sw + pal.gap;
+            for (int i = 0; i < pal.n; ++i) {
+                int sx = pal.x0 + (i % pal.cols) * stride, sy = pal.y0 + (i / pal.cols) * stride;
+                ui::fillRect(pixels.data(), renderW, renderH, sx, sy + pal.sw + 1, pal.sw, 2, kCatAccent[kSlotCat[i]]);
+            }
+        }
 
         // ---- mouse hover: brush cursor ring on the canvas + a material tooltip ----
         float hlx_f, hly_f;
@@ -587,11 +637,13 @@ static int runInteractive(ViewCfg cfg) {
                         ui::fillRect(pixels.data(), renderW, renderH, cx*PIXEL, cy*PIXEL, PIXEL, PIXEL, 0xFFFFFFFFu);
                 }
         }
-        { // tooltip naming whatever is under the cursor (a palette swatch, or a cell)
-            const char* tip = nullptr;
-            if (hov >= 0) tip = kNames[hov];
-            else if (onCanvas) tip = kNames[world.viewCell(viewX + hlx / PIXEL, viewY + hly / PIXEL)];
-            if (tip && *tip) {
+        { // tooltip naming whatever is under the cursor (a palette swatch, or a cell): "NAME  CATEGORY"
+            int tipMat = -1;
+            if (hov >= 0) tipMat = kPaletteOrder[hov];
+            else if (onCanvas) tipMat = world.viewCell(viewX + hlx / PIXEL, viewY + hly / PIXEL);
+            if (tipMat >= 0 && kNames[tipMat] && *kNames[tipMat]) {
+                char tip[64];
+                std::snprintf(tip, sizeof tip, "%s  %s", kNames[tipMat], catOfMat((uint8_t)tipMat));
                 int tx = hlx + 16, ty = hly + 16, tw = ui::textWidth(tip, 2);
                 if (tx + tw + 6 > renderW) tx = renderW - tw - 6;
                 if (ty + 22 > renderH - 26) ty = hly - 24;
@@ -608,8 +660,8 @@ static int runInteractive(ViewCfg cfg) {
             ui::fillRect(pixels.data(), renderW, renderH, 0, by, renderW, 1, 0xFF3A3A44u);
             ui::fillRect(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, kColors[current] | 0xFF000000u);
             ui::outline(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, 1, 0xFF000000u);
-            char buf[96];
-            std::snprintf(buf, sizeof buf, "%s   BRUSH %d   %d FPS", kNames[current], brushRadius, (int)(fpsEMA + 0.5));
+            char buf[128];
+            std::snprintf(buf, sizeof buf, "%s  %s   BRUSH %d   %d FPS", kNames[current], catOfMat(current), brushRadius, (int)(fpsEMA + 0.5));
             ui::text(pixels.data(), renderW, renderH, 26, by + 6, buf, 2, 0xFFFFFFFFu);
             const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  TAB STEP  DEL CLEAR  ARROWS PAN";
             int hw = ui::textWidth(help, 1);
