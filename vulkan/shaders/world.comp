@@ -679,6 +679,20 @@ void main() {
         if (moved[i] == 1u) cells[i] = 56u; else if (moved[i] == 2u) cells[i] = 55u;
         return;
     }
+    if (pc.type == 80) {                                  // petrify: mark living(10/9/36/47) beside petrify(57) -> 1, petrify -> 2
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 57u) { r = 2u; }
+        else if (c==10u||c==9u||c==36u||c==47u) {
+            if (cells[i-1]==57u||cells[i+1]==57u||cells[i-pc.SW]==57u||cells[i+pc.SW]==57u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 81) {                                  // petrify: apply (1 -> petrify 57, 2 -> obsidian 23)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 57u; else if (moved[i] == 2u) cells[i] = 23u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

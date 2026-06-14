@@ -26,7 +26,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`. Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
@@ -34,7 +34,7 @@ lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
-`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `CORAL`, `ANTIMATTER`, `MOSS`, `FUSE`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER`/`SENSOR`/`BATTERY`/`LAMP` circuitry, Conway `LIFE` cells and `GEYSER` vents are solids that don't move.
+`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `CORAL`, `ANTIMATTER`, `MOSS`, `FUSE`, `PETRIFY`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER`/`SENSOR`/`BATTERY`/`LAMP` circuitry, Conway `LIFE` cells and `GEYSER` vents are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -285,6 +285,12 @@ CPU and GPU:
   it only watches — so a row of lamps beside a wire **lights in sequence as a pulse runs past (a
   marquee)**, and a battery-clocked wire makes a lamp **blink**. Build glowing signs, bar displays,
   running lights — animated art driven by your circuits.
+- `PETRIFY` is a **creeping stone-curse — medusa for the sandbox.** Drop it on anything *living*
+  — `PLANT`, `WOOD`, `MOSS`, `CORAL` — and the curse **sweeps through the connected greenery one
+  cell per frame, turning life to stone** and leaving a frozen `OBSIDIAN` statue in its wake (the
+  wavefront is the curse, the trail is rock). It's finite — living matter is consumed and every
+  curse-cell settles — so a petrification always burns out, leaving you a permanent obsidian
+  sculpture of whatever you turned. Petrify a forest, a moss-clad wall, or a whole coral reef.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

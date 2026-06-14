@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -367,6 +367,19 @@ GPU and produce a **bit-identical** world.
     light→dim blink cycle, deterministic) plus two `worldgen.h` chambers — a `LAMPLIT`-only block
     isolating the `hasReactive` edit, and a battery → wire marquee with a row of lamps —
     bit-identical across all three backends.
+  - **petrify** — `PETRIFY` is a creeping stone-curse (medusa): it turns every *living* cell it
+    touches — `PLANT`, `WOOD`, `MOSS`, `CORAL` — to stone. It reuses the one-frame-token trick that
+    `FUSE` uses: a 2-pass snapshot (passes 80/81) marks each living cell beside the curse (→
+    `PETRIFY`) and every `PETRIFY` cell (→ `OBSIDIAN`, settling after a single frame), then applies.
+    So the curse sweeps through a connected mass of greenery one ring per frame — the wavefront is
+    `PETRIFY`, the trail is stone — and it always terminates, since living matter is consumed and
+    each curse-cell settles (a permanent `OBSIDIAN` sculpture of whatever was turned, with no new
+    product material needed). It self-settles on its own, so `PETRIFY` is in the `hasReactive` set.
+    Verified: a unit test (the wave advances exactly one cell per frame leaving obsidian, all of
+    `WOOD`/`MOSS`/`CORAL` petrify while non-living `SAND` is spared, a whole plant block fully
+    converts and the curse terminates, deterministic) plus two `worldgen.h` chambers — a
+    `PETRIFY`-only block isolating the `hasReactive` edit, and a curse sweeping a plant + wood
+    forest — bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

@@ -110,8 +110,8 @@ enum Material : uint8_t {
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
-    LAMP = 55, LAMPLIT = 56,
-    MATERIAL_COUNT = 57
+    LAMP = 55, LAMPLIT = 56, PETRIFY = 57,
+    MATERIAL_COUNT = 58
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1184,6 +1184,36 @@ inline void lampLogic(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = LAMPLIT;
             else if (scratch[i] == 2) grid[i] = LAMP;
+        }
+}
+
+// Petrify: a creeping stone-curse -- medusa for the sandbox. A PETRIFY cell turns every
+// LIVING thing it touches -- PLANT, WOOD, MOSS, CORAL -- to stone, and itself settles to
+// OBSIDIAN a single frame later, so the curse sweeps through a connected mass of greenery
+// one ring per frame and leaves a frozen OBSIDIAN statue behind (the wavefront is PETRIFY,
+// the trail is stone -- the same one-frame-token trick FUSE uses). It is finite: living
+// matter is consumed and every curse-cell settles, so a petrification always terminates.
+// Drop it on a forest, a moss-clad wall or a coral reef and watch life turn to rock. Two-pass
+// snapshot: pass 1 marks each living cell beside the curse (-> PETRIFY) and each PETRIFY
+// (-> OBSIDIAN); pass 2 applies. Order-independent / GPU-identical.
+inline bool petrifiable(uint8_t m) { return m == PLANT || m == WOOD || m == MOSS || m == CORAL; }
+inline void petrify(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == PETRIFY) {
+                r = 2;  // the curse-cell settles to stone after one frame
+            } else if (petrifiable(c)) {
+                if (grid[i-1]==PETRIFY || grid[i+1]==PETRIFY || grid[i-SW]==PETRIFY || grid[i+SW]==PETRIFY) r = 1;  // cursed
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = PETRIFY;
+            else if (scratch[i] == 2) grid[i] = OBSIDIAN;
         }
 }
 
