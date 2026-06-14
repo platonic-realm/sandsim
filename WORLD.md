@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -179,6 +179,18 @@ GPU and produce a **bit-identical** world.
     flood). It joins the **ignition** pass as instant fuel, so a torch clears it off in a
     flash. Paint-only, verified by a unit test (moss creeps a floor and climbs a wall, every
     cell still touching stone -- it never floats free) plus a bit-identical `worldgen.h` chamber.
+  - **wireworld** — `WIRE`/`EHEAD`/`ETAIL` are a whole [Wireworld](https://en.wikipedia.org/wiki/Wireworld)
+    cellular automaton, so you can build digital logic (diodes, gates, clocks) out of copper
+    wire carrying electrons. Unlike every other rule it is a *synchronous CA* -- a cell's next
+    state depends only on the current states of its neighbours -- which is exactly what the
+    two-pass snapshot computes, except here the scratch buffer carries the **next material id**
+    (like the cloner) rather than a flag: pass 1 writes each cell's next state (`EHEAD`→`ETAIL`,
+    `ETAIL`→`WIRE`, and a `WIRE` → `EHEAD` iff 1 or 2 of its 8 neighbours are heads; `0` means
+    "not a wire cell"), pass 2 applies it. The 1-or-2-heads rule is the whole of digital logic:
+    a head races forward leaving a tail that stops it backing up, a fork that meets 3 heads
+    stays quiet (a gate), and a loop of wire clocks forever. Paint-only, verified by a unit test
+    (a pulse travels one cell per frame the correct way; a wire loop circulates an electron for
+    60 frames) plus a `worldgen.h` clock-loop chamber that agrees bit-for-bit across all three.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

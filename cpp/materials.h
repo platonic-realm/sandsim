@@ -78,14 +78,18 @@
 // fumes SINK through air and POOL in low ground and caverns (same density tier as SNOW:
 // heavier than air, floats on every liquid) while spreading out flat like a gas. Then a
 // SPARK or flame flashes the whole pocket -- so a pit that fills with fumes is a bomb.
+// WIRE / EHEAD / ETAIL are a Wireworld cellular automaton bolted onto the sim: copper WIRE
+// carries electrons (an EHEAD "head" chased by an ETAIL "tail") by the classic rules, so you
+// can build working logic -- diodes, AND/OR/XOR gates, clocks -- the digital counterpart to
+// the analog SPARK. They are inert solids; only the CA rule moves the electrons along.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
-    ANTIMATTER = 35, MOSS = 36, FUMES = 37,
-    MATERIAL_COUNT = 38
+    ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40,
+    MATERIAL_COUNT = 41
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -706,6 +710,36 @@ inline void growMoss(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = MOSS;
+        }
+}
+
+// Wireworld: a tiny synchronous cellular automaton layered on the sim, so copper WIRE can
+// carry electrons and you can build working logic -- diodes, gates, clocks. An electron is
+// a HEAD (EHEAD) chased by a TAIL (ETAIL). The classic rules: HEAD -> TAIL, TAIL -> WIRE, and
+// WIRE -> HEAD exactly when 1 or 2 of its 8 neighbours are heads (so a pulse races forward,
+// the tail stops it doubling back, and a junction that sees 3 heads stays quiet -- the basis
+// of gates). Being a synchronous CA it uses the two-pass snapshot with the scratch buffer
+// carrying the NEXT material id (like the cloner): pass 1 computes every cell's next state
+// from the grid snapshot, pass 2 applies it. scratch == 0 means "not a wire cell, leave it"
+// (wire cells never become EMPTY, so 0 is a safe sentinel). Order-independent / GPU-identical.
+inline void wireWorld(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == EHEAD) r = ETAIL;
+            else if (c == ETAIL) r = WIRE;
+            else if (c == WIRE) {
+                int h = (grid[i-1]==EHEAD) + (grid[i+1]==EHEAD) + (grid[i-SW]==EHEAD) + (grid[i+SW]==EHEAD)
+                      + (grid[i-SW-1]==EHEAD) + (grid[i-SW+1]==EHEAD) + (grid[i+SW-1]==EHEAD) + (grid[i+SW+1]==EHEAD);
+                r = (h == 1 || h == 2) ? EHEAD : WIRE;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = scratch[i];
         }
 }
 

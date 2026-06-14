@@ -443,6 +443,23 @@ void main() {
         if (moved[i] == 1u) cells[i] = 36u;
         return;
     }
+    if (pc.type == 50) {                                  // wireworld: compute next state into scratch (head39->tail40, tail40->wire38, wire38->head if 1|2 head nbrs)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 39u) r = 40u;
+        else if (c == 40u) r = 38u;
+        else if (c == 38u) {
+            int h = int(cells[i-1]==39u)+int(cells[i+1]==39u)+int(cells[i-pc.SW]==39u)+int(cells[i+pc.SW]==39u)
+                  + int(cells[i-pc.SW-1]==39u)+int(cells[i-pc.SW+1]==39u)+int(cells[i+pc.SW-1]==39u)+int(cells[i+pc.SW+1]==39u);
+            r = (h == 1 || h == 2) ? 39u : 38u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 51) {                                  // wireworld: apply (scratch != 0 -> become it)
+        int i = y * pc.SW + x;
+        if (moved[i] != 0u) cells[i] = moved[i];
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
