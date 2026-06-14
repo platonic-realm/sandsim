@@ -36,11 +36,14 @@
 // so it falls through air but floats on water and oil -- that melts to WATER near
 // FIRE/LAVA. MERCURY is the opposite end: the HEAVIEST material, a liquid metal that
 // everything else floats on, and it's toxic -- it kills the PLANT it touches.
+// GUNPOWDER is a pourable explosive: a black powder (it falls and piles like SAND)
+// that detonates like TNT when FIRE/LAVA touches it, chaining through itself.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
-    SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, MATERIAL_COUNT = 27
+    SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
+    MATERIAL_COUNT = 28
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -517,7 +520,7 @@ inline void poisonMercury(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X
 // so blasts chain). WALL, GLASS, WATER, LAVA, ICE, STEAM, ACID, SPRING survive --
 // a blast meeting water just stops at the waterline and gets quenched.
 inline bool blastable(uint8_t m) {
-    return m == EMPTY || m == SAND || m == OIL || m == GAS || m == WOOD || m == PLANT || m == SMOKE || m == TNT;
+    return m == EMPTY || m == SAND || m == OIL || m == GAS || m == WOOD || m == PLANT || m == SMOKE || m == TNT || m == GUNPOWDER;
 }
 
 // TNT: an explosive that detonates when FIRE/LAVA touches it, bursting into FIRE
@@ -532,7 +535,7 @@ inline void detonateTnt(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            scratch[i] = (grid[i] == TNT && hot) ? 1 : 0;
+            scratch[i] = ((grid[i] == TNT || grid[i] == GUNPOWDER) && hot) ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {
