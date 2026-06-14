@@ -46,13 +46,18 @@
 // that races across WATER turning it to ICE (seeding more FROST a step ahead so the
 // wave advances and leaves an ice trail), WITHERS the PLANT it touches, and is MELTED
 // back to WATER by FIRE/LAVA -- so heat stops a frost front the way water stops a fire.
+// WISP (will-o'-the-wisp / marsh gas) is the LIGHTEST material -- the inverse of MERCURY:
+// where everything floats on mercury, wisp rises through everything. It BUBBLES UP
+// through every liquid (water, oil, acid, lava, mercury) and gas to collect at the
+// ceiling, and it's FLAMMABLE -- FIRE/LAVA/SPARK ignite it -- so a flammable bubble
+// rising through water flashes when it surfaces into a flame.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
-    THERMITE = 28, FROST = 29,
-    MATERIAL_COUNT = 30
+    THERMITE = 28, FROST = 29, WISP = 30,
+    MATERIAL_COUNT = 31
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -183,8 +188,8 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            bool ign = ((c == OIL || c == PLANT || c == GAS) && hot)   // oil, plant & gas: instant
-                    || (c == WOOD && hot && woodCatches(x, y, frame)); // wood: slow
+            bool ign = ((c == OIL || c == PLANT || c == GAS || c == WISP) && hot)   // oil, plant, gas & wisp: instant
+                    || (c == WOOD && hot && woodCatches(x, y, frame));             // wood: slow
             scratch[i] = ign ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
@@ -451,7 +456,7 @@ inline void arcSpark(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
             bool nSpark = grid[i-1]==SPARK || grid[i+1]==SPARK || grid[i-SW]==SPARK || grid[i+SW]==SPARK;
             if (c == SPARK)      r = nWater ? 2 : 3;
             else if (c == WATER) { if (nSpark) r = 1; }
-            else if (c == GAS || c == OIL) { if (nSpark) r = 4; }
+            else if (c == GAS || c == OIL || c == WISP) { if (nSpark) r = 4; }
             scratch[i] = r;
         }
     for (int y = Y0; y < Y1; ++y)

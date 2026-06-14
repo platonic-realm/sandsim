@@ -38,7 +38,7 @@
 
 static StepFn g_step = nullptr;   // selected at startup (AVX2 or SSE)
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u,
 };
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
@@ -376,6 +376,7 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_b: current = GUNPOWDER; break;
                     case SDLK_k: current = THERMITE; break;
                     case SDLK_f: current = FROST; break;
+                    case SDLK_w: current = WISP; break;
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;

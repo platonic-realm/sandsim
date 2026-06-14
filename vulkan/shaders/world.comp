@@ -23,6 +23,7 @@ bool canEnter(uint s, uint t) {
     if (s == 5u) return t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> +SNOW
     if (s == 25u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
     if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
+    if (s == 30u) return t==3u||t==5u||t==11u||t==7u||t==26u||t==4u||t==6u||t==8u||t==12u||t==0u;  // WISP (lightest) -> rises through W,O,A,L,MERCURY + gases + E
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -31,8 +32,8 @@ bool canEnter(uint s, uint t) {
 }
 bool eligible(uint s) {
     if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==25u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,gunpowder,thermite,snow,mercury,lava,acid,water,oil
-    if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u;             // GAS/FIRE/STEAM/SMOKE rise
-    return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u;  // HORIZ: + mercury, smoke
+    if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;     // GAS/FIRE/STEAM/SMOKE/WISP rise
+    return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u;  // HORIZ: + mercury, smoke, wisp
 }
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
@@ -60,7 +61,7 @@ void main() {
         bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
                    cells[i-pc.SW]==6u||cells[i-pc.SW]==7u || cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
         uint c = cells[i]; uint r = 0u;
-        if (c == 5u || c == 10u || c == 4u) r = hot ? 1u : 0u;  // oil, plant & gas: instant
+        if (c == 5u || c == 10u || c == 4u || c == 30u) r = hot ? 1u : 0u;  // oil, plant, gas & wisp: instant
         else if (c == 9u && hot) {
             uint h = (uint(x)*149u + uint(y)*83u + uint(pc.frame)*157u) & 0xFFu;
             r = (h < 28u) ? 1u : 0u;
@@ -270,7 +271,7 @@ void main() {
         bool ns = cells[i-1]==22u||cells[i+1]==22u||cells[i-pc.SW]==22u||cells[i+pc.SW]==22u;
         if (c == 22u) r = nw ? 2u : 3u;
         else if (c == 3u) { if (ns) r = 1u; }
-        else if (c == 4u || c == 5u) { if (ns) r = 4u; }
+        else if (c == 4u || c == 5u || c == 30u) { if (ns) r = 4u; }
         moved[i] = r;
         return;
     }
