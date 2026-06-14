@@ -26,11 +26,11 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`, `MAGNET`, `IRON` (powder), `NITRO` (liquid). Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`, `MAGNET`, `IRON` (powder), `NITRO` (liquid), `RUST` (powder). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
-`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE`, `SODIUM`, `PHOSPHORUS`, `CEMENT` and `IRON` fall and pile like sand;
+`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE`, `SODIUM`, `PHOSPHORUS`, `CEMENT`, `IRON` and `RUST` fall and pile like sand;
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
@@ -324,6 +324,13 @@ CPU and GPU:
   **accretes into chains and clumps reaching out from the magnet**. Pour iron over a magnet, or
   run a stream of it there on a `BELT`, and it collects itself into the lodestone — a magnetic
   ore-sorter. (Loose iron away from any magnet is just a heavy grey powder you can pour and pile.)
+- `RUST` is **iron's foundry cycle.** Leave `IRON` sitting in `WATER` or `ACID` and it slowly
+  **corrodes to `RUST`** — a crumbly orange powder that pours and piles just like the iron it
+  came from. Hold rust to `FIRE` or `LAVA` and it **smelts back to `IRON`**, good as new. So a
+  damp dump of iron rots to rust over time, and a furnace reclaims it: pour iron into a flooded
+  pit to watch it rust away, then rake the rust through a lava channel to forge it back — an
+  endlessly recyclable metal. (The corrosion is gradual and probabilistic, so heaps rust from
+  the wet edges inward rather than all at once.)
 - `NITRO` is a **flowing liquid explosive — the one that *floods*.** Where `TNT` is a static block
   and `GUNPOWDER` a loose pile, nitro is a water-density liquid: **pour it into a fortress's cracks
   or flood a whole chamber**, then touch it with any flame and the entire connected pool

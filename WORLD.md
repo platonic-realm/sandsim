@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -465,6 +465,21 @@ GPU and produce a **bit-identical** world.
     `TNT` undisturbed), a WALL-bordered CPU test confirms `NITRO` moves *bit-identically* to `WATER`
     over 150 frames and that a 2-D pool chain-detonates from one spark, and a `worldgen.h` chamber —
     a flooded nitro pool set off by a lava drop — is bit-identical across all three backends.
+  - **corrosion / smelting** — `RUST` closes a two-way *foundry cycle* for iron with one
+    combined mark/apply pass (90/91). The mark step tags each `IRON` cell touching `WATER`/`ACID`
+    as `1` (corrode) and each `RUST` cell touching `FIRE`/`LAVA` as `2` (smelt); the apply step
+    turns `1`→`RUST` and `2`→`IRON`. The transition is gated on a per-cell spatial-temporal hash
+    firing only ~4/256 frames, so heaps corrode gradually from their wet edges inward rather than
+    flashing over all at once — and because the hash folds in the frame counter, the GPU passes
+    take `uFrame`/`pc.frame` as a uniform to stay in lockstep with the CPU. `RUST` itself is a
+    *source-only heavy powder* — it falls and rests exactly like `SAND`/`IRON` (added only to the
+    sand-group `canEnter` source and `SG_DOWN` eligibility, with no target wiring, since nothing
+    sinks *through* it). Its trigger materials (water/acid/fire/lava) are already reactive, so
+    `RUST`/`IRON` stay *out* of `hasReactive`; the pass is gated `present[IRON] || present[RUST]`.
+    Verified: a unit test (iron corrodes in water and in acid, rust smelts back near lava, dry
+    iron / cold rust stay inert, deterministic, and `RUST` rests exactly where `SAND` does) plus a
+    `worldgen.h` foundry chamber — a WALL box of iron-in-water beside rust-in-lava — bit-identical
+    across all three backends, with the default bench unchanged.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

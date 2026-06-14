@@ -111,8 +111,8 @@ enum Material : uint8_t {
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
-    BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64,
-    MATERIAL_COUNT = 65
+    BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65,
+    MATERIAL_COUNT = 66
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1355,6 +1355,42 @@ inline void magnetise(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = MAGNET;
+        }
+}
+
+// Rust: iron's corrosion -- and its undoing. Where IRON sits in WATER or ACID it slowly
+// rusts to a crumbly orange powder (RUST, which falls and piles like sand), so a submerged
+// iron structure disintegrates into a heap of rust; but heat reverses it -- RUST touching
+// FIRE or LAVA smelts back to IRON. So iron and rust form a foundry cycle: wet your iron to
+// corrode it, fire the rust to win it back. Both directions are frame-hashed (slow). It is
+// driven by reactive WATER/ACID/FIRE/LAVA, so neither IRON nor RUST needs hasReactive. Two-
+// pass snapshot: pass 1 marks each IRON to corrode (-> 1) and each RUST to smelt (-> 2);
+// pass 2 applies. Order-independent / GPU-identical.
+static constexpr uint32_t RUST_RATE = 4;       // of 256/frame -> corrosion / smelting over a few seconds
+inline bool rustTicks(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 131u + (uint32_t)y * 79u + frame * 197u) & 0xFFu;
+    return h < RUST_RATE;
+}
+inline void rustCycle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            uint8_t n0 = grid[i-1], n1 = grid[i+1], n2 = grid[i-SW], n3 = grid[i+SW];
+            if (c == IRON) {
+                bool wet = n0==WATER||n1==WATER||n2==WATER||n3==WATER||n0==ACID||n1==ACID||n2==ACID||n3==ACID;
+                if (wet && rustTicks(x, y, frame)) r = 1;            // corrode -> rust
+            } else if (c == RUST) {
+                bool hot = isHot(n0) || isHot(n1) || isHot(n2) || isHot(n3);
+                if (hot && rustTicks(x, y, frame)) r = 2;            // smelt -> iron
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = RUST;
+            else if (scratch[i] == 2) grid[i] = IRON;
         }
 }
 
