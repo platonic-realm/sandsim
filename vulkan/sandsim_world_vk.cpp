@@ -33,14 +33,14 @@
 #include <unistd.h>
 #include "../ui.h"       // on-screen material palette
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, MATERIAL_COUNT = 35 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MATERIAL_COUNT = 36 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
 static const uint32_t kColors[MATERIAL_COUNT] = {
-    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u,
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u, 0xFFCDA0FFu,
 };
 
 // Window resolution + virtual-pixel scale + simulation rate. simHz is steps/second,
@@ -193,7 +193,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -408,7 +408,7 @@ private:
             }
             if (hasReactive) {                      // reactions (gated): see shader pass types
                 int decay = (int)(frame + (uint32_t)f);
-                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45}) {  // + ... salt, mercury, thermite, frost, coal, cloner, crystal
+                for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47}) {  // + ... salt, mercury, thermite, frost, coal, cloner, crystal, antimatter
                     PushConsts pc{SW, X0, X1, Y0, Y1, t, 0, 0, 0, 0, decay};
                     vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
@@ -457,7 +457,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER) hasReactive = true;
                 stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = v;
             }
     }
@@ -631,6 +631,7 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_r: current = EMBER; break;
                 case SDLK_u: current = CLONER; break;
                 case SDLK_y: current = CRYSTAL; break;
+                case SDLK_j: current = ANTIMATTER; break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                 case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;

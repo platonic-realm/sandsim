@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -153,6 +153,19 @@ GPU and produce a **bit-identical** world.
     growth stays a delicate branching gem instead of a solid flood (verified: a 600-frame
     seed grows to a few hundred cells with **zero** cells having >=3 orthogonal crystal
     neighbours). Paint-only, verified bit-identical via a `worldgen.h` chamber.
+  - **annihilation** — `ANTIMATTER` disintegrates any *matter* it touches, the same
+    two-pass detonation *shape* as `TNT`/`THERMITE` but with no trigger and no survivors:
+    pass 1 marks every `ANTIMATTER` cell that has a non-`EMPTY`, non-`ANTIMATTER` neighbour;
+    pass 2 turns each marked cell to `FIRE` (the energy release) and clears every matter
+    cell next to one to `EMPTY` -- so it eats through `WALL`, `LAVA`, `WATER`, *anything*.
+    The crucial property is that antimatter is **never created, only consumed**: matter goes
+    to `EMPTY`, antimatter goes to `FIRE`, so its count strictly decreases and the reaction
+    always terminates (making the eaten matter into more antimatter would be a non-stopping
+    world-eater). A solid blob therefore peels to fire from the outside in over a few frames
+    -- the exposed inner layers annihilate against the fire their own surface just made --
+    carving a clean cavity its own size. Paint-only, verified by a unit test (a blob buried
+    in `WALL` eats its shell and burns itself out) plus a `worldgen.h` chamber that agrees
+    bit-for-bit.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, MATERIAL_COUNT = 35 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MATERIAL_COUNT = 36 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -478,6 +478,23 @@ void main() {
         if (moved[i] == 1u) cells[i] = 34u;
         return;
     }
+    if (uType == 46) {                                    // antimatter: mark each antimatter(35) touching matter (!=empty,!=antimatter)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 35u) {
+            bool m = (cells[i-1]!=0u&&cells[i-1]!=35u)||(cells[i+1]!=0u&&cells[i+1]!=35u)
+                   ||(cells[i-uSW]!=0u&&cells[i-uSW]!=35u)||(cells[i+uSW]!=0u&&cells[i+uSW]!=35u);
+            if (m) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 47) {                                    // antimatter: apply (marked -> fire 6; matter next to one -> empty)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) { cells[i] = 6u; return; }
+        bool nearAnnih = moved[i-1]==1u||moved[i+1]==1u||moved[i-uSW]==1u||moved[i+uSW]==1u;
+        if (nearAnnih && cells[i] != 0u && cells[i] != 35u) cells[i] = 0u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -547,6 +564,7 @@ vec3 matColor(uint m) {
     if (m == 32u) return vec3(0.800, 0.267, 0.067);
     if (m == 33u) return vec3(0.604, 0.251, 0.902);
     if (m == 34u) return vec3(0.251, 0.878, 0.753);
+    if (m == 35u) return vec3(0.804, 0.627, 1.000);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -705,7 +723,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 45; ++t) {         // + ... spark, salt, mercury, thermite, frost, coal, cloner, crystal
+            for (int t = 3; t <= 47; ++t) {         // + ... spark, salt, mercury, thermite, frost, coal, cloner, crystal, antimatter
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -716,7 +734,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER) hasReactive = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -786,7 +804,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
@@ -969,6 +987,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) current = EMBER;
         if (glfwGetKey(win, GLFW_KEY_U) == GLFW_PRESS) current = CLONER;
         if (glfwGetKey(win, GLFW_KEY_Y) == GLFW_PRESS) current = CRYSTAL;
+        if (glfwGetKey(win, GLFW_KEY_J) == GLFW_PRESS) current = ANTIMATTER;
         // Hold an arrow to scroll the viewport over the living world (smoother than
         // the old edge-triggered chunk step; the whole world is resident so it's free).
         if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;

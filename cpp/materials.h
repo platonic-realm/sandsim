@@ -65,13 +65,19 @@
 // to grow into bare air (plant creeps along waterlines, frost/virus consume a host). An
 // empty cell crystallises only when EXACTLY ONE neighbour is already crystal, so it
 // branches like a real gem/coral instead of flooding solid.
+// ANTIMATTER is a disintegration charge: inert in a vacuum, but it DISINTEGRATES any
+// matter it touches to EMPTY -- even WALL/LAVA/WATER, which stop fire and explosions --
+// flashing to FIRE as it is consumed. A blob annihilates itself and the matter around it
+// in a bright flash (peeling outside-in over a few frames), carving a clean cavity its own
+// size through anything; it is never created, only consumed, so it always burns itself out.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
-    MATERIAL_COUNT = 35
+    ANTIMATTER = 35,
+    MATERIAL_COUNT = 36
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -627,6 +633,37 @@ inline void growCrystal(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i]) grid[i] = CRYSTAL;
+        }
+}
+
+// Is this cell "matter" that antimatter annihilates? Anything that isn't empty space or
+// more antimatter -- so antimatter eats WALL, LAVA, WATER and every other material alike.
+inline bool isMatter(uint8_t m) { return m != EMPTY && m != ANTIMATTER; }
+
+// Antimatter: disintegrates any MATTER it touches. Inert in a vacuum, but the instant it
+// meets anything that isn't empty it annihilates -- a self-consuming disintegrator that
+// eats a growing cavity through ANYTHING (even WALL/LAVA/WATER, which stop fire and
+// explosions), flashing to FIRE as the energy is released and leaving a clean hole behind.
+// Two-pass snapshot like detonateTnt: pass 1 marks every ANTIMATTER cell that touches
+// matter; pass 2 turns each marked cell to FIRE (consuming the antimatter) and clears
+// every matter cell next to one to EMPTY. Pass 2 reads the pass-1 marks plus its own grid
+// cell, writing only itself, so it is order-independent and GPU-identical. Antimatter is
+// never created, only consumed, so its count strictly decreases and it always terminates --
+// a solid blob peels to fire from the outside in over a few frames (the exposed inner
+// layers annihilate against the fire their own surface just made), leaving a clean cavity.
+inline void annihilate(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool m = isMatter(grid[i-1]) || isMatter(grid[i+1]) || isMatter(grid[i-SW]) || isMatter(grid[i+SW]);
+            scratch[i] = (grid[i] == ANTIMATTER && m) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) { grid[i] = FIRE; continue; }
+            bool nearAnnih = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
+            if (nearAnnih && isMatter(grid[i])) grid[i] = EMPTY;
         }
 }
 

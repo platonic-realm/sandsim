@@ -408,6 +408,23 @@ void main() {
         if (moved[i] == 1u) cells[i] = 34u;
         return;
     }
+    if (pc.type == 46) {                                  // antimatter: mark each antimatter(35) touching matter (!=empty,!=antimatter)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 35u) {
+            bool m = (cells[i-1]!=0u&&cells[i-1]!=35u)||(cells[i+1]!=0u&&cells[i+1]!=35u)
+                   ||(cells[i-pc.SW]!=0u&&cells[i-pc.SW]!=35u)||(cells[i+pc.SW]!=0u&&cells[i+pc.SW]!=35u);
+            if (m) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 47) {                                  // antimatter: apply (marked -> fire 6; matter next to one -> empty)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) { cells[i] = 6u; return; }
+        bool nearAnnih = moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u;
+        if (nearAnnih && cells[i] != 0u && cells[i] != 35u) cells[i] = 0u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
