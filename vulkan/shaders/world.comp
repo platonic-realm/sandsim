@@ -278,6 +278,25 @@ void main() {
         else if (m == 3u) cells[i] = 0u; else if (m == 4u) cells[i] = 6u;
         return;
     }
+    if (pc.type == 32) {                                  // salt: mark salt-in-water(1) / ice-by-salt(2)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 24u) {
+            bool w = cells[i-1]==3u||cells[i+1]==3u||cells[i-pc.SW]==3u||cells[i+pc.SW]==3u;
+            uint h = (uint(x)*211u + uint(y)*79u + uint(pc.frame)*167u) & 0xFFu;
+            if (w && h < 24u) r = 1u;
+        } else if (c == 14u) {
+            bool s = cells[i-1]==24u||cells[i+1]==24u||cells[i-pc.SW]==24u||cells[i+pc.SW]==24u;
+            uint h = (uint(x)*71u + uint(y)*187u + uint(pc.frame)*113u) & 0xFFu;
+            if (s && h < 40u) r = 2u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 33) {                                  // salt: apply (1 -> empty, 2 -> water 3)
+        int i = y * pc.SW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 0u; else if (m == 2u) cells[i] = 3u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

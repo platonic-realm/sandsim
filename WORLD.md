@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`. Movement is a pure density swap (heavy→light:
   `SAND > LAVA > WATER > OIL > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -106,6 +106,11 @@ GPU and produce a **bit-identical** world.
     is what makes the pulse sweep a pool once and terminate instead of oscillating
     spark↔water forever. Paint-only, verified by a static unit test plus a walled
     `worldgen.h` chamber where it agrees bit-for-bit and ignites ~1900 gas cells.
+  - **de-icing** — `SALT` is the cold counterpart to a torch: one combined mark/apply
+    pass marks each cell `1` (salt touching water → `EMPTY`, dissolved) or `2` (ice
+    touching salt → `WATER`, melted with no heat), then applies. Both frame-hashed, so
+    a finite sprinkle melts a finite patch of ice and then dissolves into the
+    meltwater. Paint-only; verified by a static unit test and a `worldgen.h` seed.
 
   All reaction passes are gated by a per-world flag set when a reactive material
   is present, so a world of only sand/water/rock pays nothing for them. The

@@ -31,11 +31,13 @@
 // SPARK is electricity: it arcs through WATER as a one-shot pulse and ignites the
 // GAS/OIL it passes. OBSIDIAN is the glassy black rock LAVA forges into when WATER
 // quenches it (instead of plain stone) -- an inert, fire/acid/blast-proof solid.
+// SALT is a de-icer: it MELTS the ICE it touches to WATER (no heat needed) and then
+// DISSOLVES away in that water.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
-    SPARK = 22, OBSIDIAN = 23, MATERIAL_COUNT = 24
+    SPARK = 22, OBSIDIAN = 23, SALT = 24, MATERIAL_COUNT = 25
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -445,6 +447,44 @@ inline void arcSpark(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
             else if (v == 2) grid[i] = STEAM;
             else if (v == 3) grid[i] = EMPTY;
             else if (v == 4) grid[i] = FIRE;
+        }
+}
+
+static constexpr uint32_t SALT_MELT = 40;      // of 256/frame -> ice next to salt thaws (no heat)
+inline bool saltMeltsIce(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 71u + (uint32_t)y * 187u + frame * 113u) & 0xFFu;
+    return h < SALT_MELT;
+}
+static constexpr uint32_t SALT_DISSOLVE = 24;  // of 256/frame -> salt in water dissolves away
+inline bool saltDissolves(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 211u + (uint32_t)y * 79u + frame * 167u) & 0xFFu;
+    return h < SALT_DISSOLVE;
+}
+
+// Salt (de-icer): the ICE it touches melts to WATER without any heat, and the SALT
+// itself dissolves away in WATER -- so a sprinkle on a frozen pond thaws a patch and
+// then disappears into the meltwater. One combined two-pass snapshot (mark 1=salt
+// dissolves to empty, 2=ice melts to water; then apply), order-independent and
+// GPU-identical.
+inline void saltCycle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == SALT) {
+                bool water = grid[i-1]==WATER || grid[i+1]==WATER || grid[i-SW]==WATER || grid[i+SW]==WATER;
+                if (water && saltDissolves(x, y, frame)) r = 1;
+            } else if (c == ICE) {
+                bool salt = grid[i-1]==SALT || grid[i+1]==SALT || grid[i-SW]==SALT || grid[i+SW]==SALT;
+                if (salt && saltMeltsIce(x, y, frame)) r = 2;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = EMPTY;
+            else if (scratch[i] == 2) grid[i] = WATER;
         }
 }
 
