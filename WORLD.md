@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`, `SEED`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`, `SEED`, `LASER`, `BEAM`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -495,6 +495,23 @@ GPU and produce a **bit-identical** world.
     `SAND` does) plus a `worldgen.h` nursery chamber — a WALL box packed with a `SEED`/`WATER`
     checkerboard that germinates and grows into trees, which also isolates the `growTree` gate edit
     (no `SPROUT` is seeded, so the trees only grow via the `present[SEED]` clause) — bit-identical
+    across all three backends, with the default bench unchanged.
+  - **the cutting ray** — `LASER` + `BEAM` are a directed energy weapon built on the 1-frame-token
+    pattern (like the `FUSE` tip) but *sustained* rather than one-shot. `LASER` is a fixed emitter;
+    `BEAM` is the travelling token. One combined mark/apply pass (94/95) marks every cell — `BEAM`→1,
+    `LASER`→2, a flammable (`WOOD`/`PLANT`/`OIL`/`GAS`/`WISP`/`MOSS`/`FUMES`/`COAL`/`SEED`)→3 — then
+    applies, deciding each cell from its own state plus *the cell to its left* (the side the beam
+    travels from): a beam cell holds only while fed from the left (else it clears), an empty cell to
+    the right of a beam/emitter becomes beam (extend/emit), and a flammable struck from the left
+    becomes `FIRE`. So the ray grows one cell per frame, runs continuously from emitter to the first
+    obstacle, burns through fuel, and is blocked by anything solid or wet — bounded by the terrain,
+    and race-free because no cell ever reads a *neighbour's* mid-update grid (only neighbour
+    *scratch*, which is frozen between the two passes). Both pieces are non-moving, so there are
+    **zero movement-mask edits**. Both self-act (the emitter fires, an unfed beam retracts), so both
+    are in the `hasReactive` set on all three backends; the pass is gated `present[LASER] ||
+    present[BEAM]`. Verified: a unit test (a laser projects a continuous rightward beam, the beam
+    burns wood to fire, a wall stops it cold, an unfed beam vanishes, deterministic) plus a
+    `worldgen.h` range chamber — a column of emitters firing across scattered wood — bit-identical
     across all three backends, with the default bench unchanged.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus

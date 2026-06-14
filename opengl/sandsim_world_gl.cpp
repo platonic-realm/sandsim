@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66, MATERIAL_COUNT = 67 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66, LASER = 67, BEAM = 68, MATERIAL_COUNT = 69 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -870,6 +870,20 @@ void main() {
         if (moved[i] == 1u) cells[i] = 60u;
         return;
     }
+    if (uType == 94) {                                    // laser: mark BEAM(68)->1, LASER(67)->2, flammable->3
+        int i = y * uSW + x; uint c = cells[i];
+        bool burn = c==9u||c==10u||c==5u||c==4u||c==30u||c==36u||c==37u||c==31u||c==66u;
+        moved[i] = (c == 68u) ? 1u : (c == 67u) ? 2u : (burn ? 3u : 0u);
+        return;
+    }
+    if (uType == 95) {                                    // laser: apply -- beam travels right, fed from the left
+        int i = y * uSW + x; uint left = moved[i-1];
+        bool fed = (left == 1u || left == 2u);
+        if (cells[i] == 68u)      cells[i] = fed ? 68u : 0u;   // hold the ray only while fed
+        else if (cells[i] == 0u)  { if (fed) cells[i] = 68u; } // extend / emit into empty
+        else if (moved[i] == 3u)  { if (fed) cells[i] = 6u; }  // burn flammable -> FIRE
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -971,6 +985,8 @@ vec3 matColor(uint m) {
     if (m == 64u) return vec3(0.784, 0.878, 0.439);
     if (m == 65u) return vec3(0.659, 0.314, 0.125);
     if (m == 66u) return vec3(0.710, 0.514, 0.180);
+    if (m == 67u) return vec3(0.565, 0.094, 0.094);
+    if (m == 68u) return vec3(1.0, 0.188, 0.188);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -1129,7 +1145,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 93; ++t) {         // + ... belt, magnet, rust, seed
+            for (int t = 3; t <= 95; ++t) {         // + ... magnet, rust, seed, laser
                 if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
@@ -1141,7 +1157,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL || material == PHOSPHORUS || material == CEMENT || material == CHLORINE || material == BATTERY || material == BURNFUSE || material == CRYO || material == LAMPLIT || material == PETRIFY || material == FIREWORK || material == SPROUT || material == BELT || material == MAGNET) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL || material == PHOSPHORUS || material == CEMENT || material == CHLORINE || material == BATTERY || material == BURNFUSE || material == CRYO || material == LAMPLIT || material == PETRIFY || material == FIREWORK || material == SPROUT || material == BELT || material == MAGNET || material == LASER || material == BEAM) hasReactive = true;
         present[material] = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
@@ -1232,6 +1248,7 @@ private:
             case 88: case 89: return present[MAGNET];
             case 90: case 91: return present[IRON] || present[RUST];
             case 92: case 93: return present[SEED];
+            case 94: case 95: return present[LASER] || present[BEAM];
             case 52: case 53: return present[IGNITER];
             default: return true;   // 3-17, 26-27: always-on core reactions
         }
@@ -1260,7 +1277,7 @@ private:
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
                 present[v] = true;
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL || v == PHOSPHORUS || v == CEMENT || v == CHLORINE || v == BATTERY || v == BURNFUSE || v == CRYO || v == LAMPLIT || v == PETRIFY || v == FIREWORK || v == SPROUT || v == BELT || v == MAGNET) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL || v == PHOSPHORUS || v == CEMENT || v == CHLORINE || v == BATTERY || v == BURNFUSE || v == CRYO || v == LAMPLIT || v == PETRIFY || v == FIREWORK || v == SPROUT || v == BELT || v == MAGNET || v == LASER || v == BEAM) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }

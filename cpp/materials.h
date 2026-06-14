@@ -112,7 +112,8 @@ enum Material : uint8_t {
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
     BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66,
-    MATERIAL_COUNT = 67
+    LASER = 67, BEAM = 68,
+    MATERIAL_COUNT = 69
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1423,6 +1424,37 @@ inline void germinateSeed(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = SPROUT;
+        }
+}
+
+// Laser: a fixed emitter that fires a horizontal cutting BEAM to its right. The beam
+// is a one-cell-per-frame travelling token (like a fuse tip) that extends rightward
+// through empty space, holds as a continuous ray while it is fed from the emitter,
+// BURNS the flammables it strikes into FIRE, and is stopped cold by anything solid or
+// wet. Lay a laser across a cavern as a tripwire that torches forests and oil slicks,
+// or aim it at a fuse. The beam never falls; its travel is entirely this two-pass
+// reaction, race-free because every cell is decided from its own state plus the cell
+// to its LEFT (the side the beam comes from). Both the emitter and the beam are
+// non-moving, so there are no movement-mask edits.
+inline bool beamBurns(uint8_t m) {            // flammables a beam ignites on contact
+    return m == WOOD || m == PLANT || m == OIL || m == GAS || m == WISP
+        || m == MOSS || m == FUMES || m == COAL || m == SEED;
+}
+inline void laserBeam(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i];
+            scratch[i] = (c == BEAM) ? 1 : (c == LASER) ? 2 : beamBurns(c) ? 3 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t left = scratch[i-1];           // beam travels right: every cell looks to its left
+            bool fed = (left == 1 || left == 2);   // left is a live BEAM or the LASER emitter
+            if (grid[i] == BEAM)        grid[i] = fed ? BEAM : EMPTY;   // hold the ray only while fed from behind
+            else if (grid[i] == EMPTY)  { if (fed) grid[i] = BEAM; }    // extend / emit into empty
+            else if (scratch[i] == 3)   { if (fed) grid[i] = FIRE; }    // burn the flammable the beam strikes
         }
 }
 

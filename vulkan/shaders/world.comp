@@ -800,6 +800,20 @@ void main() {
         if (moved[i] == 1u) cells[i] = 60u;
         return;
     }
+    if (pc.type == 94) {                                  // laser: mark BEAM(68)->1, LASER(67)->2, flammable->3
+        int i = y * pc.SW + x; uint c = cells[i];
+        bool burn = c==9u||c==10u||c==5u||c==4u||c==30u||c==36u||c==37u||c==31u||c==66u;
+        moved[i] = (c == 68u) ? 1u : (c == 67u) ? 2u : (burn ? 3u : 0u);
+        return;
+    }
+    if (pc.type == 95) {                                  // laser: apply -- beam travels right, fed from the left
+        int i = y * pc.SW + x; uint left = moved[i-1];
+        bool fed = (left == 1u || left == 2u);
+        if (cells[i] == 68u)      cells[i] = fed ? 68u : 0u;   // hold the ray only while fed
+        else if (cells[i] == 0u)  { if (fed) cells[i] = 68u; } // extend / emit into empty
+        else if (moved[i] == 3u)  { if (fed) cells[i] = 6u; }  // burn flammable -> FIRE
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
