@@ -630,6 +630,22 @@ void main() {
         if (moved[i] == 1u) cells[i] = 39u;
         return;
     }
+    if (pc.type == 74) {                                  // fuse: mark FUSE(52) catching (-> 1 = burnfuse) or BURNFUSE(53) burning out (-> 2 = fire)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 52u) {
+            uint n0=cells[i-1], n1=cells[i+1], n2=cells[i-pc.SW], n3=cells[i+pc.SW];
+            bool lit = n0==6u||n0==7u||n0==32u||n0==53u||n1==6u||n1==7u||n1==32u||n1==53u
+                     ||n2==6u||n2==7u||n2==32u||n2==53u||n3==6u||n3==7u||n3==32u||n3==53u;
+            if (lit) r = 1u;
+        } else if (c == 53u) { r = 2u; }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 75) {                                  // fuse: apply (1 -> burnfuse 53, 2 -> fire 6)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 53u; else if (moved[i] == 2u) cells[i] = 6u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

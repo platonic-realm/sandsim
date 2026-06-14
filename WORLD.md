@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -326,6 +326,21 @@ GPU and produce a **bit-identical** world.
     exactly two pulses in 24 frames, deterministic) plus a battery+wire `worldgen.h` chamber —
     isolating *both* the `hasReactive` and wireworld-gate edits at once — bit-identical across all
     three backends.
+  - **fuse** — `FUSE` is a detonator cord that burns along itself at a crisp one cell per frame, so
+    explosions can be *timed and routed*. It uses a second material, `BURNFUSE`, as the travelling
+    tip. A 2-pass snapshot (passes 74/75) marks each `FUSE` cell that catches — from an adjacent
+    `BURNFUSE`, `FIRE`, `LAVA` or `EMBER` — and each `BURNFUSE` cell (which always burns out); pass 2
+    turns the first into `BURNFUSE` and the second into `FIRE`. Because the tip lives exactly one
+    frame before becoming fire, the burn advances exactly one cell per frame and leaves a short
+    fading trail of flame, and that fire detonates or ignites whatever the cord meets — so the
+    detonation reuses the existing fire mechanics with no special-casing of `TNT`/`GUNPOWDER`/etc.
+    `FUSE` is inert until lit, so (like `TNT`) it is *not* in `hasReactive`; `BURNFUSE` burns out on
+    its own, so it *is* (the reaction is gated on `present[FUSE] || present[BURNFUSE]`, and the
+    `present[]` latch keeps it running until every tip has burned out). Verified: a unit test (a cord
+    catches from fire, the tip advances exactly one cell per frame, it leaves a fire trail, an unlit
+    cord stays inert, lava lights it too, deterministic) plus two `worldgen.h` chambers — a
+    `BURNFUSE`-only block isolating the `hasReactive` edit, and a full fuse → `TNT` contraption —
+    bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

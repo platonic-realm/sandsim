@@ -109,8 +109,8 @@ enum Material : uint8_t {
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
-    CEMENT = 49, CHLORINE = 50, BATTERY = 51,
-    MATERIAL_COUNT = 52
+    CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53,
+    MATERIAL_COUNT = 54
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1082,6 +1082,37 @@ inline void emitBattery(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = EHEAD;
+        }
+}
+
+// Fuse: a detonator cord. A length of FUSE is inert until lit -- then it burns along
+// itself at a crisp one cell per frame, so you can route and TIME an explosion: lay a
+// long winding fuse from a safe corner to a cache of TNT and light the far end. The
+// burning tip is a second material, BURNFUSE, which lives a single frame before turning
+// to FIRE, so the burn advances exactly one cell per frame and leaves a short fading
+// trail of flame that detonates or ignites whatever the cord runs into -- the existing
+// fire mechanics do the rest, no special-casing. FUSE catches from an adjacent burning
+// tip or from FIRE/LAVA/EMBER, so a torch, a fleck of lava or an IGNITER's flame all
+// light it. Two-pass snapshot: pass 1 marks each FUSE that catches (-> BURNFUSE) and
+// each BURNFUSE that burns out (-> FIRE); pass 2 applies. Order-independent / GPU-identical.
+inline bool litsFuse(uint8_t m) { return m == FIRE || m == LAVA || m == EMBER || m == BURNFUSE; }
+inline void burnFuse(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == FUSE) {
+                if (litsFuse(grid[i-1]) || litsFuse(grid[i+1]) || litsFuse(grid[i-SW]) || litsFuse(grid[i+SW])) r = 1;  // catches
+            } else if (c == BURNFUSE) {
+                r = 2;  // the tip lives one frame, then burns out to FIRE
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = BURNFUSE;
+            else if (scratch[i] == 2) grid[i] = FIRE;
         }
 }
 
