@@ -814,6 +814,23 @@ void main() {
         else if (moved[i] == 3u)  { if (fed) cells[i] = 6u; }  // burn flammable -> FIRE
         return;
     }
+    if (pc.type == 96) {                                  // icicle: mark ICICLE(69) -> 1 grow-down, 2 freeze tip
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 69u) {
+            uint h = (uint(x)*113u + uint(y)*167u + uint(pc.frame)*211u) & 0xFFu;
+            if (cells[i+pc.SW] != 0u)  r = 2u;            // hit a floor -> freeze tip
+            else if (h < 8u)           r = 2u;            // taper off -> freeze tip
+            else                       r = 1u;            // grow: descend, laying ice
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 97) {                                  // icicle: apply (1/2 -> ICE 14; tip descends into empty below)
+        int i = y * pc.SW + x;
+        if (moved[i] == 2u || moved[i] == 1u) cells[i] = 14u;
+        else if (cells[i] == 0u && moved[i-pc.SW] == 1u) cells[i] = 69u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`, `SEED`, `LASER`, `BEAM`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`, `SEED`, `LASER`, `BEAM`, `ICICLE`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -513,6 +513,23 @@ GPU and produce a **bit-identical** world.
     burns wood to fire, a wall stops it cold, an unfed beam vanishes, deterministic) plus a
     `worldgen.h` range chamber — a column of emitters firing across scattered wood — bit-identical
     across all three backends, with the default bench unchanged.
+  - **dripstone** — `ICICLE` is the *downward* structural mirror of the upward-climbing `SPROUT`:
+    the exact same reaction-driven directed-build pattern, flipped. One combined mark/apply pass
+    (96/97): a tip is tagged `1` (grow) when the cell directly below it is empty and a per-cell
+    frame-hash hasn't yet fired, or `2` (freeze) when it meets a floor or that hash rolls a finish;
+    the apply turns the tip cell into `ICE` either way, and an empty cell whose *upstairs* neighbour
+    rolled `1` becomes the new tip — so the tip descends one cell per frame, leaving a hanging spear
+    of ice and tapering to a finite length. The body is plain `ICE`, so it melts to water near
+    `FIRE`/`LAVA` and thaws by `SALT` for free (no new product id, no new behaviour). It is
+    non-moving and race-free by the usual rule (a cell only ever reads a neighbour's frozen
+    *scratch*, never its mid-update grid), so there are **zero movement-mask edits**. The tip
+    self-grows with no reactive trigger, so `ICICLE` is in the `hasReactive` set on all three
+    backends; the pass is gated `present[ICICLE]`. This completes the directed-growth set —
+    up (`SPROUT`), and now down (`ICICLE`). Verified: a unit test (the tip descends one cell per
+    frame laying ice, builds a hanging column with a single live tip, freezes solid at a floor,
+    tapers off on its own over open space, deterministic) plus a `worldgen.h` cave chamber — a row
+    of tips hanging from a ceiling — bit-identical across all three backends, with the default
+    bench unchanged.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

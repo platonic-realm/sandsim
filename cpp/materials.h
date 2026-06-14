@@ -112,8 +112,8 @@ enum Material : uint8_t {
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
     BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66,
-    LASER = 67, BEAM = 68,
-    MATERIAL_COUNT = 69
+    LASER = 67, BEAM = 68, ICICLE = 69,
+    MATERIAL_COUNT = 70
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1455,6 +1455,42 @@ inline void laserBeam(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
             if (grid[i] == BEAM)        grid[i] = fed ? BEAM : EMPTY;   // hold the ray only while fed from behind
             else if (grid[i] == EMPTY)  { if (fed) grid[i] = BEAM; }    // extend / emit into empty
             else if (scratch[i] == 3)   { if (fed) grid[i] = FIRE; }    // burn the flammable the beam strikes
+        }
+}
+
+// Icicle: the downward mirror of SPROUT's upward climb. Paint a tip on the underside
+// of a ceiling and it grows straight DOWN -- one cell per frame the tip descends into
+// the empty space below, leaving a body of ordinary ICE behind it, until it rolls a
+// random "finish" or reaches a floor and the tip itself freezes solid. So icicles
+// drip from cave roofs and overhangs as hanging spears of ice, and because the body
+// is plain ICE it glistens, melts back to water near FIRE/LAVA, and thaws by SALT --
+// all the existing ice behaviour for free. It is the exact structural inverse of the
+// tree (climb-up-laying-wood becomes descend-laying-ice), non-moving, race-free.
+static constexpr uint32_t ICICLE_STOP = 8;     // of 256/frame -> icicles reach ~30 cells before tapering off
+inline bool icicleStops(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 113u + (uint32_t)y * 167u + frame * 211u) & 0xFFu;
+    return h < ICICLE_STOP;
+}
+inline void growIcicle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == ICICLE) {
+                if (grid[i+SW] != EMPTY)         r = 2;   // hit a floor -> the tip freezes here
+                else if (icicleStops(x, y, frame)) r = 2; // tapers off -> the tip freezes here
+                else                             r = 1;   // grow: descend, laying ice behind
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 2)      grid[i] = ICE;       // the tip solidifies into the body
+            else if (scratch[i] == 1) grid[i] = ICE;       // body laid down as the tip descends
+            else if (grid[i] == EMPTY) {
+                if (scratch[i-SW] == 1) grid[i] = ICICLE;  // the tip above descended into here
+            }
         }
 }
 

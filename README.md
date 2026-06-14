@@ -26,7 +26,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`, `MAGNET`, `IRON` (powder), `NITRO` (liquid), `RUST` (powder), `SEED` (powder), `LASER`, `BEAM`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`, `MAGNET`, `IRON` (powder), `NITRO` (liquid), `RUST` (powder), `SEED` (powder), `LASER`, `BEAM`, `ICICLE`. Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
@@ -34,7 +34,7 @@ lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
-`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `CORAL`, `ANTIMATTER`, `MOSS`, `FUSE`, `PETRIFY`, `BELT`, `MAGNET`, `LASER`, `BEAM`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER`/`SENSOR`/`BATTERY`/`LAMP` circuitry, Conway `LIFE` cells and `GEYSER` vents are solids that don't move.
+`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `CORAL`, `ANTIMATTER`, `MOSS`, `FUSE`, `PETRIFY`, `BELT`, `MAGNET`, `LASER`, `BEAM`, `ICICLE`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER`/`SENSOR`/`BATTERY`/`LAMP` circuitry, Conway `LIFE` cells and `GEYSER` vents are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -345,6 +345,13 @@ CPU and GPU:
   **stopped cold by anything solid or wet**. Lay one across a cavern as a tripwire that torches a
   forest or an oil slick, aim it at a `FUSE` to set off a charge, or block it with a wall to switch
   it off. (The beam doesn't fall — it's pure energy — and cut the emitter and the ray winks out.)
+- `ICICLE` is **dripstone — the downward mirror of a growing tree.** Where a `SPROUT` climbs
+  *up* laying a wood trunk, an icicle grows *down*: paint a tip on the underside of a ceiling or
+  an overhang and it **descends one cell per frame, leaving a hanging spear of `ICE` behind it**,
+  until it reaches a floor or tapers off and the tip itself freezes solid. Because the body is
+  ordinary ice it glistens, **melts back to water near `FIRE`/`LAVA`** and thaws against `SALT`,
+  so a cave roof can grow a fringe of icicles that drip away the moment the heat rises. (Hang a
+  row of them for a frozen portcullis, or grow one over a fire to watch it melt.)
 - `NITRO` is a **flowing liquid explosive — the one that *floods*.** Where `TNT` is a static block
   and `GUNPOWDER` a loose pile, nitro is a water-density liquid: **pour it into a fortress's cracks
   or flood a whole chamber**, then touch it with any flame and the entire connected pool
