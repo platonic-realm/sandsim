@@ -111,7 +111,8 @@ enum Material : uint8_t {
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
-    MATERIAL_COUNT = 61
+    BELT = 61,
+    MATERIAL_COUNT = 62
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1296,6 +1297,38 @@ inline void growTree(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
                 else if (scratch[i-1]==2 || scratch[i+1]==2 || scratch[i-SW]==2 || scratch[i+SW]==2)
                     grid[i] = PLANT;                       // leafy canopy
             }
+        }
+}
+
+// Conveyor belt: a static machine that carries the loose material resting on it sideways
+// (to the right). The material a belt moves is anything that isn't fixed -- it shifts the
+// cell directly above a BELT one to the right when that cell is occupied and the cell to
+// its right is empty, so a stream of sand or a trickle of water riding a belt line marches
+// along, piling up where the belt ends or a wall blocks it. Build belt lines, feed them with
+// a CLONER and route material into a furnace or a sorter -- a whole automation layer. The
+// motion is reaction-driven (the belt itself never moves), and race-free: an empty cell is
+// filled only from the single cell to its left, which carries its material id through the
+// scratch buffer (the same trick CLONER uses) so the two passes never read a half-updated
+// grid. Sentinels in scratch: 254 = "this cell empties", 255 = "no change", else a material id.
+inline bool conveyable(uint8_t m) { return m != EMPTY && m != WALL && m != BELT; }
+inline void runConveyor(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 255;                                                // no change
+            if (grid[i] == EMPTY) {                                        // can a rider arrive from the left?
+                if (conveyable(grid[i-1]) && grid[i-1+SW] == BELT) r = grid[i-1];
+            } else if (conveyable(grid[i]) && grid[i+SW] == BELT && grid[i+1] == EMPTY) {
+                r = 254;                                                   // this rider moves off to the right
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = scratch[i];
+            if (r == 254) grid[i] = EMPTY;
+            else if (r != 255) grid[i] = r;                                // the material that arrived
         }
 }
 

@@ -26,7 +26,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`. Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
@@ -34,7 +34,7 @@ lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
-`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `CORAL`, `ANTIMATTER`, `MOSS`, `FUSE`, `PETRIFY`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER`/`SENSOR`/`BATTERY`/`LAMP` circuitry, Conway `LIFE` cells and `GEYSER` vents are solids that don't move.
+`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `CORAL`, `ANTIMATTER`, `MOSS`, `FUSE`, `PETRIFY`, `BELT`, and the `WIRE`/`EHEAD`/`ETAIL`/`IGNITER`/`SENSOR`/`BATTERY`/`LAMP` circuitry, Conway `LIFE` cells and `GEYSER` vents are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -311,6 +311,13 @@ CPU and GPU:
   **petrifies to stone**, and its leaves **creep further near water**. (It uses the same
   reaction-driven climb as `FIREWORK`, but builds instead of bursting.) Sit one under a `CLONER`
   to plant an endless orchard.
+- `BELT` is a **conveyor belt — the start of an automation layer.** It's a static machine that
+  **carries the loose material resting on it sideways (to the right):** lay a row of belts and any
+  loose stuff on top — sand, ore, even a trickle of water — **marches along** and piles up where
+  the line ends or a wall blocks it. Feed a belt with a `CLONER` for an endless supply, route the
+  stream into a furnace of `LAVA`, drop it off a ledge to sort by where it lands — build factories.
+  The belt never moves; it's the *riders* that travel, claimed one cell at a time so they shuffle
+  along single-file.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

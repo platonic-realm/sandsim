@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -422,6 +422,22 @@ GPU and produce a **bit-identical** world.
     consumed, a tip under a ceiling crowns at once, a stacked pair climbs without the lower one
     crowning early, deterministic) plus a `worldgen.h` chamber — a row of sprouts growing into a
     forest, isolating the `hasReactive` edit — bit-identical across all three backends.
+  - **conveyor** — `BELT` is a static machine that carries the loose material *resting on it* one
+    cell to the right per frame — reaction-driven sideways motion (a new direction for the
+    technique). A 2-pass snapshot (passes 86/87) marks each cell: a non-fixed rider sitting on a
+    belt (`grid[i+SW] == BELT`) with an empty cell to its right is tagged "leaving" (`254`), and
+    an empty cell whose left neighbour is such a rider is tagged with that rider's material id;
+    pass 2 empties the leavers and fills the receivers with the carried id (`255` means no change).
+    The id is carried through the scratch buffer exactly as `CLONER` does, so the two passes never
+    read a half-updated grid, and the move is race-free because an empty cell is filled only from
+    the single cell to its left — so a packed line marches right single-file, piling up where the
+    belt ends or a wall blocks it. The belt self-acts, so `BELT` is in the `hasReactive` set; it is
+    a non-moving solid and needs no movement-mask edits. Build belt lines, feed them with a
+    `CLONER`, and route material into a furnace or a sorter. Verified: a unit test (a grain advances
+    one cell per frame and is conserved, off-belt material is left alone, a packed line marches
+    single-file, a rider piles against a wall, liquids ride too, deterministic) plus a `worldgen.h`
+    chamber — a sand pile riding a belt into a heap, isolating the `hasReactive` edit — bit-identical
+    across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

@@ -737,6 +737,23 @@ void main() {
         }
         return;
     }
+    if (pc.type == 86) {                                  // conveyor: mark (254 leaving / material-id arriving / 255 no change)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 255u;
+        if (c == 0u) {
+            uint cl = cells[i-1];
+            if (cl != 0u && cl != 1u && cl != 61u && cells[i-1+pc.SW] == 61u) r = cl;  // arrives from the left
+        } else if (c != 1u && c != 61u && cells[i+pc.SW] == 61u && cells[i+1] == 0u) {
+            r = 254u;                                                                  // rides off to the right
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 87) {                                  // conveyor: apply
+        int i = y * pc.SW + x; uint r = moved[i];
+        if (r == 254u) cells[i] = 0u;
+        else if (r != 255u) cells[i] = r;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
