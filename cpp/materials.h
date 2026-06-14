@@ -111,8 +111,8 @@ enum Material : uint8_t {
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
-    BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65,
-    MATERIAL_COUNT = 66
+    BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66,
+    MATERIAL_COUNT = 67
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1391,6 +1391,38 @@ inline void rustCycle(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = RUST;
             else if (scratch[i] == 2) grid[i] = IRON;
+        }
+}
+
+// Seed: a heavy powder that sows a forest. A SEED comes to rest on the ground like
+// sand, and when it is supported (something solid directly below it) with WATER in
+// reach it germinates into a SPROUT -- which then climbs and grows a whole tree on
+// its own. So you scatter seeds over a wet valley and watch a forest erupt. The
+// germination is one mark/apply pass gated by a frame-hash so seeds sprout gradually
+// rather than all at once; the product is the existing SPROUT, so no new growth code
+// is needed. Because SEED *creates* SPROUT, the growTree gate becomes
+// present[SPROUT] || present[SEED] (the same cross-creation gating LYE->SALT needs).
+static constexpr uint32_t SEED_RATE = 8;       // of 256/frame -> a watered, grounded seed germinates
+inline bool seedGerminates(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 89u + (uint32_t)y * 197u + frame * 151u) & 0xFFu;
+    return h < SEED_RATE;
+}
+inline void germinateSeed(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == SEED && grid[i+SW] != EMPTY) {           // resting on solid ground
+                uint8_t n0 = grid[i-1], n1 = grid[i+1], n2 = grid[i-SW], n3 = grid[i+SW];
+                bool wet = n0 == WATER || n1 == WATER || n2 == WATER || n3 == WATER;
+                if (wet && seedGerminates(x, y, frame)) r = 1;      // germinate -> sprout
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = SPROUT;
         }
 }
 

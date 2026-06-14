@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`, `RUST`, `SEED`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -479,6 +479,22 @@ GPU and produce a **bit-identical** world.
     Verified: a unit test (iron corrodes in water and in acid, rust smelts back near lava, dry
     iron / cold rust stay inert, deterministic, and `RUST` rests exactly where `SAND` does) plus a
     `worldgen.h` foundry chamber — a WALL box of iron-in-water beside rust-in-lava — bit-identical
+    across all three backends, with the default bench unchanged.
+  - **germination** — `SEED` sows forests by *reusing* the whole `SPROUT` tree-grower rather than
+    adding any growth code. `SEED` is a source-only heavy powder (it pours and rests exactly like
+    `SAND`/`IRON`); one combined mark/apply pass (92/93) tags each `SEED` that is *supported* (the
+    cell directly below it is non-empty, so it has settled on ground) and has a `WATER` neighbour,
+    gated by a per-cell frame-hash firing ~8/256 frames so a scatter of seeds sprouts gradually,
+    then turns the tagged grains into `SPROUT`. From there the existing `growTree` pass climbs and
+    lays the trunk/canopy. Because `SEED` *creates* `SPROUT`, the `growTree` gate is widened to
+    `present[SPROUT] || present[SEED]` (the same cross-creation gating `LYE`→`SALT` needs, since a
+    reaction-created material never sets its own presence latch). `SEED`'s trigger (`WATER`) is
+    already reactive, so `SEED` itself stays *out* of `hasReactive`; the germination pass is gated
+    `present[SEED]`. Verified: a unit test (a grounded watered seed germinates to `SPROUT`, a
+    mid-air seed and a dry seed both stay dormant, deterministic, and `SEED` rests exactly where
+    `SAND` does) plus a `worldgen.h` nursery chamber — a WALL box packed with a `SEED`/`WATER`
+    checkerboard that germinates and grows into trees, which also isolates the `growTree` gate edit
+    (no `SPROUT` is seeded, so the trees only grow via the `present[SEED]` clause) — bit-identical
     across all three backends, with the default bench unchanged.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus

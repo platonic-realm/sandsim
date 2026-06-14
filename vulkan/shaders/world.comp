@@ -16,7 +16,7 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u || s == 63u || s == 65u) return t==7u||t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u || s == 63u || s == 65u || s == 66u) return t==7u||t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT/IRON/RUST/SEED
     if (s == 7u) return t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u; // LAVA -> +SNOW,FUMES
     if (s == 11u) return t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;        // ACID -> +SNOW,FUMES
     if (s == 3u || s == 64u) return t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                // WATER -> +SNOW,FUMES
@@ -32,7 +32,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==63u||s==65u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==64u||s==5u||s==54u;  // DOWN: +lye/sodium/phosphorus/cement
+    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==63u||s==65u||s==66u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==64u||s==5u||s==54u;  // DOWN: +lye/sodium/phosphorus/cement/iron/rust/seed
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u||s==59u;  // +LEVITON rises (up + diag-up, NOT horiz)     // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==64u||s==5u||s==54u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u||s==50u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
@@ -782,6 +782,22 @@ void main() {
     if (pc.type == 91) {                                  // rust: apply (1 -> rust 65, 2 -> iron 63)
         int i = y * pc.SW + x;
         if (moved[i] == 1u) cells[i] = 65u; else if (moved[i] == 2u) cells[i] = 63u;
+        return;
+    }
+    if (pc.type == 92) {                                  // seed: mark SEED(66) grounded + beside WATER -> 1 (germinate)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 66u && cells[i+pc.SW] != 0u) {
+            uint n0=cells[i-1], n1=cells[i+1], n2=cells[i-pc.SW], n3=cells[i+pc.SW];
+            bool wet = n0==3u||n1==3u||n2==3u||n3==3u;
+            uint h = (uint(x)*89u + uint(y)*197u + uint(pc.frame)*151u) & 0xFFu;
+            if (wet && h < 8u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 93) {                                  // seed: apply (1 -> sprout 60)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 60u;
         return;
     }
     int cx = x - pc.X0;

@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, MATERIAL_COUNT = 66 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66, MATERIAL_COUNT = 67 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -86,7 +86,7 @@ uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u || s == 63u || s == 65u) return t==7u||t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u || s == 63u || s == 65u || s == 66u) return t==7u||t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT/IRON/RUST/SEED
     if (s == 7u) return t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u; // LAVA -> A,W,O,SNOW,FUMES,G,F,St,Sm,E
     if (s == 11u) return t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;        // ACID -> W,O,SNOW,FUMES,G,F,St,Sm,E
     if (s == 3u || s == 64u) return t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,FUMES,G,F,St,Sm,E
@@ -102,7 +102,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==63u||s==65u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==64u||s==5u||s==54u; // DOWN: +lye/sodium/phosphorus/cement
+    if (uGrp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==63u||s==65u||s==66u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==64u||s==5u||s==54u; // DOWN: +lye/sodium/phosphorus/cement/iron/rust/seed
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u||s==59u;  // +LEVITON rises (up + diag-up, NOT horiz)       // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==64u||s==5u||s==54u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u||s==50u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
@@ -854,6 +854,22 @@ void main() {
         if (moved[i] == 1u) cells[i] = 65u; else if (moved[i] == 2u) cells[i] = 63u;
         return;
     }
+    if (uType == 92) {                                    // seed: mark SEED(66) grounded + beside WATER -> 1 (germinate)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 66u && cells[i+uSW] != 0u) {
+            uint n0=cells[i-1], n1=cells[i+1], n2=cells[i-uSW], n3=cells[i+uSW];
+            bool wet = n0==3u||n1==3u||n2==3u||n3==3u;
+            uint h = (uint(x)*89u + uint(y)*197u + uint(uFrame)*151u) & 0xFFu;
+            if (wet && h < 8u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 93) {                                    // seed: apply (1 -> sprout 60)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 60u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -954,6 +970,7 @@ vec3 matColor(uint m) {
     if (m == 63u) return vec3(0.471, 0.502, 0.533);
     if (m == 64u) return vec3(0.784, 0.878, 0.439);
     if (m == 65u) return vec3(0.659, 0.314, 0.125);
+    if (m == 66u) return vec3(0.710, 0.514, 0.180);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -1112,7 +1129,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 91; ++t) {         // + ... sprout, belt, magnet, rust
+            for (int t = 3; t <= 93; ++t) {         // + ... belt, magnet, rust, seed
                 if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
@@ -1210,10 +1227,11 @@ private:
             case 78: case 79: return present[LAMP] || present[LAMPLIT];
             case 80: case 81: return present[PETRIFY];
             case 82: case 83: return present[FIREWORK];
-            case 84: case 85: return present[SPROUT];
+            case 84: case 85: return present[SPROUT] || present[SEED];
             case 86: case 87: return present[BELT];
             case 88: case 89: return present[MAGNET];
             case 90: case 91: return present[IRON] || present[RUST];
+            case 92: case 93: return present[SEED];
             case 52: case 53: return present[IGNITER];
             default: return true;   // 3-17, 26-27: always-on core reactions
         }
