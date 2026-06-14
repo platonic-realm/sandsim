@@ -85,6 +85,10 @@
 // IGNITER is the bridge from those circuits to the physical world: an inert solid that does
 // nothing until a Wireworld electron (EHEAD) reaches it, then spits FIRE into the empty cells
 // around it. Wire a clock or a gate to one and you have a logic-controlled detonator.
+// SENSOR is the opposite bridge -- physical to digital: an inert solid that fires an electron
+// (EHEAD) into the WIRE next to it whenever any real material (a liquid, powder, fire, ...)
+// touches it, so a circuit can READ the world. Sensor + wire logic + igniter = a machine that
+// senses, decides and acts (a flood alarm, a heat trigger, a feedback loop).
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
@@ -92,7 +96,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    MATERIAL_COUNT = 42
+    SENSOR = 42,
+    MATERIAL_COUNT = 43
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -766,6 +771,36 @@ inline void fireIgniter(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
             if (grid[i] == EMPTY) {
                 bool nIgn = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
                 if (nIgn) grid[i] = FIRE;
+            }
+        }
+}
+
+// What a SENSOR detects: any "real" material that flows up against it -- i.e. anything that
+// isn't empty space, structural WALL, or part of the circuitry itself.
+inline bool detectable(uint8_t m) {
+    return m != EMPTY && m != WALL && m != WIRE && m != EHEAD && m != ETAIL && m != SENSOR && m != IGNITER;
+}
+
+// Sensor: the physical->digital bridge. An inert solid that, whenever a detectable material is
+// next to it, lights the WIRE next to it into an electron head (EHEAD) -- so the Wireworld
+// circuit can sense the world (water rising, lava arriving, a powder piling up) and react.
+// Two-pass snapshot: pass 1 marks every SENSOR with a detectable neighbour, pass 2 turns a
+// WIRE next to a marked sensor into EHEAD. The injected head is propagated by the wireworld
+// pass on the following frame; while the trigger persists the sensor re-fires periodically
+// (the wire cycles head->tail->wire before it can be relit), so a steady touch is a clock.
+inline void senseWorld(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool d = detectable(grid[i-1]) || detectable(grid[i+1]) || detectable(grid[i-SW]) || detectable(grid[i+SW]);
+            scratch[i] = (grid[i] == SENSOR && d) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (grid[i] == WIRE) {
+                bool nSensor = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
+                if (nSensor) grid[i] = EHEAD;
             }
         }
 }

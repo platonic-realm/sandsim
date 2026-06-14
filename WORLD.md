@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -201,6 +201,17 @@ GPU and produce a **bit-identical** world.
     clock a timed detonator and a gate a triggered one -- a circuit can light `FUMES`, set off
     `GUNPOWDER`/`TNT` or burn a structure on cue. Verified bit-identical via a `worldgen.h`
     clock-driven-igniter-over-gunpowder chamber.
+  - **sensing** — `SENSOR` is the opposite bridge, physical → digital, completing the I/O: it
+    marks every sensor that has a *detectable* neighbour (anything that isn't empty/wall/the
+    circuitry itself) and turns the `WIRE` next to a marked sensor into an electron head -- so a
+    flood, a lava flow or a piling powder injects a signal the logic can act on. Because the
+    sensor *creates* electrons, it's the one exception to the presence-gate's "never created by
+    another reaction" rule, so the wireworld pass is also gated on a sensor being present (else
+    a sensor-made electron wouldn't propagate). Together `SENSOR` (in), `WIRE`/`EHEAD`/`ETAIL`
+    (logic) and `IGNITER` (out) are a full sense→decide→act machine. Verified by a unit test
+    (water touching a sensor injects an electron that travels the wire; inert when untouched)
+    plus a `worldgen.h` chamber wiring a water-tripped sensor through to an igniter over
+    gunpowder, bit-identical across all three.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

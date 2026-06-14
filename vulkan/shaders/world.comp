@@ -36,6 +36,7 @@ bool eligible(uint s) {
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;     // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
+bool det(uint m) { return m!=0u && m!=1u && m!=38u && m!=39u && m!=40u && m!=41u && m!=42u; } // SENSOR-detectable: not empty/wall/circuit
 void main() {
     int x = pc.X0 + int(gl_GlobalInvocationID.x);
     int y = pc.Y0 + int(gl_GlobalInvocationID.y);
@@ -470,6 +471,20 @@ void main() {
     if (pc.type == 53) {                                  // igniter: empty next to a triggered igniter -> fire
         int i = y * pc.SW + x;
         if (cells[i] == 0u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u)) cells[i] = 6u;
+        return;
+    }
+    if (pc.type == 54) {                                  // sensor: mark each sensor(42) with a detectable neighbour
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 42u) {
+            uint a=cells[i-1],b=cells[i+1],c2=cells[i-pc.SW],d=cells[i+pc.SW];
+            r = (det(a)||det(b)||det(c2)||det(d)) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 55) {                                  // sensor: a WIRE(38) next to a marked sensor -> electron head(39)
+        int i = y * pc.SW + x;
+        if (cells[i] == 38u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u)) cells[i] = 39u;
         return;
     }
     int cx = x - pc.X0;

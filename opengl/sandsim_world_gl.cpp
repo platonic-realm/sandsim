@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, MATERIAL_COUNT = 42 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, MATERIAL_COUNT = 43 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -106,6 +106,7 @@ bool eligible(uint s) {
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;       // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
+bool det(uint m) { return m!=0u && m!=1u && m!=38u && m!=39u && m!=40u && m!=41u && m!=42u; } // SENSOR-detectable: not empty/wall/circuit
 void main() {
     int x = uX0 + int(gl_GlobalInvocationID.x);
     int y = uY0 + int(gl_GlobalInvocationID.y);
@@ -542,6 +543,20 @@ void main() {
         if (cells[i] == 0u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-uSW]==1u||moved[i+uSW]==1u)) cells[i] = 6u;
         return;
     }
+    if (uType == 54) {                                    // sensor: mark each sensor(42) with a detectable neighbour (not 0/1/38/39/40/41/42)
+        int i = y * uSW + x; uint r = 0u;
+        if (cells[i] == 42u) {
+            uint a=cells[i-1],b=cells[i+1],c2=cells[i-uSW],d=cells[i+uSW];
+            r = (det(a)||det(b)||det(c2)||det(d)) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 55) {                                    // sensor: a WIRE(38) next to a marked sensor -> electron head(39)
+        int i = y * uSW + x;
+        if (cells[i] == 38u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-uSW]==1u||moved[i+uSW]==1u)) cells[i] = 39u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -618,6 +633,7 @@ vec3 matColor(uint m) {
     if (m == 39u) return vec3(0.502, 0.878, 1.000);
     if (m == 40u) return vec3(0.227, 0.416, 0.690);
     if (m == 41u) return vec3(0.847, 0.565, 0.125);
+    if (m == 42u) return vec3(0.690, 0.878, 0.251);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -776,7 +792,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 53; ++t) {         // + ... cloner, crystal, antimatter, moss, wireworld, igniter
+            for (int t = 3; t <= 55; ++t) {         // + ... antimatter, moss, wireworld, igniter, sensor
                 if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
@@ -858,7 +874,8 @@ private:
             case 44: case 45: return present[CRYSTAL];
             case 46: case 47: return present[ANTIMATTER];
             case 48: case 49: return present[MOSS];
-            case 50: case 51: return present[EHEAD] || present[ETAIL];
+            case 50: case 51: return present[EHEAD] || present[ETAIL] || present[SENSOR];  // sensor can create electrons
+            case 54: case 55: return present[SENSOR];
             case 52: case 53: return present[IGNITER];
             default: return true;   // 3-17, 26-27: always-on core reactions
         }
@@ -1077,6 +1094,7 @@ static int runInteractive(ViewCfg cfg) {
         if (glfwGetKey(win, GLFW_KEY_SLASH) == GLFW_PRESS) current = EHEAD;
         if (glfwGetKey(win, GLFW_KEY_APOSTROPHE) == GLFW_PRESS) current = ETAIL;
         if (glfwGetKey(win, GLFW_KEY_MINUS) == GLFW_PRESS) current = IGNITER;
+        if (glfwGetKey(win, GLFW_KEY_EQUAL) == GLFW_PRESS) current = SENSOR;
         // Hold an arrow to scroll the viewport over the living world (smoother than
         // the old edge-triggered chunk step; the whole world is resident so it's free).
         if (glfwGetKey(win, GLFW_KEY_LEFT)  == GLFW_PRESS) viewX -= PAN;
