@@ -13,12 +13,14 @@ static inline uint32_t hashCoord(int gx, int gy) {
 }
 
 // A diverse, randomised-but-deterministic world: an open sky over a rolling
-// surface, a sandy crust dotted with plant and wood, and an underground of rock
-// carved by caves and packed with region-clustered pools of every liquid and gas --
-// water, oil, acid, gas, ice -- with LAVA welling up from the deep and the rare
-// water SPRING or buried cache of TNT. Materials are clustered (the pool choice is
+// surface whose tall peaks are SNOW-capped, a sandy crust dotted with plant and
+// wood, and an underground of rock carved by caves and packed with region-clustered
+// pools and seams -- water, oil, acid, gas, ice, plus buried COAL seams, pale SALT
+// deposits and silvery MERCURY pools -- with LAVA welling up from the deep and the
+// rare water SPRING or cache of TNT. Materials are clustered (the pool choice is
 // keyed to a coarse region hash) rather than salt-and-pepper, so the world reads as
-// pools, veins and caverns that then come alive as the reactions run.
+// pools, veins and caverns that then come alive as the reactions run (coal seams
+// catch where lava meets them, snow melts at the warm edges, and so on).
 static inline uint8_t seedMat(int gx, int gy) {
     uint32_t cell = hashCoord(gx, gy);
 
@@ -35,9 +37,12 @@ static inline uint8_t seedMat(int gx, int gy) {
 
     int depth = gy - surface;
 
-    // --- topsoil: a sandy crust with plant tufts and the occasional wood post ---
+    // --- topsoil: a sandy crust with plant tufts and wood posts; tall peaks wear snow ---
     if (depth < 6) {
         uint32_t s = cell % 1000u;
+        if (surface < 84) {                                // the high peaks are snow-capped
+            return (s < 70u) ? WALL : SNOW;                // bare rock pokes through the drift
+        }
         if (s < 110u) return PLANT;
         if (s < 140u) return WOOD;
         return SAND;
@@ -46,13 +51,16 @@ static inline uint8_t seedMat(int gx, int gy) {
     // --- pick a clustered pool material for this ~16-cell region ---
     uint32_t region = hashCoord((gx >> 4) + 31, (gy >> 4) + 67) % 1000u;
     uint8_t pool;
-    if      (region < 220u) pool = WATER;
-    else if (region < 370u) pool = OIL;
-    else if (region < 470u) pool = ACID;
-    else if (region < 560u) pool = GAS;
-    else if (region < 650u) pool = ICE;
-    else if (region < 740u) pool = PLANT;
-    else if (region < 820u) pool = SAND;
+    if      (region < 200u) pool = WATER;
+    else if (region < 330u) pool = OIL;
+    else if (region < 420u) pool = ACID;
+    else if (region < 500u) pool = GAS;
+    else if (region < 580u) pool = ICE;
+    else if (region < 650u) pool = PLANT;
+    else if (region < 710u) pool = SAND;
+    else if (region < 790u) pool = COAL;      // buried coal seams
+    else if (region < 850u) pool = SALT;      // pale salt deposits
+    else if (region < 895u) pool = MERCURY;   // silvery quicksilver pools
     else                    pool = WATER;
 
     // lava wells up from the deep, taking over the pool the lower we go

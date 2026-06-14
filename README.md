@@ -3,9 +3,12 @@
 A multi-material falling-sand **world**: a huge grid of materials (sand, water,
 lava, oil, acid, gas, rock and more) that is chunked and streamed to/from disk
 around a camera, so the world can be far larger than memory. It generates as a
-varied landscape — an open sky over rolling ground, with underground caverns,
-clustered pools of every liquid and gas, lava welling up from the deep, and the
-odd buried spring or cache of TNT — and then comes alive as the materials react.
+varied landscape — an open sky over rolling ground with **snow-capped peaks**, and
+underground caverns packed with clustered pools of every liquid and gas, **coal
+seams, salt deposits and silvery mercury pools**, lava welling up from the deep, and
+the odd buried spring or cache of TNT — and then comes alive as the materials react
+(coal catches where lava finds it, snow melts at the warm edges, mercury pools at the
+bottom).
 There is one engine, with a single implementation per platform:
 
 | Platform | Status | Notes |
