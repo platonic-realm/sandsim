@@ -22,11 +22,11 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder). Movement is a density swap —
-heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air >
-GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through lava, acid
-sinks below water, oil floats on water, and gas/fire/steam/smoke rise. `ASH` and
-`GUNPOWDER` fall and pile like sand;
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder). Movement is a
+density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
+SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
+lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise.
+`ASH`, `GUNPOWDER` and `THERMITE` fall and pile like sand;
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**. `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
@@ -113,6 +113,13 @@ CPU and GPU:
   sand, so you can run it into trails, cracks and heaps, then **detonate it with a
   spark**: it blasts and chain-detonates through itself exactly like TNT. Pour a
   fuse of it from a torch to a buried cache and watch the line race away.
+- `THERMITE` is a **powder that burns through stone** — pile it like sand, light it
+  with `FIRE`/`LAVA`, and it ignites so hot it **melts the solid `WALL`, `GLASS`,
+  `OBSIDIAN`, `SAND` or `WOOD` it touches into molten `LAVA`** before combusting away.
+  The burn chains through the pile one ring per frame, so a heap dumped on a stone
+  floor eats a glowing cavity straight down through it — the only thing in the world
+  that can melt the otherwise-indestructible `WALL`/`GLASS`/`OBSIDIAN`. The lava it
+  leaves then drives every other heat reaction.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid
@@ -121,7 +128,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite); `[` / `]` size the brush. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.

@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -94,6 +94,15 @@ GPU and produce a **bit-identical** world.
     snapshot) plus its own grid cell, writing only itself. That keeps it order-
     independent and GPU-identical even though the blast reaches a full ring outward,
     and the wave then advances one ring per frame as the new fire reaches more TNT.
+  - **thermite** — `THERMITE` is the same detonation *shape* turned into a slow burn-
+    through: pass 1 marks every `THERMITE` cell touching `FIRE`/`LAVA` (the cells that
+    ignite this frame); pass 2 turns each marked cell into `FIRE` and melts every
+    adjacent meltable solid (`WALL`/`GLASS`/`OBSIDIAN`/`SAND`/`WOOD`) into `LAVA` —
+    reading the pass-1 marks of its 4 neighbours plus its own cell, so it stays order-
+    independent. Because the ignition chains one ring per frame and leaves molten lava
+    behind, a pile poured on stone eats a cavity straight through it — the only rule
+    that destroys the otherwise-indestructible `WALL`/`GLASS`/`OBSIDIAN`. Paint-only,
+    verified by a unit test plus a `worldgen.h` chamber that agrees bit-for-bit.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

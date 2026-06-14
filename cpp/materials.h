@@ -38,12 +38,17 @@
 // everything else floats on, and it's toxic -- it kills the PLANT it touches.
 // GUNPOWDER is a pourable explosive: a black powder (it falls and piles like SAND)
 // that detonates like TNT when FIRE/LAVA touches it, chaining through itself.
+// THERMITE is an incendiary powder (it falls and piles like SAND too): once FIRE/LAVA
+// lights it, it burns hot enough to MELT the solid WALL/GLASS/OBSIDIAN/SAND/WOOD it
+// touches into molten LAVA, then combusts to FIRE -- so a pile eats a cavity through
+// stone the way nothing else can. The ignition chains through the powder one ring/frame.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
-    MATERIAL_COUNT = 28
+    THERMITE = 28,
+    MATERIAL_COUNT = 29
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -543,5 +548,35 @@ inline void detonateTnt(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
             bool nearBlast = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW] ||
                              scratch[i-SW-1] || scratch[i-SW+1] || scratch[i+SW-1] || scratch[i+SW+1];
             if (scratch[i] || (nearBlast && blastable(grid[i]))) grid[i] = FIRE;
+        }
+}
+
+// Which solids THERMITE melts through: the otherwise-toughest stuff (WALL/GLASS/
+// OBSIDIAN -- nothing else touches them) plus SAND and WOOD. Liquids/powders/EMPTY
+// are skipped (it just combusts amid them).
+inline bool meltable(uint8_t m) {
+    return m == WALL || m == GLASS || m == OBSIDIAN || m == SAND || m == WOOD;
+}
+
+// THERMITE: an incendiary powder that burns through stone. Same two-pass snapshot
+// shape as detonateTnt -- pass 1 marks every THERMITE cell touching something hot
+// (the cells that ignite this frame); pass 2 turns each marked cell into FIRE (it
+// combusts) and melts every adjacent meltable solid into LAVA. Pass 2 reads the
+// pass-1 marks (in scratch) of its 4 neighbours plus its own grid cell, writing only
+// itself, so it stays order-independent and GPU-identical. The burn front advances
+// one ring per frame (the new fire lights the next thermite), eating a molten cavity.
+inline void burnThermite(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+            scratch[i] = (grid[i] == THERMITE && hot) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) { grid[i] = FIRE; continue; }
+            bool nearBurn = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
+            if (nearBurn && meltable(grid[i])) grid[i] = LAVA;
         }
 }
