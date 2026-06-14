@@ -72,6 +72,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
 #include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
 #include "../challenges.h" // challenge-mode mini-puzzles
 #include "../scenes.h"     // freeplay ready-made scenes
+#include "../sceneio.h"    // save / load a viewport to disk
 
 // The 16 sub-passes, in the exact order of cpp/simd_core.h.
 struct Pass { int type, dx, dy, parity, grp; };   // type: 0 vert, 1 diag, 2 horiz
@@ -1497,6 +1498,7 @@ static int runInteractive(ViewCfg cfg) {
     std::vector<uint8_t> chalBuf((size_t)LWv * LHv);
     auto chalStart = std::chrono::steady_clock::now();
     int sceneIdx = 0, toastFrames = 0; const char* toastMsg = nullptr; bool pF1 = false;   // freeplay scenes (F1)
+    bool pF5 = false, pF9 = false;                                                          // save / load (F5/F9)
     glfwSetScrollCallback(win, scrollCB);
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
@@ -1590,7 +1592,24 @@ static int runInteractive(ViewCfg cfg) {
             toastMsg = scene::kScenes[sceneIdx].name; toastFrames = 120;
             sceneIdx = (sceneIdx + 1) % scene::kNumScenes;
         }
-        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter; pF1 = kF1;
+        bool kF5 = glfwGetKey(win, GLFW_KEY_F5) == GLFW_PRESS;
+        bool kF9 = glfwGetKey(win, GLFW_KEY_F9) == GLFW_PRESS;
+        if (kF5 && !pF5) {                                          // save the visible viewport
+            for (int y = 0; y < LHv; ++y)
+                for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.viewCell(viewX + x, viewY + y);
+            toastMsg = sio::save("sandsim.sav", chalBuf.data(), LWv, LHv) ? "SAVED" : "SAVE FAILED";
+            toastFrames = 120;
+        }
+        if (kF9 && !pF9) {                                          // load a saved viewport
+            std::vector<uint8_t> lb; int sw = 0, sh = 0;
+            if (sio::load("sandsim.sav", lb, sw, sh)) {
+                chalIdx = -1; chalSolved = false;
+                world.loadView(lb.data(), sw, sh, viewX, viewY);
+                toastMsg = "LOADED";
+            } else toastMsg = "NO SAVE FILE";
+            toastFrames = 120;
+        }
+        pSpace = kSpace; pTab = kTab; pDel = kDel; pEnter = kEnter; pF1 = kF1; pF5 = kF5; pF9 = kF9;
 
         // Mouse: left paints, right erases, middle eyedrops; clicks on the palette pick.
         double mx, my; glfwGetCursorPos(win, &mx, &my);

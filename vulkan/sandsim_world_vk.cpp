@@ -69,6 +69,7 @@ static ViewCfg parseView(int argc, char* argv[]) {
 #include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
 #include "../challenges.h" // challenge-mode mini-puzzles
 #include "../scenes.h"     // freeplay ready-made scenes
+#include "../sceneio.h"    // save / load a viewport to disk
 
 struct Pass { int32_t type, dx, dy, parity, grp; };
 static const Pass kPasses[16] = {
@@ -770,6 +771,23 @@ static int runInteractive(ViewCfg cfg) {
                     world.loadView(chalBuf.data(), LWv, LHv, viewX, viewY);
                     toastMsg = scene::kScenes[sceneIdx].name; toastFrames = 120;
                     sceneIdx = (sceneIdx + 1) % scene::kNumScenes;
+                    break;
+                }
+                case SDLK_F5: {                                  // save the visible viewport
+                    for (int y = 0; y < LHv; ++y)
+                        for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.viewCell(viewX + x, viewY + y);
+                    toastMsg = sio::save("sandsim.sav", chalBuf.data(), LWv, LHv) ? "SAVED" : "SAVE FAILED";
+                    toastFrames = 120;
+                    break;
+                }
+                case SDLK_F9: {                                  // load a saved viewport
+                    std::vector<uint8_t> lb; int w = 0, h = 0;
+                    if (sio::load("sandsim.sav", lb, w, h)) {
+                        chalIdx = -1; chalSolved = false;
+                        world.loadView(lb.data(), w, h, viewX, viewY);
+                        toastMsg = "LOADED";
+                    } else toastMsg = "NO SAVE FILE";
+                    toastFrames = 120;
                     break;
                 }
                 case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;

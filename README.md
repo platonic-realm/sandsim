@@ -408,6 +408,11 @@ materials: a **Volcano** (lava wells up a vent and erupts), a **Fireworks** voll
 just fills a flat cell buffer) and are loaded with the same `loadView` the challenges use,
 so all three viewers share them.
 
+**Save & load** keep a creation (or a challenge solution): `F5` writes the visible viewport
+to `sandsim.sav` and `F9` loads it back, with a brief on-screen confirmation. The format is
+a tiny binary header plus raw cells (`sceneio.h`), so a save is portable across the three
+backends.
+
 In the interactive view the simulated area is a little **larger than what you can
 see** — the viewport plus a one-chunk **live border** all around it, all of it
 stepping every frame. So panning with the arrows reveals an edge that has gone on

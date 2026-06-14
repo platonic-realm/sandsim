@@ -156,7 +156,7 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
         std::snprintf(buf, sizeof buf, "%s  %s   BRUSH %d   %d FPS",
                       kNames[s.current], kCatNames[kSlotCat[s.slotOf[s.current]]], s.brushRadius, s.fps);
         ui::text(px, W, H, 26, by + 6, buf, 2, 0xFFFFFFFFu);
-        const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  DEL CLEAR  ENTER CHALLENGE  F1 SCENE";
+        const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  DEL CLEAR  ENTER CHALLENGE  F1 SCENE  F5/9 SAVE/LOAD";
         int hw = ui::textWidth(help, 1);
         ui::text(px, W, H, W - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
     }
