@@ -333,6 +333,24 @@ void main() {
         if (nearBurn && melt) cells[i] = 7u;
         return;
     }
+    if (pc.type == 38) {                                  // frost: mark water->frost(1)/frost->ice(3)/plant->wither(4)/frost->melt(5)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        bool nf = cells[i-1]==29u||cells[i+1]==29u||cells[i-pc.SW]==29u||cells[i+pc.SW]==29u;
+        if (c == 29u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            r = hot ? 5u : 3u;
+        } else if (c == 3u) { if (nf) r = 1u; }
+        else if (c == 10u) { if (nf) r = 4u; }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 39) {                                  // frost: apply (1->frost 29, 3->ice 14, 4->empty, 5->water 3)
+        int i = y * pc.SW + x; uint m = moved[i];
+        if (m == 1u) cells[i] = 29u; else if (m == 3u) cells[i] = 14u;
+        else if (m == 4u) cells[i] = 0u; else if (m == 5u) cells[i] = 3u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

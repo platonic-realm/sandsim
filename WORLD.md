@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` lightest). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly:
@@ -103,6 +103,19 @@ GPU and produce a **bit-identical** world.
     behind, a pile poured on stone eats a cavity straight through it — the only rule
     that destroys the otherwise-indestructible `WALL`/`GLASS`/`OBSIDIAN`. Paint-only,
     verified by a unit test plus a `worldgen.h` chamber that agrees bit-for-bit.
+  - **frost** — `FROST` is the cold mirror of fire's spread: one combined mark/apply
+    pass marks each cell `1` (`WATER` next to frost → `FROST`, the advancing edge),
+    `3` (a `FROST` cell → `ICE`, crystallising — it's only ever the leading edge),
+    `4` (`PLANT` next to frost → `EMPTY`, a killing frost) or `5` (`FROST` next to
+    `FIRE`/`LAVA` → `WATER`, melted), then applies. The advance is *deterministic*
+    (every water cell touching frost freezes), so the freeze front never starves the
+    way a probabilistic one would — it sweeps a whole connected pool to ice at one
+    cell per frame and self-terminates where the water runs out. The melt path is the
+    interesting one: a frost front hitting lava turns back to water, which the earlier
+    **quench** pass flashes to steam while forging the lava to obsidian — so the
+    boundary *resolves to a fixed point* rather than oscillating frost↔water forever
+    (verified: a full-pipeline chamber freezes solid and stops changing by frame 38).
+    Paint-only, verified bit-identical via a `worldgen.h` chamber.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

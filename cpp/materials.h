@@ -42,13 +42,17 @@
 // lights it, it burns hot enough to MELT the solid WALL/GLASS/OBSIDIAN/SAND/WOOD it
 // touches into molten LAVA, then combusts to FIRE -- so a pile eats a cavity through
 // stone the way nothing else can. The ignition chains through the powder one ring/frame.
+// FROST is the cold mirror of FIRE/VIRUS: a creeping freeze front, painted as a seed,
+// that races across WATER turning it to ICE (seeding more FROST a step ahead so the
+// wave advances and leaves an ice trail), WITHERS the PLANT it touches, and is MELTED
+// back to WATER by FIRE/LAVA -- so heat stops a frost front the way water stops a fire.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
-    THERMITE = 28,
-    MATERIAL_COUNT = 29
+    THERMITE = 28, FROST = 29,
+    MATERIAL_COUNT = 30
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -458,6 +462,45 @@ inline void arcSpark(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
             else if (v == 2) grid[i] = STEAM;
             else if (v == 3) grid[i] = EMPTY;
             else if (v == 4) grid[i] = FIRE;
+        }
+}
+
+// Frost: a creeping cold front -- the cold mirror of FIRE/VIRUS. Painted as a seed it
+// races across WATER, freezing every water cell it touches into more FROST one step
+// ahead, so a freezing wave radiates out at one cell per frame and crackles a whole
+// connected pond over with ice. Each FROST cell crystallises to ICE the next frame
+// (it's only ever the advancing leading edge), so the front leaves a solid ice trail
+// and self-terminates where the water runs out -- monotonic (water only ever turns to
+// frost then ice), so it always settles. FROST also WITHERS the PLANT it touches (a
+// killing frost) and is itself MELTED back to WATER by FIRE/LAVA -- so heat stops a
+// frost front the way water stops a fire (and the meltwater then flashes to steam on
+// the lava in the earlier quench pass, so the boundary resolves rather than oscillating).
+// One combined two-pass snapshot (mark 1=water->frost advance, 3=frost->ice crystallise,
+// 4=plant->empty wither, 5=frost->water melt; then apply), order-independent / GPU-identical.
+inline void spreadFrost(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            bool nFrost = grid[i-1]==FROST || grid[i+1]==FROST || grid[i-SW]==FROST || grid[i+SW]==FROST;
+            if (c == FROST) {
+                bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+                r = hot ? 5 : 3;
+            } else if (c == WATER) {
+                if (nFrost) r = 1;
+            } else if (c == PLANT) {
+                if (nFrost) r = 4;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t v = scratch[i];
+            if (v == 1) grid[i] = FROST;
+            else if (v == 3) grid[i] = ICE;
+            else if (v == 4) grid[i] = EMPTY;
+            else if (v == 5) grid[i] = WATER;
         }
 }
 
