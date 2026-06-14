@@ -51,13 +51,18 @@
 // through every liquid (water, oil, acid, lava, mercury) and gas to collect at the
 // ceiling, and it's FLAMMABLE -- FIRE/LAVA/SPARK ignite it -- so a flammable bubble
 // rising through water flashes when it surfaces into a flame.
+// COAL is a pourable fuel powder (it falls and piles like SAND): lit by FIRE/LAVA it
+// catches into EMBER -- glowing burning coal -- which spreads ember-to-coal through a
+// pile, RADIATES FIRE into the empty cells around it (igniting nearby fuel) for a while,
+// and finally burns down to ASH. So a heap of coal lit at one corner becomes a lasting
+// campfire/forge, unlike oil/gas which flash away in a frame. EMBER also falls like sand.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
-    THERMITE = 28, FROST = 29, WISP = 30,
-    MATERIAL_COUNT = 31
+    THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32,
+    MATERIAL_COUNT = 33
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -506,6 +511,52 @@ inline void spreadFrost(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
             else if (v == 3) grid[i] = ICE;
             else if (v == 4) grid[i] = EMPTY;
             else if (v == 5) grid[i] = WATER;
+        }
+}
+
+static constexpr uint32_t COAL_FLAME = 64;     // of 256/frame -> an EMBER sets an adjacent empty cell alight
+inline bool coalFlames(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 97u + (uint32_t)y * 149u + frame * 73u) & 0xFFu;
+    return h < COAL_FLAME;
+}
+static constexpr uint32_t COAL_ASH = 8;        // of 256/frame -> a burning EMBER ages down to ASH (avg ~32-frame burn)
+inline bool coalAshes(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 181u + (uint32_t)y * 61u + frame * 139u) & 0xFFu;
+    return h < COAL_ASH;
+}
+
+// Coal/ember: a pourable fuel. COAL is inert until FIRE/LAVA (or an existing EMBER)
+// touches it, when it catches into EMBER -- glowing burning coal. An EMBER spreads to
+// the COAL it touches (so the fire creeps through a pile ember-to-coal, independent of
+// which way the loose flames drift), RADIATES FIRE into the empty cells around it
+// (steadily, frame-hashed -- this is what ignites nearby oil/gas/wood) and slowly ages
+// down to ASH, so the burn is long but finite. One combined two-pass snapshot (mark
+// 1=coal catches -> ember, 2=this cell is an ember; then apply: 1->EMBER, 2->ASH-or-stay,
+// and EMPTY next to an ember -> FIRE), order-independent and GPU-identical.
+inline void smoulderCoal(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == COAL) {
+                bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+                bool ember = grid[i-1]==EMBER || grid[i+1]==EMBER || grid[i-SW]==EMBER || grid[i+SW]==EMBER;
+                if (hot || ember) r = 1;
+            } else if (c == EMBER) {
+                r = 2;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t v = scratch[i];
+            if (v == 1) grid[i] = EMBER;
+            else if (v == 2) { if (coalAshes(x, y, frame)) grid[i] = ASH; }   // else stays EMBER
+            else if (grid[i] == EMPTY) {
+                bool litN = scratch[i-1]==2 || scratch[i+1]==2 || scratch[i-SW]==2 || scratch[i+SW]==2;
+                if (litN && coalFlames(x, y, frame)) grid[i] = FIRE;
+            }
         }
 }
 

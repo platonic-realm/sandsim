@@ -16,7 +16,7 @@ layout(push_constant) uniform PC {
 
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER
     if (s == 7u) return t==11u||t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> +SNOW
     if (s == 11u) return t==3u||t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> +SNOW
     if (s == 3u) return t==5u||t==25u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> +SNOW
@@ -31,7 +31,7 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==25u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,gunpowder,thermite,snow,mercury,lava,acid,water,oil
+    if (pc.grp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==25u||s==26u||s==7u||s==11u||s==3u||s==5u;  // DOWN: sand,ash,gunpowder,thermite,coal,ember,snow,mercury,lava,acid,water,oil
     if (pc.grp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;     // GAS/FIRE/STEAM/SMOKE/WISP rise
     return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u;  // HORIZ: + mercury, smoke, wisp
 }
@@ -350,6 +350,32 @@ void main() {
         int i = y * pc.SW + x; uint m = moved[i];
         if (m == 1u) cells[i] = 29u; else if (m == 3u) cells[i] = 14u;
         else if (m == 4u) cells[i] = 0u; else if (m == 5u) cells[i] = 3u;
+        return;
+    }
+    if (pc.type == 40) {                                  // coal: mark coal-catches(1, hot/ember nbr) / ember(2)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 31u) {
+            bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
+                     ||cells[i-pc.SW]==6u||cells[i-pc.SW]==7u||cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
+            bool ember = cells[i-1]==32u||cells[i+1]==32u||cells[i-pc.SW]==32u||cells[i+pc.SW]==32u;
+            if (hot || ember) r = 1u;
+        } else if (c == 32u) r = 2u;
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 41) {                                  // coal: apply (1->ember 32, 2->ash 17 or stay, empty next to ember -> fire)
+        int i = y * pc.SW + x; uint m = moved[i];
+        if (m == 1u) { cells[i] = 32u; return; }
+        if (m == 2u) {
+            uint h = (uint(x)*181u + uint(y)*61u + uint(pc.frame)*139u) & 0xFFu;
+            if (h < 8u) cells[i] = 17u;
+            return;
+        }
+        if (cells[i] == 0u) {
+            bool litN = moved[i-1]==2u||moved[i+1]==2u||moved[i-pc.SW]==2u||moved[i+pc.SW]==2u;
+            uint h = (uint(x)*97u + uint(y)*149u + uint(pc.frame)*73u) & 0xFFu;
+            if (litN && h < 64u) cells[i] = 6u;
+        }
         return;
     }
     int cx = x - pc.X0;

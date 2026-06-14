@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -121,6 +121,18 @@ GPU and produce a **bit-identical** world.
     boundary *resolves to a fixed point* rather than oscillating frost↔water forever
     (verified: a full-pipeline chamber freezes solid and stops changing by frame 38).
     Paint-only, verified bit-identical via a `worldgen.h` chamber.
+  - **smouldering** — `COAL` is a pourable fuel that burns *slowly* rather than flashing.
+    One combined mark/apply pass marks each cell `1` (a `COAL` touching `FIRE`/`LAVA` or an
+    `EMBER`, so it catches → `EMBER`) or `2` (a cell that is an `EMBER` this frame); then
+    pass 2 turns the `1`s into `EMBER`, ages each `EMBER` down to `ASH` on a slow frame-hash
+    (else it keeps burning), and turns an `EMPTY` cell next to an `EMBER` (pass-1 mark `2`)
+    into `FIRE` on a faster frame-hash. The propagation is the point: embers spread
+    **ember-to-coal through the pile itself**, so the fire creeps along regardless of which
+    way the loose flames drift up — unlike `WOOD`, which only burns where the flame happens
+    to reach. The radiated `FIRE` lights neighbouring oil/gas/wood, and because each ember
+    only ages to ash on a slow hash, a coal bed is a *lasting* heat source. Paint-only,
+    verified by a unit test (a lit pile spreads to ember and burns down to ash) plus a
+    `worldgen.h` chamber that agrees bit-for-bit.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

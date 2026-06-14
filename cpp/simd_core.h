@@ -82,7 +82,8 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
             vG = Ops::set1(GAS), vO = Ops::set1(OIL), vF = Ops::set1(FIRE), vL = Ops::set1(LAVA),
             vSt = Ops::set1(STEAM), vA = Ops::set1(ACID), vSm = Ops::set1(SMOKE), vAsh = Ops::set1(ASH),
             vSnow = Ops::set1(SNOW), vMerc = Ops::set1(MERCURY), vGun = Ops::set1(GUNPOWDER),
-            vTh = Ops::set1(THERMITE), vWisp = Ops::set1(WISP);
+            vTh = Ops::set1(THERMITE), vWisp = Ops::set1(WISP),
+            vCoal = Ops::set1(COAL), vEmber = Ops::set1(EMBER);
 
     // move mask: which lanes hold an eligible mover whose target is enterable and
     // where neither cell has already moved this frame. Density SAND>LAVA>ACID>
@@ -92,7 +93,8 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
           isO = Ops::eq(cur, vO), isF = Ops::eq(cur, vF), isL = Ops::eq(cur, vL),
           isSt = Ops::eq(cur, vSt), isA = Ops::eq(cur, vA), isSm = Ops::eq(cur, vSm),
           isAsh = Ops::eq(cur, vAsh), isSnow = Ops::eq(cur, vSnow), isMerc = Ops::eq(cur, vMerc),
-          isGun = Ops::eq(cur, vGun), isTh = Ops::eq(cur, vTh), isWisp = Ops::eq(cur, vWisp);
+          isGun = Ops::eq(cur, vGun), isTh = Ops::eq(cur, vTh), isWisp = Ops::eq(cur, vWisp),
+          isCoal = Ops::eq(cur, vCoal), isEmber = Ops::eq(cur, vEmber);
         V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG),
           tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF), tL = Ops::eq(tgt, vL),
           tSt = Ops::eq(tgt, vSt), tA = Ops::eq(tgt, vA), tSm = Ops::eq(tgt, vSm),
@@ -109,13 +111,13 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
         V aboveWisp  = Ops::Or(lightGas, Ops::Or(Ops::Or(tW, tO), Ops::Or(tA, Ops::Or(tL, tMerc))));  // WISP is lightest: rises through every liquid + gas + air
         V rise = Ops::Or(isG, Ops::Or(isF, Ops::Or(isSt, Ops::Or(isSm, isWisp))));          // gas/fire/steam/smoke/wisp
         V can = Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(
-            Ops::Or(Ops::And(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), belowSand), Ops::And(isL, belowLava)),  // SAND/ASH/GUNPOWDER/THERMITE: heavy powders
+            Ops::Or(Ops::And(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), isCoal), isEmber), belowSand), Ops::And(isL, belowLava)),  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER: heavy powders
             Ops::Or(Ops::And(isA, belowAcid), Ops::And(isW, belowWater))),
             Ops::Or(Ops::And(isO, belowOil), Ops::And(rise, tE))),
             Ops::And(isSnow, belowSnow)),                                                  // SNOW: light powder
             Ops::And(isMerc, belowMerc)),                                                  // MERCURY: heaviest liquid
             Ops::And(isWisp, aboveWisp));                                                  // WISP: lightest, bubbles up through liquids
-        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), isSnow), isMerc), isL), Ops::Or(isA, Ops::Or(isW, isO)))
+        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), isCoal), isEmber), isSnow), isMerc), isL), Ops::Or(isA, Ops::Or(isW, isO)))
                : (grp == SG_GAS)  ? rise
                                   : Ops::Or(Ops::Or(Ops::Or(isL, isMerc), isA), Ops::Or(Ops::Or(isW, isO), rise));
         return Ops::And(Ops::And(elig, can),
