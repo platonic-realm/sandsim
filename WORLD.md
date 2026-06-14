@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON`, `SPROUT`, `BELT`, `MAGNET`, `IRON`, `NITRO`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -452,6 +452,19 @@ GPU and produce a **bit-identical** world.
     iron block fully accretes and terminates, deterministic, and `IRON` falls and rests exactly like
     `SAND`) plus a `worldgen.h` chamber — iron poured over a magnet, isolating the `hasReactive`
     edit — bit-identical across all three backends.
+  - **nitro** — `NITRO` is a flowing liquid explosive. Its movement is wired to be identical to
+    `WATER` (a water-density liquid that floods low ground and pools in cracks), and its detonation
+    *reuses* the `TNT`/`GUNPOWDER` blast pass (20/21) rather than adding a new one: `NITRO` joins the
+    set of cells that detonate when touched by `FIRE`/`LAVA`, and the set of "blastable" cells a
+    blast turns to `FIRE` — so a spark anywhere on a connected pool chains through the whole thing,
+    and nitro and TNT set each other off as one explosive system. Like `TNT` it is inert until heat
+    reaches it, so it is *not* in `hasReactive` (its trigger, fire/lava, already is), and the blast
+    gate becomes `present[TNT] || present[GUNPOWDER] || present[NITRO]`. A new liquid is the most
+    invasive movement change, so it was verified hardest: the default bench is unchanged (the
+    water-mirror edits and the detonation extension are no-ops without nitro, and leave `WATER` and
+    `TNT` undisturbed), a WALL-bordered CPU test confirms `NITRO` moves *bit-identically* to `WATER`
+    over 150 frames and that a 2-D pool chain-detonates from one spark, and a `worldgen.h` chamber —
+    a flooded nitro pool set off by a lava drop — is bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

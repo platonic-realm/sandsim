@@ -111,8 +111,8 @@ enum Material : uint8_t {
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
-    BELT = 61, MAGNET = 62, IRON = 63,
-    MATERIAL_COUNT = 64
+    BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64,
+    MATERIAL_COUNT = 65
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1422,7 +1422,7 @@ inline void poisonMercury(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X
 // so blasts chain). WALL, GLASS, WATER, LAVA, ICE, STEAM, ACID, SPRING survive --
 // a blast meeting water just stops at the waterline and gets quenched.
 inline bool blastable(uint8_t m) {
-    return m == EMPTY || m == SAND || m == OIL || m == GAS || m == WOOD || m == PLANT || m == SMOKE || m == TNT || m == GUNPOWDER;
+    return m == EMPTY || m == SAND || m == OIL || m == GAS || m == WOOD || m == PLANT || m == SMOKE || m == TNT || m == GUNPOWDER || m == NITRO;
 }
 
 // TNT: an explosive that detonates when FIRE/LAVA touches it, bursting into FIRE
@@ -1437,7 +1437,7 @@ inline void detonateTnt(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            scratch[i] = ((grid[i] == TNT || grid[i] == GUNPOWDER) && hot) ? 1 : 0;
+            scratch[i] = ((grid[i] == TNT || grid[i] == GUNPOWDER || grid[i] == NITRO) && hot) ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
         for (int x = X0; x < X1; ++x) {

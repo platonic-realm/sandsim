@@ -26,7 +26,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`, `MAGNET`, `IRON` (powder). Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid), `LAMP`, `PETRIFY`, `FIREWORK`, `LEVITON` (powder), `SPROUT`, `BELT`, `MAGNET`, `IRON` (powder), `NITRO` (liquid). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
@@ -324,6 +324,12 @@ CPU and GPU:
   **accretes into chains and clumps reaching out from the magnet**. Pour iron over a magnet, or
   run a stream of it there on a `BELT`, and it collects itself into the lodestone — a magnetic
   ore-sorter. (Loose iron away from any magnet is just a heavy grey powder you can pour and pile.)
+- `NITRO` is a **flowing liquid explosive — the one that *floods*.** Where `TNT` is a static block
+  and `GUNPOWDER` a loose pile, nitro is a water-density liquid: **pour it into a fortress's cracks
+  or flood a whole chamber**, then touch it with any flame and the entire connected pool
+  **chain-detonates** into fire. It shares the TNT/gunpowder blast system, so nitro and TNT set
+  each other off — wick a `FUSE` to a flooded vault, or drip `LAVA` in from above, and bring the
+  walls down from the inside. (Volatile: keep it well clear of lava and fire until you mean it.)
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, MATERIAL_COUNT = 64 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, MATERIAL_COUNT = 65 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -86,15 +86,15 @@ uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u || s == 63u) return t==7u||t==11u||t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT
-    if (s == 7u) return t==11u||t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u; // LAVA -> A,W,O,SNOW,FUMES,G,F,St,Sm,E
-    if (s == 11u) return t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;        // ACID -> W,O,SNOW,FUMES,G,F,St,Sm,E
-    if (s == 3u) return t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,FUMES,G,F,St,Sm,E
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u || s == 63u) return t==7u||t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT
+    if (s == 7u) return t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u; // LAVA -> A,W,O,SNOW,FUMES,G,F,St,Sm,E
+    if (s == 11u) return t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;        // ACID -> W,O,SNOW,FUMES,G,F,St,Sm,E
+    if (s == 3u || s == 64u) return t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,FUMES,G,F,St,Sm,E
     if (s == 5u || s == 54u) return t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> SNOW,FUMES,G,F,St,Sm,E
     if (s == 25u) return t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
     if (s == 37u || s == 50u) return t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;                              // FUMES (heavy gas) -> sinks through G,F,St,Sm,E
-    if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
-    if (s == 30u) return t==3u||t==5u||t==54u||t==11u||t==7u||t==26u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // WISP (lightest) -> rises through W,O,A,L,MERCURY + gases + E
+    if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==64u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
+    if (s == 30u) return t==3u||t==64u||t==5u||t==54u||t==11u||t==7u||t==26u||t==4u||t==59u||t==6u||t==8u||t==12u||t==0u;  // WISP (lightest) -> rises through W,O,A,L,MERCURY + gases + E
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -102,9 +102,9 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==63u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==5u||s==54u; // DOWN: +lye/sodium/phosphorus/cement
+    if (uGrp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==63u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==64u||s==5u||s==54u; // DOWN: +lye/sodium/phosphorus/cement
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u||s==59u;  // +LEVITON rises (up + diag-up, NOT horiz)       // GAS/FIRE/STEAM/SMOKE/WISP rise
-    return s==7u||s==26u||s==11u||s==3u||s==5u||s==54u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u||s==50u;  // HORIZ: + mercury, smoke, wisp, fumes
+    return s==7u||s==26u||s==11u||s==3u||s==64u||s==5u||s==54u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u||s==50u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
 bool det(uint m) { return m!=0u && m!=1u && m!=38u && m!=39u && m!=40u && m!=41u && m!=42u; } // SENSOR-detectable: not empty/wall/circuit
 void main() {
@@ -251,7 +251,7 @@ void main() {
     }
     if (uType == 20) {                                    // tnt/gunpowder: mark detonators (16/27 touching fire/lava)
         int i = y * uSW + x; uint r = 0u;
-        if (cells[i] == 16u || cells[i] == 27u) {
+        if (cells[i] == 16u || cells[i] == 27u || cells[i] == 64u) {
             bool hot = cells[i-1]==6u||cells[i-1]==7u||cells[i+1]==6u||cells[i+1]==7u
                      ||cells[i-uSW]==6u||cells[i-uSW]==7u||cells[i+uSW]==6u||cells[i+uSW]==7u;
             r = hot ? 1u : 0u;
@@ -264,7 +264,7 @@ void main() {
         bool nearBlast = moved[i-1]==1u||moved[i+1]==1u||moved[i-uSW]==1u||moved[i+uSW]==1u
                        ||moved[i-uSW-1]==1u||moved[i-uSW+1]==1u||moved[i+uSW-1]==1u||moved[i+uSW+1]==1u;
         uint c = cells[i];
-        bool soft = c==0u||c==2u||c==5u||c==4u||c==9u||c==10u||c==12u||c==16u||c==27u;  // E,SAND,OIL,GAS,WOOD,PLANT,SMOKE,TNT,GUNPOWDER
+        bool soft = c==0u||c==2u||c==5u||c==4u||c==9u||c==10u||c==12u||c==16u||c==27u||c==64u;  // E,SAND,OIL,GAS,WOOD,PLANT,SMOKE,TNT,GUNPOWDER
         if (moved[i]==1u || (nearBlast && soft)) cells[i] = 6u;
         return;
     }
@@ -933,6 +933,7 @@ vec3 matColor(uint m) {
     if (m == 61u) return vec3(0.271, 0.298, 0.314);
     if (m == 62u) return vec3(0.345, 0.471, 0.722);
     if (m == 63u) return vec3(0.471, 0.502, 0.533);
+    if (m == 64u) return vec3(0.784, 0.878, 0.439);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -1159,7 +1160,7 @@ private:
     bool passEnabled(int t) const {
         switch (t) {
             case 18: case 19: return present[SPRING];
-            case 20: case 21: return present[TNT] || present[GUNPOWDER];
+            case 20: case 21: return present[TNT] || present[GUNPOWDER] || present[NITRO];
             case 22: case 23: return present[VOLCANO];
             case 24: case 25: return present[VOID];
             case 28: case 29: return present[VIRUS];

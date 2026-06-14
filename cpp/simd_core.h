@@ -86,7 +86,7 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
             vCoal = Ops::set1(COAL), vEmber = Ops::set1(EMBER), vFumes = Ops::set1(FUMES),
             vLye = Ops::set1(LYE), vSodium = Ops::set1(SODIUM), vPhos = Ops::set1(PHOSPHORUS),
             vCement = Ops::set1(CEMENT), vChlor = Ops::set1(CHLORINE), vCryo = Ops::set1(CRYO),
-            vLev = Ops::set1(LEVITON), vIron = Ops::set1(IRON);
+            vLev = Ops::set1(LEVITON), vIron = Ops::set1(IRON), vNitro = Ops::set1(NITRO);
 
     // move mask: which lanes hold an eligible mover whose target is enterable and
     // where neither cell has already moved this frame. Density SAND>LAVA>ACID>
@@ -100,37 +100,38 @@ inline void simdStep(uint8_t* grid, uint8_t* moved, int SW,
           isCoal = Ops::eq(cur, vCoal), isEmber = Ops::eq(cur, vEmber), isFumes = Ops::eq(cur, vFumes),
           isLye = Ops::eq(cur, vLye), isSodium = Ops::eq(cur, vSodium), isPhos = Ops::eq(cur, vPhos),
           isCement = Ops::eq(cur, vCement), isChlor = Ops::eq(cur, vChlor), isCryo = Ops::eq(cur, vCryo),
-          isLev = Ops::eq(cur, vLev), isIron = Ops::eq(cur, vIron);
+          isLev = Ops::eq(cur, vLev), isIron = Ops::eq(cur, vIron), isNitro = Ops::eq(cur, vNitro);
         V tE = Ops::eq(tgt, vE), tW = Ops::eq(tgt, vW), tG = Ops::eq(tgt, vG),
           tO = Ops::eq(tgt, vO), tF = Ops::eq(tgt, vF), tL = Ops::eq(tgt, vL),
           tSt = Ops::eq(tgt, vSt), tA = Ops::eq(tgt, vA), tSm = Ops::eq(tgt, vSm),
           tSnow = Ops::eq(tgt, vSnow), tS = Ops::eq(tgt, vS), tMerc = Ops::eq(tgt, vMerc),
           tFumes = Ops::eq(tgt, vFumes), tChlor = Ops::eq(tgt, vChlor), tCryo = Ops::eq(tgt, vCryo),
-          tLev = Ops::eq(tgt, vLev);
+          tLev = Ops::eq(tgt, vLev), tNitro = Ops::eq(tgt, vNitro);
         V lightGas   = Ops::Or(Ops::Or(Ops::Or(tG, tF), Ops::Or(tSt, Ops::Or(tSm, tE))), tLev);  // G,F,STEAM,SMOKE,E,LEVITON (everything heavier sinks through anti-grav dust)
         V lightSnow  = Ops::Or(lightGas, Ops::Or(Ops::Or(tSnow, tFumes), tChlor));          // SNOW/FUMES/CHLORINE tier + light (heavier than air, float on liquids)
-        V belowAcid  = Ops::Or(Ops::Or(Ops::Or(tW, tO), tCryo), lightSnow);                 // W,O,CRYO,SNOW,+light
+        V belowAcid  = Ops::Or(Ops::Or(Ops::Or(Ops::Or(tW, tO), tCryo), tNitro), lightSnow); // W,O,CRYO,NITRO,SNOW,+light
         V belowSand  = Ops::Or(Ops::Or(tL, tA), belowAcid);                                 // L,A,W,O,SNOW,+light
         V belowLava  = Ops::Or(tA, belowAcid);                                              // A,W,O,SNOW,+light
         V belowWater = Ops::Or(Ops::Or(tO, tCryo), lightSnow);                              // O,CRYO,SNOW,+light
+        V belowNitro = belowWater;                                                          // NITRO (liquid explosive): water-density, floods like water
         V belowOil   = lightSnow;                                                           // SNOW,G,F,STEAM,SMOKE,E
         V belowCryo  = lightSnow;                                                           // CRYO (cold liquid, same tier as OIL): floats on water, sinks through snow/gases
         V belowSnow  = lightGas;                                                            // SNOW floats on liquids: enters only G,F,St,Sm,E
         V belowFumes = lightGas;                                                            // FUMES (heavy gas) sinks through air + lighter gases, floats on liquids
         V belowChlor = lightGas;                                                            // CHLORINE (heavy gas, same tier as FUMES) sinks through air + lighter gases
         V belowMerc  = Ops::Or(tS, belowSand);                                              // MERCURY is heaviest: sinks through SAND + everything
-        V aboveWisp  = Ops::Or(lightGas, Ops::Or(Ops::Or(Ops::Or(tW, tO), tCryo), Ops::Or(tA, Ops::Or(tL, tMerc))));  // WISP is lightest: rises through every liquid + gas + air
+        V aboveWisp  = Ops::Or(lightGas, Ops::Or(Ops::Or(Ops::Or(Ops::Or(tW, tO), tCryo), tNitro), Ops::Or(tA, Ops::Or(tL, tMerc))));  // WISP is lightest: rises through every liquid + gas + air
         V rise = Ops::Or(isG, Ops::Or(isF, Ops::Or(isSt, Ops::Or(isSm, isWisp))));          // gas/fire/steam/smoke/wisp
         V can = Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(
             Ops::Or(Ops::And(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), isCoal), isEmber), isLye), isSodium), isPhos), isCement), isIron), belowSand), Ops::And(isL, belowLava)),  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT/IRON: heavy powders
-            Ops::Or(Ops::And(isA, belowAcid), Ops::And(isW, belowWater))),
+            Ops::Or(Ops::Or(Ops::And(isA, belowAcid), Ops::And(isW, belowWater)), Ops::And(isNitro, belowNitro))),  // WATER / NITRO: water-density liquids
             Ops::Or(Ops::Or(Ops::And(isO, belowOil), Ops::And(isCryo, belowCryo)), Ops::And(Ops::Or(rise, isLev), tE))),  // OIL / CRYO: light liquids; LEVITON rises into empty (up + diag-up)
             Ops::And(isSnow, belowSnow)),                                                  // SNOW: light powder
             Ops::And(isMerc, belowMerc)),                                                  // MERCURY: heaviest liquid
             Ops::Or(Ops::And(isWisp, aboveWisp), Ops::Or(Ops::And(isFumes, belowFumes), Ops::And(isChlor, belowChlor))));  // WISP rises; FUMES/CHLORINE: heavy gases sink/pool
-        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), isCoal), isEmber), isLye), isSodium), isPhos), isCement), isIron), isSnow), isFumes), isChlor), isMerc), isL), Ops::Or(isA, Ops::Or(isW, Ops::Or(isO, isCryo))))
+        V elig = (grp == SG_DOWN) ? Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isS, isAsh), isGun), isTh), isCoal), isEmber), isLye), isSodium), isPhos), isCement), isIron), isSnow), isFumes), isChlor), isMerc), isL), Ops::Or(isA, Ops::Or(isW, Ops::Or(isO, Ops::Or(isCryo, isNitro)))))
                : (grp == SG_GAS)  ? Ops::Or(rise, isLev)   // LEVITON rises + slides diagonally up (NOT horiz), so it piles inversely like sand
-                                  : Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isL, isMerc), isA), isFumes), isChlor), Ops::Or(Ops::Or(isW, Ops::Or(isO, isCryo)), rise));
+                                  : Ops::Or(Ops::Or(Ops::Or(Ops::Or(Ops::Or(isL, isMerc), isA), isFumes), isChlor), Ops::Or(Ops::Or(isW, Ops::Or(isO, Ops::Or(isCryo, isNitro))), rise));
         return Ops::And(Ops::And(elig, can),
                         Ops::And(Ops::eq(mc, vE), Ops::eq(mt, vE)));
     };
