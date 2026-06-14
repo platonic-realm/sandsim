@@ -74,14 +74,18 @@
 // from PLANT (needs a waterline) and CRYSTAL (branches into open air): it spreads only along
 // the empty cells hugging a WALL/OBSIDIAN/GLASS/WOOD surface, so it greens walls and timber
 // like ivy on a ruin without filling open space. It's flammable.
+// FUMES is a heavy flammable vapour -- the mirror of GAS: where gas rises to the ceiling,
+// fumes SINK through air and POOL in low ground and caverns (same density tier as SNOW:
+// heavier than air, floats on every liquid) while spreading out flat like a gas. Then a
+// SPARK or flame flashes the whole pocket -- so a pit that fills with fumes is a bomb.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
-    ANTIMATTER = 35, MOSS = 36,
-    MATERIAL_COUNT = 37
+    ANTIMATTER = 35, MOSS = 36, FUMES = 37,
+    MATERIAL_COUNT = 38
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -212,8 +216,8 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            bool ign = ((c == OIL || c == PLANT || c == GAS || c == WISP || c == MOSS) && hot)   // oil, plant, gas, wisp & moss: instant
-                    || (c == WOOD && hot && woodCatches(x, y, frame));                           // wood: slow
+            bool ign = ((c == OIL || c == PLANT || c == GAS || c == WISP || c == MOSS || c == FUMES) && hot)   // oil, plant, gas, wisp, moss & fumes: instant
+                    || (c == WOOD && hot && woodCatches(x, y, frame));                                       // wood: slow
             scratch[i] = ign ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
@@ -480,7 +484,7 @@ inline void arcSpark(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
             bool nSpark = grid[i-1]==SPARK || grid[i+1]==SPARK || grid[i-SW]==SPARK || grid[i+SW]==SPARK;
             if (c == SPARK)      r = nWater ? 2 : 3;
             else if (c == WATER) { if (nSpark) r = 1; }
-            else if (c == GAS || c == OIL || c == WISP) { if (nSpark) r = 4; }
+            else if (c == GAS || c == OIL || c == WISP || c == FUMES) { if (nSpark) r = 4; }
             scratch[i] = r;
         }
     for (int y = Y0; y < Y1; ++y)

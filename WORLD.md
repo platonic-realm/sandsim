@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -52,12 +52,16 @@ GPU and produce a **bit-identical** world.
   material needs to know about it), and `WISP` is the exact inverse — lightest, so it
   only ever rises, bubbling up *through* every liquid and gas (the first material that
   rises through a liquid instead of being trapped beneath it) to gather at the ceiling,
-  again touching only its own target set. The reactions:
+  again touching only its own target set. `FUMES` are the odd gas out: a heavy vapour in
+  the `SNOW` density tier (heavier than air, floats on every liquid) that *sinks* and pools
+  in the low ground while spreading flat like a gas — the mirror of `GAS`, which rises. The
+  reactions:
   - **time-varying transforms** — `FIRE` burning out to `EMPTY` and `STEAM`
     condensing back to `WATER` are per-cell passes that are pure functions of
     `(x, y, frame)` (no neighbour reads), so the GPU computes the identical hash.
-  - **ignition** (`FIRE`/`LAVA` igniting the `OIL`, `GAS`, `PLANT` and flammable `WISP`
-    it touches, and smouldering `WOOD`) and **things-meet-hot** (`WATER` → `STEAM`, `ACID` →
+  - **ignition** (`FIRE`/`LAVA` igniting the `OIL`, `GAS`, `PLANT`, `MOSS` and flammable
+    `WISP`/`FUMES` it touches, and smouldering `WOOD`; a `SPARK` lights the same fuels) and
+    **things-meet-hot** (`WATER` → `STEAM`, `ACID` →
     `SMOKE`, `FIRE` quenched, `LAVA` → `OBSIDIAN`) are neighbour-based, which is normally
     order-*dependent* (CPU-sequential ≠ GPU-parallel). Each is made order-independent
     with **two snapshot passes through the `moved` scratch buffer** (free after the
