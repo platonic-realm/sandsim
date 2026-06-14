@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -144,6 +144,15 @@ GPU and produce a **bit-identical** world.
     cell — so there is no read/write race and it stays order-independent / GPU-identical.
     The source on top is only read, never consumed, so one drop is an endless supply.
     Paint-only, verified by a unit test plus a `worldgen.h` chamber that agrees bit-for-bit.
+  - **crystallisation** — `CRYSTAL` grows dendritically into bare air: the first growth
+    rule that needs neither a waterline (`PLANT`) nor a host to consume (`FROST`/`VIRUS`).
+    A frame-hashed mark/apply pair where each `EMPTY` cell decides from a snapshot, but the
+    condition is the classic dendrite rule: it crystallises only when **exactly one** of
+    its *eight* neighbours is already crystal. A tip extends where a single arm reaches,
+    while any gap flanked by two arms (>=2 crystal neighbours) locks and never fills, so the
+    growth stays a delicate branching gem instead of a solid flood (verified: a 600-frame
+    seed grows to a few hundred cells with **zero** cells having >=3 orthogonal crystal
+    neighbours). Paint-only, verified bit-identical via a `worldgen.h` chamber.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

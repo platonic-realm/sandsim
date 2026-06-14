@@ -392,6 +392,22 @@ void main() {
         if (cells[i] == 0u && moved[i-pc.SW] != 0u) cells[i] = moved[i-pc.SW];
         return;
     }
+    if (pc.type == 44) {                                  // crystal: mark EMPTY with exactly one crystal(34) neighbour-of-8 (frame-hashed)
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 0u) {
+            int n = int(cells[i-1]==34u)+int(cells[i+1]==34u)+int(cells[i-pc.SW]==34u)+int(cells[i+pc.SW]==34u)
+                  + int(cells[i-pc.SW-1]==34u)+int(cells[i-pc.SW+1]==34u)+int(cells[i+pc.SW-1]==34u)+int(cells[i+pc.SW+1]==34u);
+            uint h = (uint(x)*127u + uint(y)*89u + uint(pc.frame)*167u) & 0xFFu;
+            if (n == 1 && h < 10u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 45) {                                  // crystal: apply (1 -> crystal 34)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 34u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity

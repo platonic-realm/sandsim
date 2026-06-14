@@ -61,13 +61,17 @@
 // it into an endless faucet of that material (the generic source -- SPRING/VOLCANO well a
 // fixed material; CLONER wells whatever you give it). It is the first rule to carry a
 // material id through the scratch buffer rather than a bare flag.
+// CRYSTAL is an inert mineral that GROWS dendritically into empty space -- the first rule
+// to grow into bare air (plant creeps along waterlines, frost/virus consume a host). An
+// empty cell crystallises only when EXACTLY ONE neighbour is already crystal, so it
+// branches like a real gem/coral instead of flooding solid.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
-    THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33,
-    MATERIAL_COUNT = 34
+    THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
+    MATERIAL_COUNT = 35
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -589,6 +593,40 @@ inline void cloneMaterial(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (grid[i] == EMPTY && scratch[i-SW] != 0) grid[i] = scratch[i-SW];
+        }
+}
+
+static constexpr uint32_t CRYSTAL_GROW = 10;   // of 256/frame -> dendrites creep slowly
+inline bool crystalGrows(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 127u + (uint32_t)y * 89u + frame * 167u) & 0xFFu;
+    return h < CRYSTAL_GROW;
+}
+
+// Crystal: an inert mineral that GROWS dendritically into empty space -- the first rule
+// to grow into bare air rather than along a waterline (plant) or by consuming a host
+// (frost/virus). An EMPTY cell crystallises only when EXACTLY ONE of its EIGHT neighbours
+// is already crystal (frame-hashed for a slow creep): a tip extends where a single arm
+// reaches, but a cell flanked by two arms (>=2 crystal neighbours, orthogonal or diagonal)
+// locks and won't fill -- the classic dendrite rule, so the growth stays a delicate
+// branching gem instead of a solid flood. Two snapshot passes (mark the eligible empties,
+// then apply), order-independent and GPU-identical -- like plant growth, but counting
+// neighbours instead of needing water.
+inline void growCrystal(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == EMPTY) {
+                int n = (grid[i-1]==CRYSTAL) + (grid[i+1]==CRYSTAL) + (grid[i-SW]==CRYSTAL) + (grid[i+SW]==CRYSTAL)
+                      + (grid[i-SW-1]==CRYSTAL) + (grid[i-SW+1]==CRYSTAL) + (grid[i+SW-1]==CRYSTAL) + (grid[i+SW+1]==CRYSTAL);
+                if (n == 1 && crystalGrows(x, y, frame)) r = 1;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = CRYSTAL;
         }
 }
 
