@@ -29,7 +29,6 @@
 #include <cstring>
 #include <cstdlib>
 #include <chrono>
-#include <cmath>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -42,73 +41,10 @@ static const uint32_t kColors[MATERIAL_COUNT] = {
     0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u, 0xFFCDA0FFu, 0xFF6E8B3Du, 0xFFCBC75Au, 0xFFC8862Eu, 0xFF80E0FFu, 0xFF3A6AB0u, 0xFFD89020u, 0xFFB0E040u, 0xFF50FF90u, 0xFF5090A0u, 0xFFC8E8D0u, 0xFFD7D0B0u, 0xFFFF8C69u, 0xFFEFE8A0u, 0xFF7E8C99u, 0xFFB6E03Au, 0xFFFFCC22u, 0xFF9A8050u, 0xFFFFD030u, 0xFF88D0F8u, 0xFF4A4030u, 0xFFFFF0A0u, 0xFFB098A8u, 0xFFFF50C0u, 0xFFB060FFu, 0xFF70D838u, 0xFF454C50u, 0xFF5878B8u, 0xFF788088u, 0xFFC8E070u, 0xFFA85020u, 0xFFB5832Eu, 0xFF901818u, 0xFFFF3030u, 0xFFE8F8FFu,
 };
 
-// Display names for the HUD/tooltips -- one per material id, in enum order.
-static const char* kNames[MATERIAL_COUNT] = {
-    "ERASER", "WALL", "SAND", "WATER", "GAS", "OIL", "FIRE", "LAVA", "STEAM", "WOOD",
-    "PLANT", "ACID", "SMOKE", "GLASS", "ICE", "SPRING", "TNT", "ASH", "VOLCANO", "VOID",
-    "MUD", "VIRUS", "SPARK", "OBSIDIAN", "SALT", "SNOW", "MERCURY", "GUNPOWDER", "THERMITE", "FROST",
-    "WISP", "COAL", "EMBER", "CLONER", "CRYSTAL", "ANTIMATTER", "MOSS", "FUMES", "WIRE", "E-HEAD",
-    "E-TAIL", "IGNITER", "SENSOR", "LIFE", "GEYSER", "LYE", "SODIUM", "CORAL", "PHOSPHORUS", "CEMENT",
-    "CHLORINE", "BATTERY", "FUSE", "BURN-FUSE", "CRYO", "LAMP", "LAMP-LIT", "PETRIFY", "FIREWORK", "LEVITON",
-    "SPROUT", "BELT", "MAGNET", "IRON", "NITRO", "RUST", "SEED", "LASER", "BEAM", "ICICLE",
-};
-
-// The palette is laid out grouped by category (a navigable toolbox) rather than in raw
-// id order. kPaletteOrder is the swatch order (material ids); kSlotCat[i] is the category
-// of swatch i; each category has a name and an accent colour drawn under its swatches.
-static const char* kCatNames[] = {
-    "TOOLS", "SOLIDS", "POWDERS", "LIQUIDS", "GASES", "FIRE & HEAT",
-    "EXPLOSIVES", "LIFE & GROWTH", "CIRCUITS", "MACHINES", "SOURCES & MAGIC",
-};
-static const uint32_t kCatAccent[] = {
-    0xFF8890A0u, 0xFF6E6E78u, 0xFFC8A060u, 0xFF4488FFu, 0xFFA6C2D2u, 0xFFFF6633u,
-    0xFFFF3344u, 0xFF44C060u, 0xFFFFCC22u, 0xFFB060FFu, 0xFF40E0C0u,
-};
-static const uint8_t kPaletteOrder[MATERIAL_COUNT] = {
-    EMPTY,                                                                       // tools
-    WALL, WOOD, GLASS, ICE, OBSIDIAN,                                            // solids
-    SAND, ASH, SALT, SNOW, MUD, COAL, LYE, CEMENT, IRON, RUST, LEVITON, SEED,    // powders
-    WATER, OIL, ACID, MERCURY, CRYO,                                            // liquids
-    GAS, STEAM, SMOKE, WISP, FUMES, CHLORINE,                                   // gases
-    FIRE, LAVA, EMBER, FROST,                                                   // fire & heat
-    TNT, GUNPOWDER, THERMITE, SODIUM, PHOSPHORUS, NITRO, FUSE, BURNFUSE,        // explosives
-    PLANT, CRYSTAL, MOSS, CORAL, SPROUT, ICICLE, VIRUS, LIFE,                   // life & growth
-    SPARK, WIRE, EHEAD, ETAIL, IGNITER, SENSOR, BATTERY, LAMP, LAMPLIT,         // circuits
-    CLONER, BELT, MAGNET, LASER, BEAM, ANTIMATTER,                             // machines
-    SPRING, VOLCANO, GEYSER, VOID, PETRIFY, FIREWORK,                          // sources & magic
-};
-static const uint8_t kSlotCat[MATERIAL_COUNT] = {
-    0,
-    1,1,1,1,1,
-    2,2,2,2,2,2,2,2,2,2,2,2,
-    3,3,3,3,3,
-    4,4,4,4,4,4,
-    5,5,5,5,
-    6,6,6,6,6,6,6,6,
-    7,7,7,7,7,7,7,7,
-    8,8,8,8,8,8,8,8,8,
-    9,9,9,9,9,9,
-    10,10,10,10,10,10,
-};
-
-// Render-only: how brightly each material glows. Emissive cells cast a soft additive
-// bloom into their surroundings so fire, lava, lasers and lamps light up the scene.
-static float emissionStrength(uint8_t m) {
-    switch (m) {
-        case FIRE:       return 1.00f;
-        case BEAM:       return 1.00f;
-        case SPARK:      return 0.90f;
-        case LAVA:       return 0.85f;
-        case LAMPLIT:    return 0.80f;
-        case EMBER:      return 0.70f;
-        case FIREWORK:   return 0.70f;
-        case BURNFUSE:   return 0.70f;
-        case LASER:      return 0.60f;
-        case ANTIMATTER: return 0.60f;
-        case EHEAD:      return 0.50f;
-        default:         return 0.00f;
-    }
-}
+// Material names, the category-grouped palette layout, per-material glow strength, and
+// the shared interactive HUD/canvas drawing -- all in headers so every viewer matches.
+#include "../hud_meta.h"
+#include "../hud.h"
 
 static constexpr int CHUNK = 64;   // simulation chunk = 64x64 cells
 static constexpr int PAD = 16;     // WALL border / SIMD halo
@@ -428,7 +364,6 @@ static int runInteractive(ViewCfg cfg) {
     std::vector<uint32_t> orderedColors(MATERIAL_COUNT);
     int slotOf[MATERIAL_COUNT];
     for (int i = 0; i < MATERIAL_COUNT; ++i) { orderedColors[i] = kColors[kPaletteOrder[i]]; slotOf[kPaletteOrder[i]] = i; }
-    auto catOfMat = [&](uint8_t m) { return kCatNames[kSlotCat[slotOf[m]]]; };
     int brushRadius = 4;
     bool painting = false;
     bool paused = false;
@@ -442,11 +377,7 @@ static int runInteractive(ViewCfg cfg) {
     const float GLOW = 0.85f;                           // how strongly the bloom is added
     std::vector<float> glowR((size_t)LWv * LHv), glowG((size_t)LWv * LHv), glowB((size_t)LWv * LHv);
     float kern[(2 * GR + 1) * (2 * GR + 1)];
-    for (int dy = -GR; dy <= GR; ++dy)
-        for (int dx = -GR; dx <= GR; ++dx) {
-            float w = 1.0f - std::sqrt((float)(dx * dx + dy * dy)) / (GR + 1);
-            kern[(dy + GR) * (2 * GR + 1) + (dx + GR)] = (w > 0.0f) ? w * w : 0.0f;
-        }
+    hud::buildGlowKernel(kern, GR);
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
         "sandsim - paint with the mouse, pick from the palette, hover to identify, SPACE to pause",
@@ -567,111 +498,14 @@ static int runInteractive(ViewCfg cfg) {
         if (paused && stepOnce) { world.step(); stepOnce = false; }   // single-frame advance
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
 
-        // Scatter each emissive cell's light into a cell-resolution bloom buffer.
-        std::fill(glowR.begin(), glowR.end(), 0.0f);
-        std::fill(glowG.begin(), glowG.end(), 0.0f);
-        std::fill(glowB.begin(), glowB.end(), 0.0f);
-        for (int y = 0; y < LHv; ++y)
-            for (int x = 0; x < LWv; ++x) {
-                float s = emissionStrength(world.viewCell(viewX + x, viewY + y));
-                if (s <= 0.0f) continue;
-                uint32_t c = kColors[world.viewCell(viewX + x, viewY + y)];
-                float cr = (c >> 16) & 0xFF, cg = (c >> 8) & 0xFF, cb = c & 0xFF;
-                for (int dy = -GR; dy <= GR; ++dy) {
-                    int ny = y + dy; if (ny < 0 || ny >= LHv) continue;
-                    for (int dx = -GR; dx <= GR; ++dx) {
-                        int nx = x + dx; if (nx < 0 || nx >= LWv) continue;
-                        float w = kern[(dy + GR) * (2 * GR + 1) + (dx + GR)] * s;
-                        if (w <= 0.0f) continue;
-                        size_t ni = (size_t)ny * LWv + nx;
-                        glowR[ni] += cr * w; glowG[ni] += cg * w; glowB[ni] += cb * w;
-                    }
-                }
-            }
-
-        for (int y = 0; y < LHv; ++y)
-            for (int x = 0; x < LWv; ++x) {
-                int wxc = viewX + x, wyc = viewY + y;       // world cell under this viewport pixel
-                uint8_t m = world.viewCell(wxc, wyc);
-                uint32_t color = kColors[m];
-                if (m == FIRE || m == LAVA) color = ui::flicker(color, wxc, wyc, tick);
-                size_t gi = (size_t)y * LWv + x;            // add the accumulated bloom (additive, clamped)
-                if (glowR[gi] + glowG[gi] + glowB[gi] > 0.0f) {
-                    int rr = (int)((color >> 16) & 0xFF) + (int)(glowR[gi] * GLOW);
-                    int gg = (int)((color >> 8)  & 0xFF) + (int)(glowG[gi] * GLOW);
-                    int bb = (int)( color        & 0xFF) + (int)(glowB[gi] * GLOW);
-                    if (rr > 255) rr = 255;
-                    if (gg > 255) gg = 255;
-                    if (bb > 255) bb = 255;
-                    color = 0xFF000000u | ((uint32_t)rr << 16) | ((uint32_t)gg << 8) | (uint32_t)bb;
-                }
-                for (int dy = 0; dy < PIXEL; ++dy)
-                    for (int dx = 0; dx < PIXEL; ++dx)
-                        pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
-            }
-        ui::draw(pixels.data(), renderW, renderH, pal, orderedColors.data(), slotOf[current]);
-        { // a thin category-coloured accent in the gap under each swatch, so groups read at a glance
-            int stride = pal.sw + pal.gap;
-            for (int i = 0; i < pal.n; ++i) {
-                int sx = pal.x0 + (i % pal.cols) * stride, sy = pal.y0 + (i / pal.cols) * stride;
-                ui::fillRect(pixels.data(), renderW, renderH, sx, sy + pal.sw + 1, pal.sw, 2, kCatAccent[kSlotCat[i]]);
-            }
-        }
-
-        // ---- mouse hover: brush cursor ring on the canvas + a material tooltip ----
+        // Shared canvas (flicker + bloom) and HUD (categorised palette, tooltip, brush, bar).
+        hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, tick };
+        auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
+        hud::renderCanvas(pixels.data(), view, cell, glowR, glowG, glowB, kern, GR, GLOW);
         float hlx_f, hly_f;
         SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &hlx_f, &hly_f);
-        int hlx = (int)hlx_f, hly = (int)hly_f;
-        int hov = ui::hit(pal, hlx, hly);
-        bool onCanvas = (hlx >= 0 && hly >= 0 && hlx < renderW && hly < renderH);
-        if (hov < 0 && onCanvas) {
-            int ccx = hlx / PIXEL, ccy = hly / PIXEL, r = brushRadius;
-            for (int dy = -r; dy <= r; ++dy)
-                for (int dx = -r; dx <= r; ++dx) {
-                    if (dx*dx + dy*dy > r*r) continue;                       // inside the circular brush
-                    bool edge = (dx-1)*(dx-1)+dy*dy > r*r || (dx+1)*(dx+1)+dy*dy > r*r
-                              || dx*dx+(dy-1)*(dy-1) > r*r || dx*dx+(dy+1)*(dy+1) > r*r;
-                    if (!edge) continue;                                    // keep only the ring
-                    int cx = ccx + dx, cy = ccy + dy;
-                    if (cx >= 0 && cy >= 0 && cx < LWv && cy < LHv)
-                        ui::fillRect(pixels.data(), renderW, renderH, cx*PIXEL, cy*PIXEL, PIXEL, PIXEL, 0xFFFFFFFFu);
-                }
-        }
-        { // tooltip naming whatever is under the cursor (a palette swatch, or a cell): "NAME  CATEGORY"
-            int tipMat = -1;
-            if (hov >= 0) tipMat = kPaletteOrder[hov];
-            else if (onCanvas) tipMat = world.viewCell(viewX + hlx / PIXEL, viewY + hly / PIXEL);
-            if (tipMat >= 0 && kNames[tipMat] && *kNames[tipMat]) {
-                char tip[64];
-                std::snprintf(tip, sizeof tip, "%s  %s", kNames[tipMat], catOfMat((uint8_t)tipMat));
-                int tx = hlx + 16, ty = hly + 16, tw = ui::textWidth(tip, 2);
-                if (tx + tw + 6 > renderW) tx = renderW - tw - 6;
-                if (ty + 22 > renderH - 26) ty = hly - 24;
-                if (tx < 4) tx = 4;
-                if (ty < 4) ty = 4;
-                ui::label(pixels.data(), renderW, renderH, tx, ty, tip, 2, 0xFFFFFFFFu);
-            }
-        }
-
-        // ---- bottom info bar: selected material swatch + name + brush + controls ----
-        {
-            int barH = 24, by = renderH - barH;
-            ui::fillRect(pixels.data(), renderW, renderH, 0, by, renderW, barH, 0xFF121218u);
-            ui::fillRect(pixels.data(), renderW, renderH, 0, by, renderW, 1, 0xFF3A3A44u);
-            ui::fillRect(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, kColors[current] | 0xFF000000u);
-            ui::outline(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, 1, 0xFF000000u);
-            char buf[128];
-            std::snprintf(buf, sizeof buf, "%s  %s   BRUSH %d   %d FPS", kNames[current], catOfMat(current), brushRadius, (int)(fpsEMA + 0.5));
-            ui::text(pixels.data(), renderW, renderH, 26, by + 6, buf, 2, 0xFFFFFFFFu);
-            const char* help = "LMB PAINT  RMB ERASE  MMB PICK  WHEEL BRUSH  SPACE PAUSE  TAB STEP  DEL CLEAR  ARROWS PAN";
-            int hw = ui::textWidth(help, 1);
-            ui::text(pixels.data(), renderW, renderH, renderW - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
-        }
-        if (paused) {  // centred banner so it's unmistakable
-            const char* pw = "PAUSED  -  SPACE RESUME  TAB STEP";
-            int s = 3, w = ui::textWidth(pw, s);
-            ui::label(pixels.data(), renderW, renderH, (renderW - w) / 2, renderH / 2 - 10, pw, s, 0xFFFFE060u);
-        }
+        hud::State hs{ &pal, orderedColors.data(), slotOf, current, brushRadius, paused, (int)(fpsEMA + 0.5), (int)hlx_f, (int)hly_f };
+        hud::drawHud(pixels.data(), view, hs, cell);
 
         SDL_UpdateTexture(texture, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(renderer);

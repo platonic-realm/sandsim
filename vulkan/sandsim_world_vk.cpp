@@ -65,6 +65,8 @@ static ViewCfg parseView(int argc, char* argv[]) {
 }
 
 #include "../worldgen.h"   // shared deterministic seedMat() (diverse world, all backends)
+#include "../hud_meta.h"   // material names, categorised palette layout, glow strengths
+#include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
 
 struct Pass { int32_t type, dx, dy, parity, grp; };
 static const Pass kPasses[16] = {
@@ -205,6 +207,15 @@ public:
         syncUp();
     }
     uint8_t viewCell(int lx, int ly) const { return (uint8_t)(stagingPtr[(size_t)(ly + Y0) * SW + (lx + X0)] & 0xFFu); }
+
+    // Wipe the resident live region back to empty air (keeps the WALL halo).
+    void clearView() {
+        syncDown();
+        for (int y = 0; y < LH; ++y)
+            for (int x = 0; x < LW; ++x)
+                stagingPtr[(size_t)(y + Y0) * SW + (x + X0)] = EMPTY;
+        syncUp();
+    }
 
     void summary(uint64_t& checksum, uint64_t counts[MATERIAL_COUNT]) {
         syncDown();
@@ -626,11 +637,19 @@ static int runInteractive(ViewCfg cfg) {
             "world %dx%d chunks = %dx%d cells (all simulated), %d steps/s\n",
             renderW, renderH, outW, outH, ri.name, PIXEL, WBOX, HBOX, worldW, worldH, cfg.simHz);
 
-    // Swatch slot i IS material i, so the palette is driven entirely by
-    // MATERIAL_COUNT and kColors -- no per-material list/counts to maintain.
+    // Palette grouped into categories (kPaletteOrder); reverse map material -> swatch slot.
     ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
+    std::vector<uint32_t> orderedColors(MATERIAL_COUNT);
+    int slotOf[MATERIAL_COUNT];
+    for (int i = 0; i < MATERIAL_COUNT; ++i) { orderedColors[i] = kColors[kPaletteOrder[i]]; slotOf[kPaletteOrder[i]] = i; }
     int brushRadius = 4;
-    bool painting = false;
+    bool painting = false, paused = false, stepOnce = false;
+    uint8_t paintMat = SAND;          // material laid down while dragging (current, or EMPTY when erasing)
+    double fpsEMA = 0.0;
+    // Emissive-bloom scratch buffers + radial falloff kernel (shared with the CPU viewer).
+    const int GR = 3; const float GLOW = 0.85f;
+    std::vector<float> glowR((size_t)LWv * LHv), glowG((size_t)LWv * LHv), glowB((size_t)LWv * LHv);
+    float kern[(2 * GR + 1) * (2 * GR + 1)]; hud::buildGlowKernel(kern, GR);
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     bool quit = false; int mouseX = 0, mouseY = 0; SDL_Event e;
@@ -643,10 +662,23 @@ static int runInteractive(ViewCfg cfg) {
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 float flx, fly; SDL_RenderWindowToLogical(ren, e.button.x, e.button.y, &flx, &fly);
                 int h = ui::hit(pal, (int)flx, (int)fly);
-                if (h >= 0) current = (uint8_t)h;     // clicked a palette swatch (slot == material id)
-                else { painting = true; world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius); }
+                int cellX = viewX + (int)flx / PIXEL, cellY = viewY + (int)fly / PIXEL;
+                if (h >= 0) {
+                    if (e.button.button == SDL_BUTTON_LEFT) current = kPaletteOrder[h];    // pick a swatch
+                } else if (e.button.button == SDL_BUTTON_MIDDLE) {
+                    current = world.viewCell(cellX, cellY);                                // eyedropper
+                } else {
+                    painting = true;
+                    paintMat = (e.button.button == SDL_BUTTON_RIGHT) ? (uint8_t)EMPTY : current;  // right-click erases
+                    world.paint(cellX, cellY, paintMat, brushRadius);
+                }
             }
             else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
+            else if (e.type == SDL_MOUSEWHEEL) {
+                brushRadius += e.wheel.y;
+                if (brushRadius < 0)  brushRadius = 0;
+                if (brushRadius > 32) brushRadius = 32;
+            }
             else if (e.type == SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX, &mouseY);
             else if (e.type == SDL_KEYDOWN) switch (e.key.keysym.sym) {
                 case SDLK_0: current = EMPTY; break; case SDLK_1: current = WALL; break;
@@ -694,6 +726,10 @@ static int runInteractive(ViewCfg cfg) {
                 case SDLK_BACKQUOTE: current = GEYSER; break;
                 case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                 case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
+                case SDLK_SPACE: paused = !paused; break;
+                case SDLK_TAB: if (paused) stepOnce = true; break;
+                case SDLK_BACKSPACE:
+                case SDLK_DELETE: world.clearView(); break;
                 case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
                 case SDLK_RIGHT: viewX += PAN; if (viewX > worldW - LWv) viewX = worldW - LWv; break;
                 case SDLK_UP:    viewY -= PAN; if (viewY < 0) viewY = 0; break;
@@ -702,30 +738,30 @@ static int runInteractive(ViewCfg cfg) {
         }
         if (painting) {
             float flx, fly; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &flx, &fly);
-            world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius);
+            world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, paintMat, brushRadius);
         }
         // Advance the simulation by however much real time elapsed, so physics
-        // runs at cfg.simHz steps/s regardless of the render frame rate.
+        // runs at cfg.simHz steps/s regardless of the render frame rate (paused = freeze).
         auto nowT = std::chrono::steady_clock::now();
-        acc += std::chrono::duration<double>(nowT - last).count();
+        double frameDt = std::chrono::duration<double>(nowT - last).count();
+        acc += frameDt;
         last = nowT;
+        if (frameDt > 0.0) fpsEMA = (fpsEMA <= 0.0) ? 1.0 / frameDt : fpsEMA * 0.92 + (1.0 / frameDt) * 0.08;
         int ran = 0;
-        while (acc >= stepDt && ran < 8) { acc -= stepDt; ++ran; }
+        if (!paused) while (acc >= stepDt && ran < 8) { acc -= stepDt; ++ran; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
+        if (paused && stepOnce) { ran = 1; stepOnce = false; }   // single-frame advance
         if (ran > 1) world.stepN(ran - 1);
         if (ran > 0) world.stepAndPresent();        // last step + readback in one submit
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
-        for (int y = 0; y < LHv; ++y)
-            for (int x = 0; x < LWv; ++x) {
-                int wxc = viewX + x, wyc = viewY + y;       // world cell under this viewport pixel
-                uint8_t m = world.viewCell(wxc, wyc);
-                uint32_t color = kColors[m];
-                if (m == FIRE || m == LAVA) color = ui::flicker(color, wxc, wyc, tick);
-                for (int dy = 0; dy < PIXEL; ++dy)
-                    for (int dx = 0; dx < PIXEL; ++dx)
-                        pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
-            }
-        ui::draw(pixels.data(), renderW, renderH, pal, kColors, current);
+
+        // Shared canvas (flicker + bloom) and HUD (categorised palette, tooltip, brush, bar).
+        hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, tick };
+        auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
+        hud::renderCanvas(pixels.data(), view, cell, glowR, glowG, glowB, kern, GR, GLOW);
+        float hlx_f, hly_f; SDL_RenderWindowToLogical(ren, mouseX, mouseY, &hlx_f, &hly_f);
+        hud::State hs{ &pal, orderedColors.data(), slotOf, current, brushRadius, paused, (int)(fpsEMA + 0.5), (int)hlx_f, (int)hly_f };
+        hud::drawHud(pixels.data(), view, hs, cell);
         SDL_UpdateTexture(tex, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
         SDL_Delay(16);
