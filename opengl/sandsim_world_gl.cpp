@@ -777,6 +777,7 @@ public:
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
             for (int t = 3; t <= 53; ++t) {         // + ... cloner, crystal, antimatter, moss, wireworld, igniter
+                if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -788,6 +789,7 @@ public:
 
     void paint(int lx, int ly, uint8_t material, int radius) {
         if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL) hasReactive = true;
+        present[material] = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -833,7 +835,34 @@ private:
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
     uint32_t frame = 0;
-    bool hasReactive = false;            // gates the reaction dispatches (fire/lava)
+    bool hasReactive = false;            // gates the reaction dispatches (any reactive material)
+    // Per-material "ever resident" latch -> skip the dispatch for a paint-only reaction whose
+    // trigger material is absent (a guaranteed no-op). Set, never cleared; safe (a stale flag
+    // only costs an extra no-op dispatch). Mirrors the CPU build's gate. See passEnabled().
+    bool present[MATERIAL_COUNT] = {false};
+    // A gated reaction's two pass types run only while its trigger material(s) can be present.
+    bool passEnabled(int t) const {
+        switch (t) {
+            case 18: case 19: return present[SPRING];
+            case 20: case 21: return present[TNT] || present[GUNPOWDER];
+            case 22: case 23: return present[VOLCANO];
+            case 24: case 25: return present[VOID];
+            case 28: case 29: return present[VIRUS];
+            case 30: case 31: return present[SPARK];
+            case 32: case 33: return present[SALT];
+            case 34: case 35: return present[MERCURY];
+            case 36: case 37: return present[THERMITE];
+            case 38: case 39: return present[FROST];
+            case 40: case 41: return present[COAL] || present[EMBER];
+            case 42: case 43: return present[CLONER];
+            case 44: case 45: return present[CRYSTAL];
+            case 46: case 47: return present[ANTIMATTER];
+            case 48: case 49: return present[MOSS];
+            case 50: case 51: return present[EHEAD] || present[ETAIL];
+            case 52: case 53: return present[IGNITER];
+            default: return true;   // 3-17, 26-27: always-on core reactions
+        }
+    }
     GLint lSW, lX0, lX1, lY0, lY1, lType, lDx, lDy, lPar, lGrp, lFrame;
 
     void syncDown() {
@@ -857,6 +886,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
+                present[v] = true;
                 if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }

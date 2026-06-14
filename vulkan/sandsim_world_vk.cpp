@@ -194,6 +194,7 @@ public:
 
     void paint(int lx, int ly, uint8_t material, int radius) {
         if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL) hasReactive = true;
+        seen[material] = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
@@ -242,7 +243,33 @@ private:
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
     uint32_t frame = 0;
-    bool hasReactive = false;        // gates the reaction dispatches (fire/lava)
+    bool hasReactive = false;        // gates the reaction dispatches (any reactive material)
+    // Per-material "ever resident" latch -> skip the dispatch for a paint-only reaction whose
+    // trigger material is absent (a guaranteed no-op). Set, never cleared. Mirrors the CPU/GL
+    // build's gate exactly (same pass numbering), so all three stay bit-identical.
+    bool seen[MATERIAL_COUNT] = {false};
+    bool passEnabled(int t) const {
+        switch (t) {
+            case 18: case 19: return seen[SPRING];
+            case 20: case 21: return seen[TNT] || seen[GUNPOWDER];
+            case 22: case 23: return seen[VOLCANO];
+            case 24: case 25: return seen[VOID];
+            case 28: case 29: return seen[VIRUS];
+            case 30: case 31: return seen[SPARK];
+            case 32: case 33: return seen[SALT];
+            case 34: case 35: return seen[MERCURY];
+            case 36: case 37: return seen[THERMITE];
+            case 38: case 39: return seen[FROST];
+            case 40: case 41: return seen[COAL] || seen[EMBER];
+            case 42: case 43: return seen[CLONER];
+            case 44: case 45: return seen[CRYSTAL];
+            case 46: case 47: return seen[ANTIMATTER];
+            case 48: case 49: return seen[MOSS];
+            case 50: case 51: return seen[EHEAD] || seen[ETAIL];
+            case 52: case 53: return seen[IGNITER];
+            default: return true;   // 3-17, 26-27: always-on core reactions
+        }
+    }
 
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice phys = VK_NULL_HANDLE;
@@ -409,6 +436,7 @@ private:
             if (hasReactive) {                      // reactions (gated): see shader pass types
                 int decay = (int)(frame + (uint32_t)f);
                 for (int t : {3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53}) {  // + ... cloner, crystal, antimatter, moss, wireworld, igniter
+                    if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                     PushConsts pc{SW, X0, X1, Y0, Y1, t, 0, 0, 0, 0, decay};
                     vkCmdPushConstants(cmd, pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, LW / 16, LH / 16, 1);
@@ -457,6 +485,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
+                seen[v] = true;
                 if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL) hasReactive = true;
                 stagingPtr[(size_t)(Y0 + gy * CHUNK + ly) * SW + (X0 + gx * CHUNK + lx)] = v;
             }

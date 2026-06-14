@@ -226,12 +226,25 @@ GPU and produce a **bit-identical** world.
     movement verified with a standalone step test (mercury sinks below all),
     poisoning with a unit test, bit-identity with a `worldgen.h` seed.
 
-  All reaction passes are gated by a per-world flag set when a reactive material
-  is present, so a world of only sand/water/rock pays nothing for them. The
-  generated world *is* full of lava, oil, acid, plant and the rest, so the
-  streaming `--bench` run exercises the entire reaction set every step — which
-  turns the benchmark's checksum-equality assertion into a continuous proof that
-  all of it stays bit-identical across CPU SIMD, OpenGL and Vulkan (it does).
+  **Presence gating.** Each reaction is skipped unless its trigger material can
+  actually be in the live grid — a `present[]` latch set when a material is loaded
+  or painted. The safety argument is that every *gated* reaction's input is a
+  material that is never created by *another* reaction (only by itself, or never),
+  so while its flag is false the pass is a guaranteed **no-op**; skipping it can't
+  change the result, which keeps all three backends bit-identical (the always-on
+  core — fire/ignite/quench/plant/glass/melt/freeze/mud — handles the materials
+  that *are* created mid-frame). It's set-and-never-cleared, so a stale flag only
+  costs an extra no-op pass, never correctness. In a world of just sand/water/rock
+  the dozen-plus paint-only reactions (virus, frost, crystal, antimatter, moss,
+  wireworld, …) cost nothing; the win is real — gating roughly **doubled** the CPU
+  benchmark and sped the GPU backends up by tens of percent, with the cross-backend
+  checksum unchanged (verified against the un-gated build, both for the default
+  world and a chamber seeded with every paint-only reaction at once).
+
+  The generated world *is* full of lava, oil, acid, plant, tnt, coal, salt and the
+  rest, so the streaming `--bench` run still exercises most of the reaction set every
+  step — which turns the benchmark's checksum-equality assertion into a continuous
+  proof that all of it stays bit-identical across CPU SIMD, OpenGL and Vulkan (it does).
 - **Chunk** = `CHUNK × CHUNK` cells (`CHUNK = 64`) of material ids. The world is
   `wbox × hbox` chunks; chunks live on disk and are generated the first time
   they're needed from a single deterministic, hash-based seed shared by all three

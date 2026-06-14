@@ -118,30 +118,31 @@ public:
             makeGlass(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
             meltIce(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
             freezeWater(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
-            emitSpring(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
-            detonateTnt(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
-            emitVolcano(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);  // pass 22/23 (after tnt)
-            consumeVoid(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);         // pass 24/25
-            mudCycle(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);     // pass 26/27
-            spreadVirus(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);  // pass 28/29
-            arcSpark(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);            // pass 30/31
-            saltCycle(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);    // pass 32/33
-            poisonMercury(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame); // pass 34/35
-            burnThermite(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);          // pass 36/37
-            spreadFrost(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);           // pass 38/39
-            smoulderCoal(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);   // pass 40/41
-            cloneMaterial(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);         // pass 42/43
-            growCrystal(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);    // pass 44/45
-            annihilate(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);            // pass 46/47
-            growMoss(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);       // pass 48/49
-            wireWorld(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);             // pass 50/51
-            fireIgniter(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);           // pass 52/53
+            if (present[SPRING])   emitSpring(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);
+            if (present[TNT] || present[GUNPOWDER]) detonateTnt(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);
+            if (present[VOLCANO])  emitVolcano(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);  // pass 22/23
+            if (present[VOID])     consumeVoid(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);         // pass 24/25
+            mudCycle(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);     // pass 26/27 (sand pervasive: always on)
+            if (present[VIRUS])    spreadVirus(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);  // pass 28/29
+            if (present[SPARK])    arcSpark(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);            // pass 30/31
+            if (present[SALT])     saltCycle(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);    // pass 32/33
+            if (present[MERCURY])  poisonMercury(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame); // pass 34/35
+            if (present[THERMITE]) burnThermite(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);        // pass 36/37
+            if (present[FROST])    spreadFrost(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);         // pass 38/39
+            if (present[COAL] || present[EMBER]) smoulderCoal(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame); // pass 40/41
+            if (present[CLONER])   cloneMaterial(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);       // pass 42/43
+            if (present[CRYSTAL])  growCrystal(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);  // pass 44/45
+            if (present[ANTIMATTER]) annihilate(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);        // pass 46/47
+            if (present[MOSS])     growMoss(grid.data(), moved.data(), SW, X0, X1, Y0, Y1, frame);     // pass 48/49
+            if (present[EHEAD] || present[ETAIL]) wireWorld(grid.data(), moved.data(), SW, X0, X1, Y0, Y1); // pass 50/51
+            if (present[IGNITER])  fireIgniter(grid.data(), moved.data(), SW, X0, X1, Y0, Y1);         // pass 52/53
         }
         ++frame;
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
         if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL) hasReactive = true;
+        present[material] = true;
         for (int dy = -radius; dy <= radius; ++dy)
             for (int dx = -radius; dx <= radius; ++dx) {
                 int nx = lx + dx, ny = ly + dy;
@@ -184,7 +185,13 @@ private:
     uint32_t frame = 0;
     int residentMax = 0;
     long long nWrites = 0, nReads = 0;
-    bool hasReactive = false;      // gates the reaction passes; set when fire/lava enters the grid
+    bool hasReactive = false;      // gates the reaction passes; set when any reactive material enters the grid
+    // Per-material "has this ever been resident?" latch. A reaction whose trigger material is
+    // neither loaded, painted, nor *created by another reaction* (so its only source is itself
+    // or nothing) is a guaranteed no-op while its flag is false, so it can be skipped -- this
+    // is the perf gate for the many paint-only reactions (virus, frost, crystal, ...). Set, never
+    // cleared: a stale flag only costs an extra (still no-op) pass, never a wrong result.
+    bool present[MATERIAL_COUNT] = {false};
 
     // --- chunk <-> interior, disk -------------------------------------------
     void extractChunk(int cgx, int cgy, std::vector<uint8_t>& out) const {
@@ -196,6 +203,7 @@ private:
         for (int ly = 0; ly < CHUNK; ++ly)
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
+                present[v] = true;
                 if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL) hasReactive = true;
                 grid[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
