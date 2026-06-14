@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -268,6 +268,21 @@ GPU and produce a **bit-identical** world.
     Verified: a unit test (a seed branches through a pool without flooding, stays inert in air
     with no water, bleaches to ash beside fire, deterministic) plus a `worldgen.h` flooded-chamber
     reef bit-identical across all three backends over 300 frames.
+  - **air-ignition** — `PHOSPHORUS` is the mirror of `SODIUM`: where sodium ignites on contact
+    with `WATER`, white phosphorus ignites on contact with *air*. A 2-pass snapshot (passes 66/67)
+    marks each `PHOSPHORUS` cell that is next to `FIRE`/`LAVA` (an instant catch) or next to an
+    `EMPTY` cell *and* the frame-hash fires (a brief spontaneous delay); pass 2 turns each marked
+    cell into `FIRE`. A grain walled in by water or solids has no empty neighbour and stays inert,
+    so a cache survives underwater until the pool drains; a pile in air burns from its exposed
+    surface inward as the fire it makes catches the next grain. **Unlike `SODIUM`/`LYE`, its
+    spontaneous trigger — `EMPTY` air — is *not* reactive, so `PHOSPHORUS` must itself be in the
+    `hasReactive` set (like `VIRUS`/`CRYSTAL`), or a phosphorus-only pocket would never run its
+    pass on a backend that skips reactions; `present[PHOSPHORUS]` then gates it and is safe (it is
+    only ever painted, never created by a rule).** Verified: a unit test (air-exposed grain
+    ignites, submerged grain stable over 500 frames, instant catch beside lava, a pile burns
+    surface-first, deterministic), a movement test (rests exactly like `SAND`, sinks through
+    water), and two `worldgen.h` chambers — a dry phosphorus pile in air (isolating the
+    `hasReactive` edit) and a half-submerged cache — each bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

@@ -26,11 +26,11 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` are the odd gas that **sinks** -- a heavy vapour that pools in the low ground).
-`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE` and `SODIUM` fall and pile like sand;
+`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE`, `SODIUM` and `PHOSPHORUS` fall and pile like sand;
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
@@ -236,6 +236,13 @@ CPU and GPU:
   consuming the water as it goes (the one-neighbour rule keeps it lacy instead of flooding
   solid). It's alive, so heat **bleaches** it — a coral touching `FIRE` or `LAVA` dies to
   `ASH`. The first growth bound to a liquid substrate; seed a flooded cavern and watch it fill.
+- `PHOSPHORUS` is the **mirror image of `SODIUM` — where sodium bursts into flame on contact
+  with *water*, white phosphorus ignites on contact with *air*.** So you have to keep it
+  **submerged**: a grain touching an empty cell spontaneously catches `FIRE` (a frame-hash gives
+  it a brief, shimmering delay), while a grain walled in by water or solids sits perfectly
+  stable. It catches instantly from any flame too, so a pile flares from its exposed surface
+  inward. Store a cache underwater, then drain the pool — and the whole lot goes up at once.
+  (Sodium and phosphorus make a neat pair: one fears water, the other needs it.)
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

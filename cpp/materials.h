@@ -108,8 +108,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47,
-    MATERIAL_COUNT = 48
+    SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
+    MATERIAL_COUNT = 49
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -956,6 +956,39 @@ inline void growCoral(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, i
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = CORAL;
             else if (scratch[i] == 2) grid[i] = ASH;
+        }
+}
+
+// Phosphorus: a waxy powder (it falls and piles like SAND) that is the mirror image
+// of SODIUM -- where sodium bursts into flame on contact with WATER, white phosphorus
+// ignites on contact with AIR. So you must keep it SUBMERGED: a grain touching an
+// empty cell spontaneously catches FIRE (a frame-hash gives it a brief, shimmering
+// delay), while a grain walled in by water or solids sits perfectly stable. It also
+// catches instantly from any flame, so a pile flares from its exposed surface inward.
+// Two-pass snapshot: pass 1 marks each PHOSPHORUS cell that is next to fire/lava (an
+// instant catch) or next to air (and the frame-hash fires); pass 2 turns each marked
+// cell into FIRE. Store it underwater and drain the pool to set the whole cache alight.
+static constexpr uint32_t PHOS_IGNITE = 50;    // of 256/frame -> air-exposed grains light within a few frames
+inline bool phosphorusBurns(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 199u + (uint32_t)y * 113u + frame * 173u) & 0xFFu;
+    return h < PHOS_IGNITE;
+}
+inline void ignitePhosphorus(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == PHOSPHORUS) {
+                bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
+                bool air = grid[i-1]==EMPTY || grid[i+1]==EMPTY || grid[i-SW]==EMPTY || grid[i+SW]==EMPTY;
+                if (hot || (air && phosphorusBurns(x, y, frame))) r = 1;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = FIRE;
         }
 }
 
