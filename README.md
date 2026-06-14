@@ -25,7 +25,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`. Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise.
@@ -33,7 +33,7 @@ lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
-`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, and `ANTIMATTER` are solids that don't move.
+`OBSIDIAN`, `SALT`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, and `MOSS` are solids that don't move.
 On top of movement there are reactions, all order-independent and bit-identical on
 CPU and GPU:
 
@@ -167,6 +167,12 @@ CPU and GPU:
   size and then burning out (it's never created, only spent, so it always stops). Lay a
   line of it to bore a tunnel through solid rock, or drop a chunk to simply delete a hole
   in the world.
+- `MOSS` is a **creeping overgrowth** — the third way things grow. Where `PLANT` needs a
+  waterline and `CRYSTAL` branches into open air, moss **coats solid surfaces**: it spreads
+  along the thin skin of empty cells hugging `WALL`, `OBSIDIAN`, `GLASS` or `WOOD`, so it
+  greens over walls and timber and climbs them like ivy on a ruin — without ever filling
+  open space (it has nothing to cling to there). It's **flammable**, so a torch clears it
+  off in a flash; left alone, it slowly reclaims any stonework you build.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid
@@ -175,7 +181,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter); `[` / `]` size the brush. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter, `;` moss); `[` / `]` size the brush. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.

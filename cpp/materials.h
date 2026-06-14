@@ -70,14 +70,18 @@
 // flashing to FIRE as it is consumed. A blob annihilates itself and the matter around it
 // in a bright flash (peeling outside-in over a few frames), carving a clean cavity its own
 // size through anything; it is never created, only consumed, so it always burns itself out.
+// MOSS is a creeping overgrowth that coats SOLID SURFACES -- a third growth mode distinct
+// from PLANT (needs a waterline) and CRYSTAL (branches into open air): it spreads only along
+// the empty cells hugging a WALL/OBSIDIAN/GLASS/WOOD surface, so it greens walls and timber
+// like ivy on a ruin without filling open space. It's flammable.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
     SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21,
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
-    ANTIMATTER = 35,
-    MATERIAL_COUNT = 36
+    ANTIMATTER = 35, MOSS = 36,
+    MATERIAL_COUNT = 37
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -208,8 +212,8 @@ inline void igniteFire(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             size_t i = (size_t)y * SW + x;
             uint8_t c = grid[i];
             bool hot = isHot(grid[i-1]) || isHot(grid[i+1]) || isHot(grid[i-SW]) || isHot(grid[i+SW]);
-            bool ign = ((c == OIL || c == PLANT || c == GAS || c == WISP) && hot)   // oil, plant, gas & wisp: instant
-                    || (c == WOOD && hot && woodCatches(x, y, frame));             // wood: slow
+            bool ign = ((c == OIL || c == PLANT || c == GAS || c == WISP || c == MOSS) && hot)   // oil, plant, gas, wisp & moss: instant
+                    || (c == WOOD && hot && woodCatches(x, y, frame));                           // wood: slow
             scratch[i] = ign ? 1 : 0;
         }
     for (int y = Y0; y < Y1; ++y)
@@ -664,6 +668,40 @@ inline void annihilate(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
             if (scratch[i]) { grid[i] = FIRE; continue; }
             bool nearAnnih = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
             if (nearAnnih && isMatter(grid[i])) grid[i] = EMPTY;
+        }
+}
+
+static constexpr uint32_t MOSS_GROW = 7;       // of 256/frame -> moss creeps slowly over stone
+inline bool mossGrows(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 139u + (uint32_t)y * 113u + frame * 61u) & 0xFFu;
+    return h < MOSS_GROW;
+}
+// What moss can cling to: the inert stone/timber surfaces (NOT moss itself, or it would
+// fill open space instead of hugging a surface).
+inline bool mossAnchor(uint8_t m) { return m == WALL || m == OBSIDIAN || m == GLASS || m == WOOD; }
+
+// Moss: a creeping overgrowth that coats solid surfaces -- the third growth mode (PLANT
+// needs a waterline, CRYSTAL branches into open air, MOSS hugs a surface). An EMPTY cell
+// turns to MOSS when it is adjacent to existing MOSS *and* adjacent to a stone/wood anchor
+// (frame-hashed for a slow creep), so moss spreads only along the thin layer of empty cells
+// against a wall or timber -- greening structures without filling open space. A frame-hashed
+// mark/apply pair (each empty cell decides from a snapshot), order-independent / GPU-identical.
+inline void growMoss(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == EMPTY) {
+                bool nMoss = grid[i-1]==MOSS || grid[i+1]==MOSS || grid[i-SW]==MOSS || grid[i+SW]==MOSS;
+                bool nAnchor = mossAnchor(grid[i-1]) || mossAnchor(grid[i+1]) || mossAnchor(grid[i-SW]) || mossAnchor(grid[i+SW]);
+                if (nMoss && nAnchor && mossGrows(x, y, frame)) r = 1;
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i]) grid[i] = MOSS;
         }
 }
 

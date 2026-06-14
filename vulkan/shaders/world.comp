@@ -61,7 +61,7 @@ void main() {
         bool hot = cells[i-1]==6u||cells[i-1]==7u || cells[i+1]==6u||cells[i+1]==7u ||
                    cells[i-pc.SW]==6u||cells[i-pc.SW]==7u || cells[i+pc.SW]==6u||cells[i+pc.SW]==7u;
         uint c = cells[i]; uint r = 0u;
-        if (c == 5u || c == 10u || c == 4u || c == 30u) r = hot ? 1u : 0u;  // oil, plant, gas & wisp: instant
+        if (c == 5u || c == 10u || c == 4u || c == 30u || c == 36u) r = hot ? 1u : 0u;  // oil, plant, gas, wisp & moss: instant
         else if (c == 9u && hot) {
             uint h = (uint(x)*149u + uint(y)*83u + uint(pc.frame)*157u) & 0xFFu;
             r = (h < 28u) ? 1u : 0u;
@@ -423,6 +423,23 @@ void main() {
         if (moved[i] == 1u) { cells[i] = 6u; return; }
         bool nearAnnih = moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u;
         if (nearAnnih && cells[i] != 0u && cells[i] != 35u) cells[i] = 0u;
+        return;
+    }
+    if (pc.type == 48) {                                  // moss: mark EMPTY next to moss(36) AND a stone/wood anchor (1/23/13/9), frame-hashed
+        int i = y * pc.SW + x; uint r = 0u;
+        if (cells[i] == 0u) {
+            bool nMoss = cells[i-1]==36u||cells[i+1]==36u||cells[i-pc.SW]==36u||cells[i+pc.SW]==36u;
+            uint a=cells[i-1],b=cells[i+1],c2=cells[i-pc.SW],d=cells[i+pc.SW];
+            bool nAnc = (a==1u||a==23u||a==13u||a==9u)||(b==1u||b==23u||b==13u||b==9u)||(c2==1u||c2==23u||c2==13u||c2==9u)||(d==1u||d==23u||d==13u||d==9u);
+            uint h = (uint(x)*139u + uint(y)*113u + uint(pc.frame)*61u) & 0xFFu;
+            if (nMoss && nAnc && h < 7u) r = 1u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 49) {                                  // moss: apply (1 -> moss 36)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 36u;
         return;
     }
     int cx = x - pc.X0;
