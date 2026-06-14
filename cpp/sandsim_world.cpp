@@ -304,13 +304,12 @@ static int runInteractive(ViewCfg cfg) {
     const int PAN = CHUNK / 4;                                    // pan step per key press, in cells
     uint8_t current = SAND;
 
-    static const uint8_t kSwatch[26] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK, OBSIDIAN, SALT, SNOW};
-    uint32_t swatchCol[26];
-    for (int i = 0; i < 26; ++i) swatchCol[i] = kColors[kSwatch[i]];
-    ui::Palette pal = ui::palette(renderW, 26);
+    // The palette shows every material in id order -- swatch slot i IS material i --
+    // so it's driven entirely by MATERIAL_COUNT and kColors, with no per-material
+    // swatch list or counts to keep in sync as materials are added.
+    ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
     int brushRadius = 4;
     bool painting = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 26; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
@@ -337,7 +336,7 @@ static int runInteractive(ViewCfg cfg) {
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 float flx, fly; SDL_RenderWindowToLogical(renderer, e.button.x, e.button.y, &flx, &fly);
                 int h = ui::hit(pal, (int)flx, (int)fly);
-                if (h >= 0) current = kSwatch[h];     // clicked a palette swatch
+                if (h >= 0) current = (uint8_t)h;     // clicked a palette swatch (slot == material id)
                 else { painting = true; world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius); }
             }
             else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
@@ -402,7 +401,7 @@ static int runInteractive(ViewCfg cfg) {
                     for (int dx = 0; dx < PIXEL; ++dx)
                         pixels[(size_t)(y * PIXEL + dy) * renderW + (x * PIXEL + dx)] = color;
             }
-        ui::draw(pixels.data(), renderW, renderH, pal, swatchCol, selectedIdx());
+        ui::draw(pixels.data(), renderW, renderH, pal, kColors, current);
         SDL_UpdateTexture(texture, nullptr, pixels.data(), renderW * (int)sizeof(uint32_t));
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, nullptr, nullptr);

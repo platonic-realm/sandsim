@@ -791,8 +791,9 @@ static int runInteractive(ViewCfg cfg) {
 
     // Material palette HUD: laid out in window/logical coords (the present shader
     // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    static const uint8_t kSwatch[26] = {EMPTY, WALL, SAND, WATER, GAS, OIL, FIRE, LAVA, STEAM, WOOD, PLANT, ACID, SMOKE, GLASS, ICE, SPRING, TNT, ASH, VOLCANO, VOID, MUD, VIRUS, SPARK, OBSIDIAN, SALT, SNOW};
-    ui::Palette pal = ui::palette(renderW, 26);
+    // Swatch slot i IS material i (the present shader colours slot i with
+    // matColor(i)), so the palette is driven entirely by MATERIAL_COUNT.
+    ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
     glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
     glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
     glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
@@ -806,7 +807,6 @@ static int runInteractive(ViewCfg cfg) {
     int tick = 0;
     int brushRadius = 4;
     bool painting = false, pMb = false, pLB = false, pRB = false;
-    auto selectedIdx = [&]() { for (int i = 0; i < 26; ++i) if (kSwatch[i] == current) return i; return -1; };
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -859,7 +859,7 @@ static int runInteractive(ViewCfg cfg) {
         double mx, my; glfwGetCursorPos(win, &mx, &my);
         if (mb && !pMb) {                                // press edge
             int h = ui::hit(pal, (int)mx, (int)my);
-            if (h >= 0) current = kSwatch[h];            // clicked a palette swatch
+            if (h >= 0) current = (uint8_t)h;            // clicked a palette swatch (slot == material id)
             else painting = true;
         }
         if (!mb) painting = false;
@@ -876,7 +876,7 @@ static int runInteractive(ViewCfg cfg) {
         glUseProgram(present);
         int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH);
         if (cfbW != fbW || cfbH != fbH) { fbW = cfbW; fbH = cfbH; glUniform1i(uRW, fbW); glUniform1i(uRH, fbH); }
-        glUniform1i(uPalSel, selectedIdx());
+        glUniform1i(uPalSel, (int)current);            // selected slot == selected material id
         glUniform1i(uTick, ++tick);
         glUniform1i(uViewX, viewX); glUniform1i(uViewY, viewY);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, world.buffer());
