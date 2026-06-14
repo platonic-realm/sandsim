@@ -366,7 +366,7 @@ CPU and GPU:
 
 Fire and lava **shimmer** as they're drawn (an animated, render-only flicker — it
 doesn't touch the simulation). Paint with the mouse and pick a material from the
-on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter, `;` moss, `,` fumes, `.` wire, `/` electron-head, `'` electron-tail, `-` igniter, `=` sensor, `\` life, ``` geyser; `LYE` and any newer material are palette-click only, as every single-character key is now taken); `[` / `]` size the brush, and `SPACE` pauses/resumes the simulation. The palette
+on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `I` ice, `S` spring, `T` tnt, `H` ash, `V` volcano, `X` void, `D` mud, `Z` virus, `E` spark, `O` obsidian, `L` salt, `N` snow, `Q` mercury, `B` gunpowder, `K` thermite, `F` frost, `W` wisp, `C` coal, `R` ember, `U` cloner, `Y` crystal, `J` antimatter, `;` moss, `,` fumes, `.` wire, `/` electron-head, `'` electron-tail, `-` igniter, `=` sensor, `\` life, ``` geyser; `LYE` and any newer material are palette-click only, as every single-character key is now taken). **Left-click paints, right-click erases**, `[` / `]` size the brush, `SPACE` pauses/resumes, and `DEL`/`BACKSPACE` clears the canvas to empty air. The palette
 **wraps into a grid** so every material stays on-screen and clickable, and is the
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
@@ -376,8 +376,8 @@ no font dependency): a **bottom info bar** showing the selected material's name,
 brush size and the key controls; a **hover tooltip** that names whatever is under the
 cursor — any palette swatch or any cell in the world, so the 70-material palette is
 finally legible — a **circular brush outline** that previews exactly what you'll paint;
-and a centred **PAUSED** banner. (UI/UX polish like this is per-viewer and need not be
-bit-identical across backends — only the simulation is.)
+a live **FPS** readout; and a centred **PAUSED** banner. (UI/UX polish like this is
+per-viewer and need not be bit-identical across backends — only the simulation is.)
 
 In the interactive view the simulated area is a little **larger than what you can
 see** — the viewport plus a one-chunk **live border** all around it, all of it

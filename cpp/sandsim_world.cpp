@@ -185,6 +185,13 @@ public:
     }
     uint8_t viewCell(int lx, int ly) const { return grid[(size_t)(ly + Y0) * SW + (lx + X0)]; }
 
+    // Wipe the whole resident live region back to empty air (keeps the WALL halo).
+    void clearView() {
+        for (int y = Y0; y < Y1; ++y)
+            for (int x = X0; x < X1; ++x)
+                grid[(size_t)y * SW + x] = EMPTY;
+    }
+
     void summary(uint64_t& checksum, uint64_t counts[MATERIAL_COUNT]) {
         for (int i = 0; i < MATERIAL_COUNT; ++i) counts[i] = 0;
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
@@ -362,6 +369,7 @@ static int runInteractive(ViewCfg cfg) {
     int brushRadius = 4;
     bool painting = false;
     bool paused = false;
+    uint8_t paintMat = SAND;      // material laid down while dragging (current, or EMPTY when erasing)
 
     std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
     SDL_Init(SDL_INIT_VIDEO);
@@ -381,6 +389,7 @@ static int runInteractive(ViewCfg cfg) {
     SDL_Event e;
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
     double acc = 0.0;
+    double fpsEMA = 0.0;                             // smoothed render frame rate for the HUD
     auto last = std::chrono::steady_clock::now();
     while (!quit) {
         while (SDL_PollEvent(&e)) {
@@ -388,8 +397,13 @@ static int runInteractive(ViewCfg cfg) {
             else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 float flx, fly; SDL_RenderWindowToLogical(renderer, e.button.x, e.button.y, &flx, &fly);
                 int h = ui::hit(pal, (int)flx, (int)fly);
-                if (h >= 0) current = (uint8_t)h;     // clicked a palette swatch (slot == material id)
-                else { painting = true; world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius); }
+                if (h >= 0) {                          // over the palette
+                    if (e.button.button == SDL_BUTTON_LEFT) current = (uint8_t)h;   // left-click picks a swatch
+                } else {                               // over the canvas: left paints, right erases
+                    painting = true;
+                    paintMat = (e.button.button == SDL_BUTTON_RIGHT) ? (uint8_t)EMPTY : current;
+                    world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, paintMat, brushRadius);
+                }
             }
             else if (e.type == SDL_MOUSEBUTTONUP) painting = false;
             else if (e.type == SDL_MOUSEMOTION) SDL_GetMouseState(&mouseX, &mouseY);
@@ -443,6 +457,8 @@ static int runInteractive(ViewCfg cfg) {
                     case SDLK_LEFTBRACKET:  if (brushRadius > 0)  brushRadius--; break;
                     case SDLK_RIGHTBRACKET: if (brushRadius < 32) brushRadius++; break;
                     case SDLK_SPACE: paused = !paused; break;        // freeze/resume the simulation
+                    case SDLK_BACKSPACE:
+                    case SDLK_DELETE: world.clearView(); break;      // wipe the canvas to empty air
                     case SDLK_LEFT:  viewX -= PAN; if (viewX < 0) viewX = 0; break;
                     case SDLK_RIGHT: viewX += PAN; if (viewX > worldW - LWv) viewX = worldW - LWv; break;
                     case SDLK_UP:    viewY -= PAN; if (viewY < 0) viewY = 0; break;
@@ -453,13 +469,15 @@ static int runInteractive(ViewCfg cfg) {
         if (painting) {
             float flx, fly;
             SDL_RenderWindowToLogical(renderer, mouseX, mouseY, &flx, &fly);
-            world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, current, brushRadius);
+            world.paint(viewX + (int)flx / PIXEL, viewY + (int)fly / PIXEL, paintMat, brushRadius);
         }
         // Advance the simulation by however much real time elapsed, so physics
         // runs at cfg.simHz steps/s regardless of the render frame rate.
         auto nowT = std::chrono::steady_clock::now();
-        acc += std::chrono::duration<double>(nowT - last).count();
+        double frameDt = std::chrono::duration<double>(nowT - last).count();
+        acc += frameDt;
         last = nowT;
+        if (frameDt > 0.0) fpsEMA = (fpsEMA <= 0.0) ? 1.0 / frameDt : fpsEMA * 0.92 + (1.0 / frameDt) * 0.08;
         for (int n = 0; !paused && acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
         if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
         static int tick = 0; ++tick;                // render clock for the flame/lava flicker
@@ -516,9 +534,9 @@ static int runInteractive(ViewCfg cfg) {
             ui::fillRect(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, kColors[current] | 0xFF000000u);
             ui::outline(pixels.data(), renderW, renderH, 6, by + 5, 14, 14, 1, 0xFF000000u);
             char buf[96];
-            std::snprintf(buf, sizeof buf, "%s   BRUSH %d", kNames[current], brushRadius);
+            std::snprintf(buf, sizeof buf, "%s   BRUSH %d   %d FPS", kNames[current], brushRadius, (int)(fpsEMA + 0.5));
             ui::text(pixels.data(), renderW, renderH, 26, by + 6, buf, 2, 0xFFFFFFFFu);
-            const char* help = "LMB PAINT  PALETTE PICK  [ ] BRUSH  SPACE PAUSE  ARROWS PAN";
+            const char* help = "LMB PAINT  RMB ERASE  [ ] BRUSH  SPACE PAUSE  DEL CLEAR  ARROWS PAN";
             int hw = ui::textWidth(help, 1);
             ui::text(pixels.data(), renderW, renderH, renderW - hw - 6, by + 9, help, 1, 0xFFB0B0BEu);
         }
