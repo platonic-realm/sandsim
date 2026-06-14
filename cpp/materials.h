@@ -111,8 +111,8 @@ enum Material : uint8_t {
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
     LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60,
-    BELT = 61,
-    MATERIAL_COUNT = 62
+    BELT = 61, MAGNET = 62, IRON = 63,
+    MATERIAL_COUNT = 64
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1329,6 +1329,32 @@ inline void runConveyor(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1,
             uint8_t r = scratch[i];
             if (r == 254) grid[i] = EMPTY;
             else if (r != 255) grid[i] = r;                                // the material that arrived
+        }
+}
+
+// Magnet & iron filings. MAGNET is a static lodestone; IRON is a heavy steel powder that
+// pours and piles like sand -- until it touches a magnet, when it MAGNETISES and clings.
+// The field carries through the clinging iron, so a grain that sticks magnetises the next,
+// and a poured heap of iron accretes into chains and clumps reaching out from the magnet
+// (the magnetised iron is left the magnet's own colour, so the magnet visibly grows). Pour
+// iron over a magnet, or run it there on a BELT, and it collects itself. Two-pass snapshot:
+// pass 1 marks each IRON cell touching a MAGNET; pass 2 turns it to MAGNET. The magnet only
+// ever grows by consuming the iron it touches, so it terminates once the connected iron is
+// used up. Order-independent / GPU-identical.
+inline void magnetise(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == IRON &&
+                (grid[i-1]==MAGNET || grid[i+1]==MAGNET || grid[i-SW]==MAGNET || grid[i+SW]==MAGNET))
+                r = 1;
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = MAGNET;
         }
 }
 
