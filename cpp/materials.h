@@ -89,6 +89,10 @@
 // (EHEAD) into the WIRE next to it whenever any real material (a liquid, powder, fire, ...)
 // touches it, so a circuit can READ the world. Sensor + wire logic + igniter = a machine that
 // senses, decides and acts (a flood alarm, a heat trigger, a feedback loop).
+// LIFE is Conway's Game of Life -- a second famous cellular automaton sharing the sandbox with
+// Wireworld. A live cell with 2 or 3 live neighbours survives, an empty cell with exactly 3 is
+// born; everything else dies/stays empty. Gliders and oscillators weave through the falling
+// sand (which blocks births where it lands), a CA colliding with a physics sim.
 enum Material : uint8_t {
     EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7,
     STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14,
@@ -96,8 +100,8 @@ enum Material : uint8_t {
     SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27,
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
-    SENSOR = 42,
-    MATERIAL_COUNT = 43
+    SENSOR = 42, LIFE = 43,
+    MATERIAL_COUNT = 44
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -802,6 +806,33 @@ inline void senseWorld(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, 
                 bool nSensor = scratch[i-1] || scratch[i+1] || scratch[i-SW] || scratch[i+SW];
                 if (nSensor) grid[i] = EHEAD;
             }
+        }
+}
+
+// Conway's Game of Life: a second cellular automaton in the sandbox. A LIFE cell with 2 or 3
+// live neighbours (of 8) survives, else dies to EMPTY; an EMPTY cell with exactly 3 live
+// neighbours is born. Synchronous CA, so the two-pass snapshot computes it: pass 1 marks each
+// LIFE-or-EMPTY cell's fate (1 = live next, 2 = empty next, 0 = leave it -- which keeps any
+// other material untouched, so it blocks births and gliders thread through the falling world),
+// pass 2 applies. Order-independent / GPU-identical.
+inline void conwayLife(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            if (c == LIFE || c == EMPTY) {
+                int n = (grid[i-1]==LIFE) + (grid[i+1]==LIFE) + (grid[i-SW]==LIFE) + (grid[i+SW]==LIFE)
+                      + (grid[i-SW-1]==LIFE) + (grid[i-SW+1]==LIFE) + (grid[i+SW-1]==LIFE) + (grid[i+SW+1]==LIFE);
+                if (c == LIFE) r = (n == 2 || n == 3) ? 1 : 2;
+                else           r = (n == 3) ? 1 : 0;   // empty: born only on exactly 3 live neighbours
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = LIFE;
+            else if (scratch[i] == 2) grid[i] = EMPTY;
         }
 }
 

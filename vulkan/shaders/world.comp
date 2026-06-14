@@ -487,6 +487,22 @@ void main() {
         if (cells[i] == 38u && (moved[i-1]==1u||moved[i+1]==1u||moved[i-pc.SW]==1u||moved[i+pc.SW]==1u)) cells[i] = 39u;
         return;
     }
+    if (pc.type == 56) {                                  // life: mark each LIFE/EMPTY cell's Conway fate (1=live, 2=empty, 0=leave)
+        int i = y * pc.SW + x; uint c = cells[i]; uint r = 0u;
+        if (c == 43u || c == 0u) {
+            int n = int(cells[i-1]==43u)+int(cells[i+1]==43u)+int(cells[i-pc.SW]==43u)+int(cells[i+pc.SW]==43u)
+                  + int(cells[i-pc.SW-1]==43u)+int(cells[i-pc.SW+1]==43u)+int(cells[i+pc.SW-1]==43u)+int(cells[i+pc.SW+1]==43u);
+            if (c == 43u) r = (n == 2 || n == 3) ? 1u : 2u;
+            else          r = (n == 3) ? 1u : 0u;
+        }
+        moved[i] = r;
+        return;
+    }
+    if (pc.type == 57) {                                  // life: apply (1 -> LIFE 43, 2 -> EMPTY 0)
+        int i = y * pc.SW + x;
+        if (moved[i] == 1u) cells[i] = 43u; else if (moved[i] == 2u) cells[i] = 0u;
+        return;
+    }
     int cx = x - pc.X0;
     bool src = (pc.type == 0) ? (((y - pc.Y0) & 1) == pc.parity)   // vertical: row parity
                               : ((cx & 1) == pc.parity);            // diag/horiz: column parity
