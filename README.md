@@ -26,10 +26,10 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder). Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
-lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` are the odd gas that **sinks** -- a heavy vapour that pools in the low ground).
+lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
 `ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE`, `SODIUM`, `PHOSPHORUS` and `CEMENT` fall and pile like sand;
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
@@ -249,6 +249,13 @@ CPU and GPU:
   upward like drying concrete (a grain still falling through air never freezes in mid-air). It's
   the counterpart to the destroyers — where `ACID`, `THERMITE` and `ANTIMATTER` eat `WALL` away,
   cement pours new wall back, so you can carve *and* rebuild the world.
+- `CHLORINE` is a **heavy green toxic gas** that sinks and pools along the ground like `FUMES`.
+  Its signature is real chemistry: where chlorine meets `SODIUM` the two combine into `SALT`
+  (2Na + Cl₂ → 2NaCl — literally the reaction that makes table salt, closing a loop between
+  two materials already in the world). It's also poisonous to life — a chlorine cell touching
+  `PLANT`, `MOSS` or `CORAL` **bleaches it away** — and any stray gas slowly disperses, so the
+  cloud thins instead of lasting forever. Flood a cavern with it, then drop sodium in to watch
+  it crystallise into brine.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

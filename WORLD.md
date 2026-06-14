@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -296,6 +296,21 @@ GPU and produce a **bit-identical** world.
     unsupported grain stays loose over 1000 frames, a resting column cures fully, deterministic), a
     movement test (rests exactly like `SAND`, sinks through water), and a cement-only `worldgen.h`
     chamber — isolating the `hasReactive` edit — bit-identical across all three backends.
+  - **toxic gas** — `CHLORINE` is a heavy green gas wired to move exactly like `FUMES` (it sinks
+    and pools), and the first material with gas-phase chemistry. A 2-pass snapshot (passes 70/71)
+    marks each cell's fate: a `CHLORINE` (or `SODIUM`) cell beside the other becomes `SALT`
+    (2Na + Cl₂ → 2NaCl — closing a loop with two existing materials); a `CHLORINE` beside `PLANT`,
+    `MOSS` or `CORAL` is spent bleaching that cell to `EMPTY`; and any stray chlorine disperses to
+    `EMPTY` on a frame-hash. Chlorine is only ever consumed (never created), so it terminates.
+    Because it makes `SALT`, the salt-cycle pass is gated on `present[SALT] || present[LYE] ||
+    present[CHLORINE]` (the same fix `LYE` needed), and because it disperses on its own timer it
+    is in the `hasReactive` set (like `PHOSPHORUS`/`CEMENT`). Adding a new gas is the most
+    invasive movement change — chlorine's id had to join every `canEnter`/eligibility site where
+    `FUMES` appears, across `simd_core.h` and both GPU shaders — so it was verified hardest: the
+    default bench is unchanged, a WALL-bordered CPU test confirms chlorine moves *bit-identically*
+    to `FUMES` over 150 frames, a reaction unit test covers Na→salt/bleach/disperse, and two
+    `worldgen.h` chambers (chlorine-only, and chlorine + sodium + plant) agree across all three
+    backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

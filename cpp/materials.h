@@ -109,8 +109,8 @@ enum Material : uint8_t {
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
-    CEMENT = 49,
-    MATERIAL_COUNT = 50
+    CEMENT = 49, CHLORINE = 50,
+    MATERIAL_COUNT = 51
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1017,6 +1017,45 @@ inline void hardenCement(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = WALL;
+        }
+}
+
+// Chlorine: a heavy green toxic gas (it sinks and pools like FUMES). Its signature is
+// real chemistry -- where CHLORINE meets SODIUM the two combine into SALT (2Na + Cl2 ->
+// 2NaCl, the very reaction that makes table salt), closing a loop between two materials
+// already in the world. It is also poisonous to living things: a CHLORINE cell touching
+// PLANT, MOSS or CORAL bleaches it away (and is spent doing so), and any stray chlorine
+// slowly disperses on a frame-hash, so toxic clouds thin out instead of lasting forever.
+// Two-pass snapshot: pass 1 marks each cell's fate (1 = becomes SALT, 2 = becomes EMPTY);
+// pass 2 applies. Order-independent / GPU-identical.
+static constexpr uint32_t CHLORINE_FADE = 4;   // of 256/frame -> a cloud thins over ~1 s
+inline bool chlorineFades(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 83u + (uint32_t)y * 211u + frame * 67u) & 0xFFu;
+    return h < CHLORINE_FADE;
+}
+inline bool chlorineKills(uint8_t m) { return m == PLANT || m == MOSS || m == CORAL; }
+inline void reactChlorine(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            uint8_t n0 = grid[i-1], n1 = grid[i+1], n2 = grid[i-SW], n3 = grid[i+SW];
+            if (c == CHLORINE) {
+                if (n0==SODIUM || n1==SODIUM || n2==SODIUM || n3==SODIUM) r = 1;           // -> SALT
+                else if (chlorineKills(n0)||chlorineKills(n1)||chlorineKills(n2)||chlorineKills(n3)) r = 2;  // spent bleaching
+                else if (chlorineFades(x, y, frame)) r = 2;                                // disperse
+            } else if (c == SODIUM) {
+                if (n0==CHLORINE || n1==CHLORINE || n2==CHLORINE || n3==CHLORINE) r = 1;   // -> SALT
+            } else if (chlorineKills(c)) {
+                if (n0==CHLORINE || n1==CHLORINE || n2==CHLORINE || n3==CHLORINE) r = 2;   // bleached away
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = SALT;
+            else if (scratch[i] == 2) grid[i] = EMPTY;
         }
 }
 
