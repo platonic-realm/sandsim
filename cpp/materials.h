@@ -109,8 +109,8 @@ enum Material : uint8_t {
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
-    CEMENT = 49, CHLORINE = 50,
-    MATERIAL_COUNT = 51
+    CEMENT = 49, CHLORINE = 50, BATTERY = 51,
+    MATERIAL_COUNT = 52
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1056,6 +1056,32 @@ inline void reactChlorine(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = SALT;
             else if (scratch[i] == 2) grid[i] = EMPTY;
+        }
+}
+
+// Battery: a power source for WIREWORLD circuits and the first material to GENERATE
+// signals on its own. On a periodic global clock it injects an electron head (EHEAD)
+// into every WIRE cell touching it, so a battery laid against a wire network drives a
+// steady train of pulses -- the missing autonomous SOURCE that lets circuits run
+// hands-free (a clock for a timed IGNITER, a ring oscillator, a blinking display).
+// Where a SENSOR needs the world to poke it, a battery needs nothing. The pulse window
+// uses the global frame counter (same determinism as fire-decay/geyser), so it stays
+// bit-identical across backends. Two-pass snapshot: pass 1 marks each WIRE touching a
+// battery on a pulse frame; pass 2 lights it to EHEAD. Runs after the wireworld pass,
+// so an injected head begins propagating on the next frame.
+static constexpr uint32_t BATTERY_PERIOD = 12;   // a one-frame pulse every 12 frames
+inline void emitBattery(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    bool pulse = (frame % BATTERY_PERIOD) == 0u;
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            scratch[i] = (pulse && grid[i] == WIRE &&
+                          (grid[i-1]==BATTERY || grid[i+1]==BATTERY || grid[i-SW]==BATTERY || grid[i+SW]==BATTERY)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = EHEAD;
         }
 }
 
