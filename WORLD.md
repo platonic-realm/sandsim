@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -283,6 +283,19 @@ GPU and produce a **bit-identical** world.
     surface-first, deterministic), a movement test (rests exactly like `SAND`, sinks through
     water), and two `worldgen.h` chambers — a dry phosphorus pile in air (isolating the
     `hasReactive` edit) and a half-submerged cache — each bit-identical across all three backends.
+  - **curing** — `CEMENT` is the first *building* material: a sand-density powder that hardens into
+    `WALL`. A 2-pass snapshot (passes 68/69) marks each `CEMENT` cell that is *supported* (the cell
+    directly below is not empty) and whose frame-hash fires, then turns it to `WALL`; a grain still
+    falling through air (empty below) is never marked, so it can't freeze in mid-air, and a settled
+    pile cures from the supported cells upward like drying concrete. The product is the existing
+    `WALL`, so no new material is needed, and it is the counterpart to the wall-eaters
+    (`ACID`/`THERMITE`/`ANTIMATTER`). Like `PHOSPHORUS`, its trigger is *not* a reactive material
+    (it cures on its own timer), so `CEMENT` must itself be in the `hasReactive` set, or a
+    cement-only pile would never cure on a backend that skips reactions; `present[CEMENT]` then
+    gates it and is safe (only ever painted). Verified: a unit test (a supported grain cures, an
+    unsupported grain stays loose over 1000 frames, a resting column cures fully, deterministic), a
+    movement test (rests exactly like `SAND`, sinks through water), and a cement-only `worldgen.h`
+    chamber — isolating the `hasReactive` edit — bit-identical across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

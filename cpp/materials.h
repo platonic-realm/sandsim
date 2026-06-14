@@ -109,7 +109,8 @@ enum Material : uint8_t {
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
-    MATERIAL_COUNT = 49
+    CEMENT = 49,
+    MATERIAL_COUNT = 50
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -989,6 +990,33 @@ inline void ignitePhosphorus(uint8_t* grid, uint8_t* scratch, int SW, int X0, in
         for (int x = X0; x < X1; ++x) {
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = FIRE;
+        }
+}
+
+// Cement: a pourable construction powder (it falls and piles like SAND). The first
+// BUILDING material -- once a grain comes to rest *on something* (the cell below is
+// not empty), it cures: a frame-hash slowly turns it to WALL (stone), so a poured
+// pile settles into its mould and then sets, hardening from the supported cells
+// upward like drying concrete. A grain still falling through air (nothing beneath it)
+// stays loose, so it never freezes in mid-air. The counterpart to the destroyers
+// (ACID/THERMITE/ANTIMATTER eat WALL; cement pours new WALL back). Two-pass snapshot:
+// pass 1 marks each supported CEMENT whose frame-hash fires; pass 2 turns it to WALL.
+static constexpr uint32_t CEMENT_SET = 6;      // of 256/frame -> a resting pile cures over ~1-2 s
+inline bool cementSets(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 61u + (uint32_t)y * 157u + frame * 97u) & 0xFFu;
+    return h < CEMENT_SET;
+}
+inline void hardenCement(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            // supported = the cell below is occupied (settled, not falling through air)
+            scratch[i] = (grid[i] == CEMENT && grid[i+SW] != EMPTY && cementSets(x, y, frame)) ? 1 : 0;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = WALL;
         }
 }
 

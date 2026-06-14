@@ -26,11 +26,11 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder). Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` are the odd gas that **sinks** -- a heavy vapour that pools in the low ground).
-`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE`, `SODIUM` and `PHOSPHORUS` fall and pile like sand;
+`ASH`, `GUNPOWDER`, `THERMITE`, `COAL`, `EMBER`, `LYE`, `SODIUM`, `PHOSPHORUS` and `CEMENT` fall and pile like sand;
 `SNOW` is lighter than every liquid, so it falls through air but **floats on water
 and oil**; `MERCURY` is the heaviest of all, so **everything floats on it**, and `WISP` is the lightest, so **it rises through everything** (even liquids). `WALL`,
 `WOOD`, `PLANT`, `GLASS`, `ICE`, `SPRING`, `TNT`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`,
@@ -243,6 +243,12 @@ CPU and GPU:
   stable. It catches instantly from any flame too, so a pile flares from its exposed surface
   inward. Store a cache underwater, then drain the pool — and the whole lot goes up at once.
   (Sodium and phosphorus make a neat pair: one fears water, the other needs it.)
+- `CEMENT` is the **first building material — a pourable powder that hardens into stone.** Pour
+  it like sand to fill a mould or cavity, and once a grain comes to **rest on something** it
+  cures: a frame-hash slowly turns it to `WALL`, so a settled pile sets from the supported cells
+  upward like drying concrete (a grain still falling through air never freezes in mid-air). It's
+  the counterpart to the destroyers — where `ACID`, `THERMITE` and `ANTIMATTER` eat `WALL` away,
+  cement pours new wall back, so you can carve *and* rebuild the world.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid
