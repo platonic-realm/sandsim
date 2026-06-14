@@ -17,10 +17,12 @@ static inline uint32_t hashCoord(int gx, int gy) {
 // wood, and an underground of rock carved by caves and packed with region-clustered
 // pools and seams -- water, oil, acid, gas, ice, plus buried COAL seams, pale SALT
 // deposits and silvery MERCURY pools -- with LAVA welling up from the deep and the
-// rare water SPRING or cache of TNT. Materials are clustered (the pool choice is
-// keyed to a coarse region hash) rather than salt-and-pepper, so the world reads as
-// pools, veins and caverns that then come alive as the reactions run (coal seams
-// catch where lava meets them, snow melts at the warm edges, and so on).
+// rare water SPRING or cache of TNT. Caverns hold pockets of bubbling WISP (marsh
+// gas) and the odd GEYSER vent that pulses steam on a cycle. Materials are clustered
+// (the pool choice is keyed to a coarse region hash) rather than salt-and-pepper, so
+// the world reads as pools, veins and caverns that then come alive as the reactions run
+// (coal seams catch where lava meets them, snow melts at the warm edges, geysers gush
+// steam that rains back, marsh gas drifts up and flares near a vein of lava, and so on).
 static inline uint8_t seedMat(int gx, int gy) {
     uint32_t cell = hashCoord(gx, gy);
 
@@ -76,6 +78,8 @@ static inline uint8_t seedMat(int gx, int gy) {
     // caves: a coarse hash opens roomy caverns, textured by a fine hash
     bool cave = (hashCoord((gx >> 4) + 808, (gy >> 4) + 909) % 1000u) < 340u && (cell % 1000u) < 800u;
     if (cave) {
+        if ((cell % 1000u) < 2u && depth > 40)   return GEYSER;  // rare geothermal vents pulse steam into caverns
+        if ((cell % 1000u) < 9u && depth > 30)   return WISP;    // pockets of marsh gas bubble up and gather
         if ((cell % 100u) < 18u) return pool;              // scattered deposits / drips
         return EMPTY;                                      // open cavern
     }
