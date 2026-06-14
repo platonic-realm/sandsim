@@ -37,6 +37,12 @@
 enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58, LEVITON = 59, SPROUT = 60, BELT = 61, MAGNET = 62, IRON = 63, NITRO = 64, RUST = 65, SEED = 66, LASER = 67, BEAM = 68, ICICLE = 69, MATERIAL_COUNT = 70 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
+// CPU-side material colours (ARGB), matching the GLSL matColor(). The interactive view
+// composes its frame on the CPU (shared hud:: code) and blits it, so it needs these.
+static const uint32_t kColors[MATERIAL_COUNT] = {
+    0xFF000000u, 0xFF808080u, 0xFFE2C878u, 0xFF4488FFu, 0xFFB0C4DEu, 0xFF8E44ADu, 0xFFFF5A1Eu, 0xFFCF1B0Bu, 0xFFDCE4ECu, 0xFF8B5A2Bu, 0xFF3AA84Au, 0xFFB8F000u, 0xFF585860u, 0xFFAEE0E8u, 0xFFCDEBFFu, 0xFF1FB5C4u, 0xFFCC2222u, 0xFF6B6358u, 0xFF402A28u, 0xFF3C1452u, 0xFF4E3B24u, 0xFFD81E9Bu, 0xFFFAF080u, 0xFF2A2438u, 0xFFEDEDE0u, 0xFFEAF4FFu, 0xFFC4C8D4u, 0xFF3A3A40u, 0xFF8A3A1Fu, 0xFFAEF0FFu, 0xFF9EF5B5u, 0xFF26221Eu, 0xFFCC4411u, 0xFF9A40E6u, 0xFF40E0C0u, 0xFFCDA0FFu, 0xFF6E8B3Du, 0xFFCBC75Au, 0xFFC8862Eu, 0xFF80E0FFu, 0xFF3A6AB0u, 0xFFD89020u, 0xFFB0E040u, 0xFF50FF90u, 0xFF5090A0u, 0xFFC8E8D0u, 0xFFD7D0B0u, 0xFFFF8C69u, 0xFFEFE8A0u, 0xFF7E8C99u, 0xFFB6E03Au, 0xFFFFCC22u, 0xFF9A8050u, 0xFFFFD030u, 0xFF88D0F8u, 0xFF4A4030u, 0xFFFFF0A0u, 0xFFB098A8u, 0xFFFF50C0u, 0xFFB060FFu, 0xFF70D838u, 0xFF454C50u, 0xFF5878B8u, 0xFF788088u, 0xFFC8E070u, 0xFFA85020u, 0xFFB5832Eu, 0xFF901818u, 0xFFFF3030u, 0xFFE8F8FFu,
+};
+
 static constexpr int CHUNK = 64;
 static constexpr int PAD = 16;
 
@@ -62,6 +68,8 @@ static ViewCfg parseView(int argc, char* argv[]) {
 }
 
 #include "../worldgen.h"   // shared deterministic seedMat() (diverse world, all backends)
+#include "../hud_meta.h"   // material names, categorised palette layout, glow strengths
+#include "../hud.h"        // shared canvas (flicker+bloom) + HUD (palette/tooltip/bar)
 
 // The 16 sub-passes, in the exact order of cpp/simd_core.h.
 struct Pass { int type, dx, dy, parity, grp; };   // type: 0 vert, 1 diag, 2 horiz
@@ -927,6 +935,19 @@ void main() {
 }
 )GLSL";
 
+// Blit a CPU-rendered ARGB frame (scene + HUD, drawn by the shared hud:: code) to the
+// screen, flipping V so the buffer's top row lands at the top of the window.
+static const char* kBlitFrag = R"GLSL(
+#version 430
+uniform sampler2D uTex;
+uniform int uRW, uRH;
+out vec4 frag;
+void main() {
+    vec2 uv = gl_FragCoord.xy / vec2(float(uRW), float(uRH));
+    frag = texture(uTex, vec2(uv.x, 1.0 - uv.y));
+}
+)GLSL";
+
 static const char* kPresentFrag = R"GLSL(
 #version 430
 layout(std430, binding = 0) buffer Cells { uint cells[]; };
@@ -1125,6 +1146,18 @@ public:
     int stride() const { return SW; }
     int originX() const { return X0; }
     int originY() const { return Y0; }
+
+    // CPU-side cell read (from the shadow mirror; call refreshHost() first to refresh it).
+    uint8_t viewCell(int lx, int ly) const { return (uint8_t)(shadow[(size_t)(ly + Y0) * SW + (lx + X0)] & 0xFFu); }
+    void refreshHost() { syncDown(); }            // pull the latest grid from the GPU into shadow
+    // Wipe the resident live region back to empty air (keeps the WALL halo).
+    void clearView() {
+        syncDown();
+        for (int y = 0; y < LH; ++y)
+            for (int x = 0; x < LW; ++x)
+                shadow[(size_t)(y + Y0) * SW + (x + X0)] = EMPTY;
+        syncUp();
+    }
 
     void generateAllToDisk() {
         std::vector<uint8_t> buf((size_t)CHUNK * CHUNK);
@@ -1371,6 +1404,9 @@ static int runBench(int steps, int wbox, int hbox) {
     return conserved ? 0 : 2;
 }
 
+static int g_scroll = 0;     // mouse-wheel accumulator (GLFW scroll arrives via callback)
+static void scrollCB(GLFWwindow*, double, double yoff) { g_scroll += (int)yoff; }
+
 static int runInteractive(ViewCfg cfg) {
     const int PIXEL = cfg.scale;
     const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK);   // viewport, in chunks
@@ -1400,42 +1436,44 @@ static int runInteractive(ViewCfg cfg) {
     const int PAN = CHUNK / 4;                                    // pan step per key press, in cells
     uint8_t current = SAND;
 
-    // The actual framebuffer can differ from the requested window size under a
-    // HiDPI / fractional-scaling compositor; map cells across the real pixels so
-    // the grid fills the window exactly like the SDL builds' logical-size scaling.
     int fbW = renderW, fbH = renderH;
     glfwGetFramebufferSize(win, &fbW, &fbH);
-    glUseProgram(present);
-    glUniform1i(glGetUniformLocation(present, "uSW"), world.stride());
-    glUniform1i(glGetUniformLocation(present, "uX0"), world.originX());
-    glUniform1i(glGetUniformLocation(present, "uY0"), world.originY());
-    glUniform1i(glGetUniformLocation(present, "uLW"), LWv);   // viewport extent in cells
-    glUniform1i(glGetUniformLocation(present, "uLH"), LHv);
-    GLint uRW = glGetUniformLocation(present, "uRW"), uRH = glGetUniformLocation(present, "uRH");
-    glUniform1i(uRW, fbW); glUniform1i(uRH, fbH);
-    GLint uViewX = glGetUniformLocation(present, "uViewX"), uViewY = glGetUniformLocation(present, "uViewY");
     fprintf(stderr, "sandsim [opengl]: view %dx%d (framebuffer %dx%d), scale %d, "
             "world %dx%d chunks = %dx%d cells (all simulated), %d steps/s\n",
             renderW, renderH, fbW, fbH, PIXEL, WBOX, HBOX, worldW, worldH, cfg.simHz);
+    (void)present;                                  // the interactive view composes on the CPU instead
 
-    // Material palette HUD: laid out in window/logical coords (the present shader
-    // scales it to the framebuffer), matching the SDL builds via the shared ui.h.
-    // Swatch slot i IS material i (the present shader colours slot i with
-    // matColor(i)), so the palette is driven entirely by MATERIAL_COUNT.
+    // The interactive frame is composed on the CPU by the shared hud:: code (scene with
+    // flame flicker + emissive bloom, plus the full HUD) -- byte-for-byte the same as the
+    // SDL viewers -- then uploaded and blitted, so OpenGL shows the same text, categorised
+    // palette and tooltips. The sim still runs on the GPU; we only read the grid back.
+    GLuint blit = linkProgram({compileShader(GL_VERTEX_SHADER, kPresentVert),
+                               compileShader(GL_FRAGMENT_SHADER, kBlitFrag)});
+    GLuint frameTex; glGenTextures(1, &frameTex);
+    glBindTexture(GL_TEXTURE_2D, frameTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, renderW, renderH, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, nullptr);
+    glUseProgram(blit);
+    glUniform1i(glGetUniformLocation(blit, "uTex"), 0);
+    GLint uBRW = glGetUniformLocation(blit, "uRW"), uBRH = glGetUniformLocation(blit, "uRH");
+
     ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
-    glUniform1i(glGetUniformLocation(present, "uWinW"), renderW);
-    glUniform1i(glGetUniformLocation(present, "uWinH"), renderH);
-    glUniform1i(glGetUniformLocation(present, "uPalX0"), pal.x0);
-    glUniform1i(glGetUniformLocation(present, "uPalY0"), pal.y0);
-    glUniform1i(glGetUniformLocation(present, "uPalSW"), pal.sw);
-    glUniform1i(glGetUniformLocation(present, "uPalGap"), pal.gap);
-    glUniform1i(glGetUniformLocation(present, "uPalN"), pal.n);
-    glUniform1i(glGetUniformLocation(present, "uPalCols"), pal.cols);
-    GLint uPalSel = glGetUniformLocation(present, "uPalSel");
-    GLint uTick = glGetUniformLocation(present, "uTick");
-    int tick = 0;
-    int brushRadius = 4;
-    bool painting = false, pMb = false, pLB = false, pRB = false;
+    std::vector<uint32_t> orderedColors(MATERIAL_COUNT);
+    int slotOf[MATERIAL_COUNT];
+    for (int i = 0; i < MATERIAL_COUNT; ++i) { orderedColors[i] = kColors[kPaletteOrder[i]]; slotOf[kPaletteOrder[i]] = i; }
+    std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
+    int tick = 0, brushRadius = 4;
+    bool painting = false, pLB = false, pRB = false, paused = false, stepOnce = false;
+    bool pBL = false, pBR = false, pBM = false, pSpace = false, pTab = false, pDel = false;
+    uint8_t paintMat = SAND;
+    double fpsEMA = 0.0;
+    const int GR = 3; const float GLOW = 0.85f;
+    std::vector<float> glowR((size_t)LWv * LHv), glowG((size_t)LWv * LHv), glowB((size_t)LWv * LHv);
+    float kern[(2 * GR + 1) * (2 * GR + 1)]; hud::buildGlowKernel(kern, GR);
+    glfwSetScrollCallback(win, scrollCB);
 
     glfwSwapInterval(1);                             // vsync: cap rendering (physics is decoupled)
     const double stepDt = 1.0 / cfg.simHz;          // seconds per simulation step
@@ -1502,32 +1540,55 @@ static int runInteractive(ViewCfg cfg) {
         if (lb && !pLB && brushRadius > 0)  brushRadius--;
         if (rb && !pRB && brushRadius < 32) brushRadius++;
         pLB = lb; pRB = rb;
+        if (g_scroll) { brushRadius += g_scroll; g_scroll = 0;       // mouse wheel sizes the brush
+            brushRadius = std::max(0, std::min(32, brushRadius)); }
+        bool kSpace = glfwGetKey(win, GLFW_KEY_SPACE) == GLFW_PRESS;
+        bool kTab   = glfwGetKey(win, GLFW_KEY_TAB) == GLFW_PRESS;
+        bool kDel   = glfwGetKey(win, GLFW_KEY_DELETE) == GLFW_PRESS || glfwGetKey(win, GLFW_KEY_BACKSPACE) == GLFW_PRESS;
+        if (kSpace && !pSpace) paused = !paused;                     // pause / resume
+        if (kTab && !pTab && paused) stepOnce = true;               // single frame while paused
+        if (kDel && !pDel) world.clearView();                       // clear the canvas
+        pSpace = kSpace; pTab = kTab; pDel = kDel;
 
-        bool mb = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+        // Mouse: left paints, right erases, middle eyedrops; clicks on the palette pick.
         double mx, my; glfwGetCursorPos(win, &mx, &my);
-        if (mb && !pMb) {                                // press edge
-            int h = ui::hit(pal, (int)mx, (int)my);
-            if (h >= 0) current = (uint8_t)h;            // clicked a palette swatch (slot == material id)
-            else painting = true;
-        }
-        if (!mb) painting = false;
-        pMb = mb;
-        if (painting) world.paint(viewX + (int)mx / PIXEL, viewY + (int)my / PIXEL, current, brushRadius);
-        // Advance the simulation by however much real time elapsed, so physics
-        // runs at cfg.simHz steps/s regardless of the render frame rate.
-        auto nowT = std::chrono::steady_clock::now();
-        acc += std::chrono::duration<double>(nowT - last).count();
-        last = nowT;
-        for (int n = 0; acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
-        if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
+        int cellX = viewX + (int)mx / PIXEL, cellY = viewY + (int)my / PIXEL;
+        bool bl = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT)   == GLFW_PRESS;
+        bool br = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT)  == GLFW_PRESS;
+        bool bm = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+        int hov = ui::hit(pal, (int)mx, (int)my);
+        if (bl && !pBL) { if (hov >= 0) current = kPaletteOrder[hov]; else { painting = true; paintMat = current; } }
+        if (br && !pBR) { if (hov < 0) { painting = true; paintMat = EMPTY; } }
+        if (bm && !pBM && hov < 0) { world.refreshHost(); current = world.viewCell(cellX, cellY); }
+        if (!bl && !br) painting = false;
+        pBL = bl; pBR = br; pBM = bm;
+        if (painting && hov < 0) world.paint(cellX, cellY, paintMat, brushRadius);
 
-        glUseProgram(present);
-        int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH);
-        if (cfbW != fbW || cfbH != fbH) { fbW = cfbW; fbH = cfbH; glUniform1i(uRW, fbW); glUniform1i(uRH, fbH); }
-        glUniform1i(uPalSel, (int)current);            // selected slot == selected material id
-        glUniform1i(uTick, ++tick);
-        glUniform1i(uViewX, viewX); glUniform1i(uViewY, viewY);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, world.buffer());
+        // Advance the simulation by however much real time elapsed (paused = freeze).
+        auto nowT = std::chrono::steady_clock::now();
+        double frameDt = std::chrono::duration<double>(nowT - last).count();
+        last = nowT;
+        if (frameDt > 0.0) fpsEMA = (fpsEMA <= 0.0) ? 1.0 / frameDt : fpsEMA * 0.92 + (1.0 / frameDt) * 0.08;
+        acc += frameDt;
+        if (!paused) for (int n = 0; acc >= stepDt && n < 8; ++n) { world.step(); acc -= stepDt; }
+        if (acc > stepDt) acc = stepDt;             // drop backlog after a stall
+        if (paused && stepOnce) { world.step(); stepOnce = false; }
+
+        // Compose the frame on the CPU (shared with the SDL viewers) and blit it.
+        world.refreshHost();                         // refresh the CPU mirror for colouring
+        ++tick;
+        hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, tick };
+        auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
+        hud::renderCanvas(pixels.data(), view, cell, glowR, glowG, glowB, kern, GR, GLOW);
+        hud::State hs{ &pal, orderedColors.data(), slotOf, current, brushRadius, paused, (int)(fpsEMA + 0.5), (int)mx, (int)my };
+        hud::drawHud(pixels.data(), view, hs, cell);
+
+        int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH); fbW = cfbW; fbH = cfbH;
+        glUseProgram(blit);
+        glUniform1i(uBRW, fbW); glUniform1i(uBRH, fbH);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, frameTex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, renderW, renderH, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels.data());
         glViewport(0, 0, fbW, fbH);
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -1538,12 +1599,84 @@ static int runInteractive(ViewCfg cfg) {
     return 0;
 }
 
+// Headless snapshot: compose one interactive frame (scene + bloom + HUD) on the CPU and
+// blit it to an offscreen FBO exactly as the live viewer does, write a PPM, and verify
+// the GL upload/blit is pixel-exact against the source buffer (so the live path is proven
+// without a display). Usage: --shot <file.ppm> [steps]
+static int runShot(ViewCfg cfg, const char* path, int steps) {
+    const int PIXEL = cfg.scale;
+    const int vw = std::max(1, (cfg.winW / PIXEL) / CHUNK), vh = std::max(1, (cfg.winH / PIXEL) / CHUNK);
+    const int WBOX = vw + 2, HBOX = vh + 2;
+    const int LWv = vw * CHUNK, LHv = vh * CHUNK, renderW = LWv * PIXEL, renderH = LHv * PIXEL;
+    GLFWwindow* win = initGL(false, 64, 64);                 // hidden context
+    if (!win) return 1;
+    GLuint compute = linkProgram({compileShader(GL_COMPUTE_SHADER, kComputeSrc)});
+    GLuint vao; glGenVertexArrays(1, &vao);
+    std::string dir = "/tmp/sandsim_world_gl_shot";
+    std::filesystem::remove_all(dir);
+    GpuWorld world(WBOX, HBOX, WBOX, HBOX, dir, compute);
+    world.generateAllToDisk();
+    world.setWindow(0, 0);
+    const int worldW = world.cellsW(), worldH = world.cellsH();
+    int viewX = (worldW - LWv) / 2, viewY = (worldH - LHv) / 2;
+    for (int s = 0; s < steps; ++s) world.step();
+    world.refreshHost();
+
+    ui::Palette pal = ui::palette(renderW, MATERIAL_COUNT);
+    std::vector<uint32_t> orderedColors(MATERIAL_COUNT); int slotOf[MATERIAL_COUNT];
+    for (int i = 0; i < MATERIAL_COUNT; ++i) { orderedColors[i] = kColors[kPaletteOrder[i]]; slotOf[kPaletteOrder[i]] = i; }
+    std::vector<uint32_t> pixels((size_t)renderW * renderH, 0);
+    const int GR = 3; const float GLOW = 0.85f;
+    std::vector<float> gR((size_t)LWv * LHv), gG((size_t)LWv * LHv), gB((size_t)LWv * LHv);
+    float kern[(2 * GR + 1) * (2 * GR + 1)]; hud::buildGlowKernel(kern, GR);
+    hud::View view{ renderW, renderH, LWv, LHv, PIXEL, viewX, viewY, kColors, 1 };
+    auto cell = [&](int wx, int wy) -> uint8_t { return world.viewCell(wx, wy); };
+    hud::renderCanvas(pixels.data(), view, cell, gR, gG, gB, kern, GR, GLOW);
+    hud::State hs{ &pal, orderedColors.data(), slotOf, (uint8_t)SAND, 4, false, 60, renderW / 2, 8 };
+    hud::drawHud(pixels.data(), view, hs, cell);
+
+    GLuint blit = linkProgram({compileShader(GL_VERTEX_SHADER, kPresentVert), compileShader(GL_FRAGMENT_SHADER, kBlitFrag)});
+    GLuint tex; glGenTextures(1, &tex); glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, renderW, renderH, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels.data());
+    GLuint fbo; glGenFramebuffers(1, &fbo); glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    GLuint rtex; glGenTextures(1, &rtex); glBindTexture(GL_TEXTURE_2D, rtex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, renderW, renderH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rtex, 0);
+    glViewport(0, 0, renderW, renderH);
+    glUseProgram(blit); glUniform1i(glGetUniformLocation(blit, "uTex"), 0);
+    glUniform1i(glGetUniformLocation(blit, "uRW"), renderW); glUniform1i(glGetUniformLocation(blit, "uRH"), renderH);
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, tex);
+    glBindVertexArray(vao); glDrawArrays(GL_TRIANGLES, 0, 3); glFinish();
+    std::vector<uint8_t> back((size_t)renderW * renderH * 4);
+    glReadPixels(0, 0, renderW, renderH, GL_RGBA, GL_UNSIGNED_BYTE, back.data());   // bottom-up RGBA
+
+    size_t mism = 0;
+    for (int y = 0; y < renderH; ++y)
+        for (int x = 0; x < renderW; ++x) {
+            uint32_t src = pixels[(size_t)y * renderW + x];                          // 0xAARRGGBB, top-down
+            const uint8_t* p = &back[((size_t)(renderH - 1 - y) * renderW + x) * 4]; // flipped row, RGBA
+            if (p[0] != ((src >> 16) & 0xFF) || p[1] != ((src >> 8) & 0xFF) || p[2] != (src & 0xFF)) ++mism;
+        }
+    FILE* f = fopen(path, "wb");
+    if (f) { fprintf(f, "P6\n%d %d\n255\n", renderW, renderH);
+        for (size_t i = 0; i < (size_t)renderW * renderH; ++i) { uint32_t c = pixels[i]; uint8_t rgb[3] = {(uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c}; fwrite(rgb, 1, 3, f); } fclose(f); }
+    fprintf(stderr, "shot %s: %dx%d, GL blit mismatch=%zu/%d (0 = pixel-exact)\n", path, renderW, renderH, mism, renderW * renderH);
+    std::filesystem::remove_all(dir);
+    glfwDestroyWindow(win); glfwTerminate();
+    return mism == 0 ? 0 : 3;
+}
+
 int main(int argc, char* argv[]) {
     if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) {
         int steps = (argc > 2) ? std::atoi(argv[2]) : 600;
         int wbox  = (argc > 3) ? std::atoi(argv[3]) : 6;
         int hbox  = (argc > 4) ? std::atoi(argv[4]) : 6;
         return runBench(steps, wbox, hbox);
+    }
+    if (argc > 2 && std::strcmp(argv[1], "--shot") == 0) {
+        int steps = (argc > 3) ? std::atoi(argv[3]) : 120;
+        return runShot(parseView(argc, argv), argv[2], steps);
     }
     return runInteractive(parseView(argc, argv));
 }

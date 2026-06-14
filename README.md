@@ -375,18 +375,19 @@ on-screen palette (or keys `0`-`9`, `P` plant, `A` acid, `M` smoke, `G` glass, `
 same on all three backends; every rule — movement, the time-varying transforms, and
 the neighbour reactions — is bit-identical across CPU SIMD, OpenGL, and Vulkan.
 
-The palette in the CPU/SDL viewer is **grouped into labelled categories** — Tools, Solids,
-Powders, Liquids, Gases, Fire & Heat, Explosives, Life & Growth, Circuits, Machines and
-Sources & Magic — with a thin category-coloured accent under each swatch so related
-materials cluster and read at a glance instead of scattering in add-order.
-
-The CPU/SDL viewer also draws a small **HUD** (rendered with a built-in bitmap font, so
-no font dependency): a **bottom info bar** showing the selected material's name and
-**category**, the brush size, FPS and the key controls; a **hover tooltip** that names
-(and categorises) whatever is under the cursor — any palette swatch or any cell in the
-world, so the 70-material palette is finally legible — a **circular brush outline** that previews exactly what you'll paint;
-a live **FPS** readout; and a centred **PAUSED** banner. (UI/UX polish like this is
-per-viewer and need not be bit-identical across backends — only the simulation is.)
+**All three viewers** (CPU/SDL, Vulkan/SDL and OpenGL) share one HUD, drawn from common
+headers (`hud_meta.h` + `hud.h`) with a built-in bitmap font, so they look and play the
+same. The palette is **grouped into labelled categories** — Tools, Solids, Powders,
+Liquids, Gases, Fire & Heat, Explosives, Life & Growth, Circuits, Machines and Sources &
+Magic — with a thin category-coloured accent under each swatch so related materials
+cluster and read at a glance instead of scattering in add-order. The HUD adds a **bottom
+info bar** (selected material's name + category, brush size, FPS and the key controls), a
+**hover tooltip** naming and categorising whatever is under the cursor — any palette
+swatch or any cell in the world — a **circular brush-outline** preview, the emissive
+**bloom**, and a centred **PAUSED** banner. (The OpenGL viewer composes the frame on the
+CPU and blits it as a texture while the sim still runs on the GPU; its `--shot file.ppm`
+mode renders one frame offscreen for a headless snapshot. UI/render polish is per-viewer
+and need not be bit-identical — only the simulation is.)
 
 In the interactive view the simulated area is a little **larger than what you can
 see** — the viewport plus a one-chunk **live border** all around it, all of it
