@@ -26,7 +26,7 @@ builds them, asserts the checksums match, and prints a throughput table.
 Materials: `EMPTY`, `WALL` (solid), `SAND` (powder), `WATER`, `GAS`, `OIL`,
 `FIRE`, `LAVA`, `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`,
 `TNT`, `ASH` (powder), `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`,
-`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`. Movement is a
+`SNOW` (powder), `MERCURY`, `GUNPOWDER` (powder), `THERMITE` (powder), `FROST`, `WISP`, `COAL` (powder), `EMBER` (powder), `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE` (powder), `SODIUM` (powder), `CORAL`, `PHOSPHORUS` (powder), `CEMENT` (powder), `CHLORINE` (gas), `BATTERY`, `FUSE`, `CRYO` (liquid). Movement is a
 density swap — heaviest to lightest is `MERCURY > SAND > LAVA > ACID > WATER > OIL >
 SNOW > air > GAS > FIRE`, with `STEAM`/`SMOKE` the lightest — so sand sinks through
 lava, acid sinks below water, oil floats on water, and gas/fire/steam/smoke rise (and `FUMES` and `CHLORINE` are the odd gases that **sink** -- heavy vapours that pool in the low ground).
@@ -271,6 +271,13 @@ CPU and GPU:
   fuse pairs with *every* explosive (`TNT`, `GUNPOWDER`, `SODIUM`, `PHOSPHORUS`) and any flammable.
   Light it with a `FIRE`/`LAVA`/`EMBER` touch, or wire it to an `IGNITER` for a circuit-triggered
   charge: a battery → wire → igniter → fuse → bomb is a fully automatic, hands-free demolition.
+- `CRYO` is **cryogenic coolant (liquid nitrogen) — the first *cold* liquid and the pourable
+  counterpart to `LAVA`.** It flows and pools like a light liquid (it floats on water the way
+  `OIL` does), and it is fiercely cold: `WATER` it touches **flash-freezes to `ICE`**, `FIRE` it
+  touches is **snuffed out**, and `LAVA` it touches is chilled straight to `OBSIDIAN` (without the
+  `STEAM` a water dousing makes). Being volatile it boils away on its own, so a pour is temporary.
+  Flood a lake to skate across it, freeze a moat solid, or quench a lava flow cleanly — the cold
+  mirror of everything fire does.
 - **Water meets hot:** `WATER` touching `FIRE` or `LAVA` flashes to `STEAM` — so
   water **puts fires out** — while the fire is quenched and the lava forges into
   `OBSIDIAN`, the glassy black volcanic rock (an inert, fire/acid/blast-proof solid

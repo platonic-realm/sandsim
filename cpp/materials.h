@@ -109,8 +109,8 @@ enum Material : uint8_t {
     THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34,
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
-    CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53,
-    MATERIAL_COUNT = 54
+    CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
+    MATERIAL_COUNT = 55
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1113,6 +1113,48 @@ inline void burnFuse(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, in
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = BURNFUSE;
             else if (scratch[i] == 2) grid[i] = FIRE;
+        }
+}
+
+// Cryo: a cryogenic coolant (liquid nitrogen) -- the first COLD liquid, the pourable
+// counterpart to LAVA. It flows and pools like a light liquid (it floats on water, the
+// way OIL does), and it is fiercely cold: WATER it touches flash-freezes to ICE, FIRE it
+// touches is snuffed to EMPTY, and LAVA it touches is chilled straight to OBSIDIAN. Being
+// volatile it boils away on its own -- a slow frame-hash evaporates it, and any cryo next
+// to FIRE/LAVA boils off at once. Pour it over a lake to skate across, or quench a lava
+// flow without the steam a water dousing would make. Two-pass snapshot: pass 1 marks each
+// cell's fate (1 = freeze to ICE, 2 = vanish to EMPTY, 3 = chill to OBSIDIAN); pass 2
+// applies. Order-independent / GPU-identical. Only ever consumed, so it terminates.
+static constexpr uint32_t CRYO_EVAP = 3;       // of 256/frame -> a cryo pool boils off over ~1-2 s
+inline bool cryoEvaporates(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 109u + (uint32_t)y * 233u + frame * 47u) & 0xFFu;
+    return h < CRYO_EVAP;
+}
+inline void reactCryo(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t c = grid[i], r = 0;
+            uint8_t n0 = grid[i-1], n1 = grid[i+1], n2 = grid[i-SW], n3 = grid[i+SW];
+            bool nearCryo = n0==CRYO || n1==CRYO || n2==CRYO || n3==CRYO;
+            if (c == CRYO) {
+                bool hot = isHot(n0) || isHot(n1) || isHot(n2) || isHot(n3);   // FIRE or LAVA
+                if (hot || cryoEvaporates(x, y, frame)) r = 2;                 // boils off
+            } else if (c == WATER) {
+                if (nearCryo) r = 1;                                           // flash-freeze -> ICE
+            } else if (c == FIRE) {
+                if (nearCryo) r = 2;                                           // snuffed cold -> EMPTY
+            } else if (c == LAVA) {
+                if (nearCryo) r = 3;                                           // chilled -> OBSIDIAN
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 1) grid[i] = ICE;
+            else if (scratch[i] == 2) grid[i] = EMPTY;
+            else if (scratch[i] == 3) grid[i] = OBSIDIAN;
         }
 }
 

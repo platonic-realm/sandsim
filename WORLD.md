@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -341,6 +341,19 @@ GPU and produce a **bit-identical** world.
     cord stays inert, lava lights it too, deterministic) plus two `worldgen.h` chambers — a
     `BURNFUSE`-only block isolating the `hasReactive` edit, and a full fuse → `TNT` contraption —
     bit-identical across all three backends.
+  - **cryo** — `CRYO` (cryogenic coolant) is the first *cold* liquid, the pourable mirror of
+    `LAVA`. Its movement is wired to be identical to `OIL` (a light liquid that floats on water), so
+    a new liquid tier was added without a bespoke density: `CRYO`'s id joins every `canEnter`/
+    eligibility site where `OIL` appears, across `simd_core.h` and both GPU shaders. Its reaction
+    (a 2-pass snapshot, passes 76/77) marks each cell's fate — `WATER` next to cryo flash-freezes to
+    `ICE`, `FIRE` next to cryo is snuffed to `EMPTY`, `LAVA` next to cryo is chilled to `OBSIDIAN`
+    (no `STEAM`, unlike a water quench), and any cryo next to `FIRE`/`LAVA` or whose frame-hash fires
+    boils off to `EMPTY` — then applies. Cryo is only ever consumed, so it terminates, and because it
+    evaporates on its own timer it is in the `hasReactive` set (like `PHOSPHORUS`/`CEMENT`/
+    `CHLORINE`). Adding a liquid is the most invasive movement change, so it was verified hardest:
+    the default bench is unchanged, a WALL-bordered CPU test confirms `CRYO` moves *bit-identically*
+    to `OIL` over 150 frames, a reaction unit test covers freeze/snuff/chill/boil-off, and two
+    `worldgen.h` chambers (cryo-only, and cryo + water + lava) agree across all three backends.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

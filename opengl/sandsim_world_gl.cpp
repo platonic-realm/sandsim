@@ -34,7 +34,7 @@
 #include <filesystem>
 #include "../ui.h"       // on-screen material palette (shared layout/hit-test)
 
-enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, MATERIAL_COUNT = 54 };
+enum Material : uint8_t { EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, GAS = 4, OIL = 5, FIRE = 6, LAVA = 7, STEAM = 8, WOOD = 9, PLANT = 10, ACID = 11, SMOKE = 12, GLASS = 13, ICE = 14, SPRING = 15, TNT = 16, ASH = 17, VOLCANO = 18, VOID = 19, MUD = 20, VIRUS = 21, SPARK = 22, OBSIDIAN = 23, SALT = 24, SNOW = 25, MERCURY = 26, GUNPOWDER = 27, THERMITE = 28, FROST = 29, WISP = 30, COAL = 31, EMBER = 32, CLONER = 33, CRYSTAL = 34, ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41, SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48, CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54, MATERIAL_COUNT = 55 };
 enum { SG_DOWN, SG_GAS, SG_HORIZ };
 
 static constexpr int CHUNK = 64;
@@ -86,15 +86,15 @@ uniform int uSW, uX0, uX1, uY0, uY1;
 uniform int uType, uDx, uDy, uParity, uGrp, uFrame;
 bool canEnter(uint s, uint t) {
     if (t == 1u) return false;                                       // WALL
-    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u) return t==7u||t==11u||t==3u||t==5u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT
-    if (s == 7u) return t==11u||t==3u||t==5u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> A,W,O,SNOW,FUMES,G,F,St,Sm,E
-    if (s == 11u) return t==3u||t==5u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> W,O,SNOW,FUMES,G,F,St,Sm,E
-    if (s == 3u) return t==5u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,FUMES,G,F,St,Sm,E
-    if (s == 5u) return t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> SNOW,FUMES,G,F,St,Sm,E
+    if (s == 2u || s == 17u || s == 27u || s == 28u || s == 31u || s == 32u || s == 45u || s == 46u || s == 48u || s == 49u) return t==7u||t==11u||t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;  // SAND/ASH/GUNPOWDER/THERMITE/COAL/EMBER/LYE/SODIUM/PHOSPHORUS/CEMENT
+    if (s == 7u) return t==11u||t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u; // LAVA -> A,W,O,SNOW,FUMES,G,F,St,Sm,E
+    if (s == 11u) return t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;        // ACID -> W,O,SNOW,FUMES,G,F,St,Sm,E
+    if (s == 3u) return t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;                // WATER -> O,SNOW,FUMES,G,F,St,Sm,E
+    if (s == 5u || s == 54u) return t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;                       // OIL  -> SNOW,FUMES,G,F,St,Sm,E
     if (s == 25u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // SNOW (light powder) -> G,F,St,Sm,E
     if (s == 37u || s == 50u) return t==4u||t==6u||t==8u||t==12u||t==0u;                              // FUMES (heavy gas) -> sinks through G,F,St,Sm,E
-    if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==5u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
-    if (s == 30u) return t==3u||t==5u||t==11u||t==7u||t==26u||t==4u||t==6u||t==8u||t==12u||t==0u;  // WISP (lightest) -> rises through W,O,A,L,MERCURY + gases + E
+    if (s == 26u) return t==2u||t==7u||t==11u||t==3u||t==5u||t==54u||t==25u||t==37u||t==50u||t==4u||t==6u||t==8u||t==12u||t==0u;  // MERCURY (heaviest) -> SAND + everything below
+    if (s == 30u) return t==3u||t==5u||t==54u||t==11u||t==7u||t==26u||t==4u||t==6u||t==8u||t==12u||t==0u;  // WISP (lightest) -> rises through W,O,A,L,MERCURY + gases + E
     if (s == 6u) return t==0u;                                                            // FIRE -> E
     if (s == 8u) return t==0u;                                                            // STEAM -> E (rises)
     if (s == 12u) return t==0u;                                                           // SMOKE -> E (rises)
@@ -102,9 +102,9 @@ bool canEnter(uint s, uint t) {
     return false;
 }
 bool eligible(uint s) {
-    if (uGrp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==5u; // DOWN: +lye/sodium/phosphorus/cement
+    if (uGrp == 0) return s==2u||s==17u||s==27u||s==28u||s==31u||s==32u||s==45u||s==46u||s==48u||s==49u||s==25u||s==37u||s==50u||s==26u||s==7u||s==11u||s==3u||s==5u||s==54u; // DOWN: +lye/sodium/phosphorus/cement
     if (uGrp == 1) return s==4u||s==6u||s==8u||s==12u||s==30u;       // GAS/FIRE/STEAM/SMOKE/WISP rise
-    return s==7u||s==26u||s==11u||s==3u||s==5u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u||s==50u;  // HORIZ: + mercury, smoke, wisp, fumes
+    return s==7u||s==26u||s==11u||s==3u||s==5u||s==54u||s==4u||s==6u||s==8u||s==12u||s==30u||s==37u||s==50u;  // HORIZ: + mercury, smoke, wisp, fumes
 }
 bool det(uint m) { return m!=0u && m!=1u && m!=38u && m!=39u && m!=40u && m!=41u && m!=42u; } // SENSOR-detectable: not empty/wall/circuit
 void main() {
@@ -716,6 +716,25 @@ void main() {
         if (moved[i] == 1u) cells[i] = 53u; else if (moved[i] == 2u) cells[i] = 6u;
         return;
     }
+    if (uType == 76) {                                    // cryo: mark fate (1 -> ICE, 2 -> EMPTY, 3 -> OBSIDIAN)
+        int i = y * uSW + x; uint c = cells[i]; uint r = 0u;
+        uint n0=cells[i-1], n1=cells[i+1], n2=cells[i-uSW], n3=cells[i+uSW];
+        bool nearCryo = n0==54u||n1==54u||n2==54u||n3==54u;
+        if (c == 54u) {
+            bool hot = n0==6u||n0==7u||n1==6u||n1==7u||n2==6u||n2==7u||n3==6u||n3==7u;
+            uint h=(uint(x)*109u+uint(y)*233u+uint(uFrame)*47u)&0xFFu;
+            if (hot || h<3u) r = 2u;
+        } else if (c == 3u) { if (nearCryo) r = 1u; }
+        else if (c == 6u) { if (nearCryo) r = 2u; }
+        else if (c == 7u) { if (nearCryo) r = 3u; }
+        moved[i] = r;
+        return;
+    }
+    if (uType == 77) {                                    // cryo: apply (1 -> ice 14, 2 -> empty 0, 3 -> obsidian 23)
+        int i = y * uSW + x;
+        if (moved[i] == 1u) cells[i] = 14u; else if (moved[i] == 2u) cells[i] = 0u; else if (moved[i] == 3u) cells[i] = 23u;
+        return;
+    }
     int cx = x - uX0;
     bool src = (uType == 0) ? (((y - uY0) & 1) == uParity)   // vertical: row parity
                             : ((cx & 1) == uParity);          // diag/horiz: column parity
@@ -804,6 +823,7 @@ vec3 matColor(uint m) {
     if (m == 51u) return vec3(1.000, 0.800, 0.133);
     if (m == 52u) return vec3(0.604, 0.502, 0.314);
     if (m == 53u) return vec3(1.000, 0.816, 0.188);
+    if (m == 54u) return vec3(0.533, 0.816, 0.973);
     return vec3(0.0);
 }
 float flick(int lx, int ly, int tick) {                   // matches ui::flicker()
@@ -962,7 +982,7 @@ public:
         }
         if (hasReactive) {                          // reactions (gated): see shader pass types
             glUniform1i(lFrame, (int)frame);
-            for (int t = 3; t <= 75; ++t) {         // + ... cement, chlorine, battery, fuse
+            for (int t = 3; t <= 77; ++t) {         // + ... chlorine, battery, fuse, cryo
                 if (!passEnabled(t)) continue;      // skip a paint-only reaction whose material is absent
                 glUniform1i(lType, t);
                 glDispatchCompute(LW / 16, LH / 16, 1);
@@ -974,7 +994,7 @@ public:
     }
 
     void paint(int lx, int ly, uint8_t material, int radius) {
-        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL || material == PHOSPHORUS || material == CEMENT || material == CHLORINE || material == BATTERY || material == BURNFUSE) hasReactive = true;
+        if (material == FIRE || material == LAVA || material == STEAM || material == PLANT || material == ACID || material == SMOKE || material == ICE || material == SPRING || material == VOLCANO || material == VOID || material == WATER || material == VIRUS || material == SPARK || material == SALT || material == FROST || material == EMBER || material == CLONER || material == CRYSTAL || material == ANTIMATTER || material == MOSS || material == EHEAD || material == ETAIL || material == PHOSPHORUS || material == CEMENT || material == CHLORINE || material == BATTERY || material == BURNFUSE || material == CRYO) hasReactive = true;
         present[material] = true;
         syncDown();
         for (int dy = -radius; dy <= radius; ++dy)
@@ -1056,6 +1076,7 @@ private:
             case 70: case 71: return present[CHLORINE];
             case 72: case 73: return present[BATTERY];
             case 74: case 75: return present[FUSE] || present[BURNFUSE];
+            case 76: case 77: return present[CRYO];
             case 52: case 53: return present[IGNITER];
             default: return true;   // 3-17, 26-27: always-on core reactions
         }
@@ -1084,7 +1105,7 @@ private:
             for (int lx = 0; lx < CHUNK; ++lx) {
                 uint8_t v = in[ly * CHUNK + lx];
                 present[v] = true;
-                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL || v == PHOSPHORUS || v == CEMENT || v == CHLORINE || v == BATTERY || v == BURNFUSE) hasReactive = true;
+                if (v == FIRE || v == LAVA || v == STEAM || v == PLANT || v == ACID || v == SMOKE || v == ICE || v == SPRING || v == VOLCANO || v == VOID || v == WATER || v == VIRUS || v == SPARK || v == SALT || v == FROST || v == EMBER || v == CLONER || v == CRYSTAL || v == ANTIMATTER || v == MOSS || v == EHEAD || v == ETAIL || v == PHOSPHORUS || v == CEMENT || v == CHLORINE || v == BATTERY || v == BURNFUSE || v == CRYO) hasReactive = true;
                 shadow[(size_t)(Y0 + cgy * CHUNK + ly) * SW + (X0 + cgx * CHUNK + lx)] = v;
             }
     }
