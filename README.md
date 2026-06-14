@@ -391,12 +391,15 @@ and need not be bit-identical — only the simulation is.)
 
 **Challenge mode** turns the sandbox into a little game: press `ENTER` to cycle through
 a set of bite-size puzzles (and once more to return to free play). Each stamps a starting
-scene into the arena and shows its objective in a banner; solve it with the materials and
-the win is detected live, with a **SOLVED!** time. The built-in challenges are *Fill the
-Tank* (pour water until it's full), *Melt the Ice* (bring fire or lava to a block of ice)
-and *Breach the Wall* (blast through stone with TNT, acid or thermite). The challenge
-definitions live in `challenges.h` and are shared by all three viewers, so any backend
-can be played.
+scene into the arena, shows its objective in a banner with a **live progress bar** (so you
+can see how close you are), and the win is detected on the cells every frame, with a
+**SOLVED!** time. The built-in challenges are *Fill the Tank* (pour water until it's full),
+*Melt the Ice* (bring fire or lava to a block of ice), *Breach the Wall* (blast through
+stone with TNT, acid or thermite), *Grow a Forest* (plant seeds on damp soil) and *Freeze
+the Lake* (chill a pool solid with frost or cryo). The challenge definitions live in
+`challenges.h` — each just fills/reads a flat cell buffer and reports 0–1 progress — and
+are shared by all three viewers, so any backend can be played, and adding one is a single
+line.
 
 In the interactive view the simulated area is a little **larger than what you can
 see** — the viewport plus a one-chunk **live border** all around it, all of it

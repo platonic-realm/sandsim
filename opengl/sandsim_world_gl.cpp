@@ -1608,10 +1608,12 @@ static int runInteractive(ViewCfg cfg) {
         // Compose the frame on the CPU (shared with the SDL viewers) and blit it.
         world.refreshHost();                         // refresh the CPU mirror for colouring
         ++tick;
-        if (chalIdx >= 0 && !chalSolved) {           // challenge win check on the live viewport
+        float chalP = chalSolved ? 1.0f : 0.0f;      // challenge progress, evaluated on the live viewport
+        if (chalIdx >= 0) {
             for (int y = 0; y < LHv; ++y)
                 for (int x = 0; x < LWv; ++x) chalBuf[(size_t)y * LWv + x] = world.viewCell(viewX + x, viewY + y);
-            if (chal::kChallenges[chalIdx].won(chalBuf.data(), LWv, LHv)) {
+            chalP = chal::kChallenges[chalIdx].progress(chalBuf.data(), LWv, LHv);
+            if (chalP >= 1.0f && !chalSolved) {
                 chalSolved = true;
                 chalSecs = (int)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - chalStart).count();
             }
@@ -1623,6 +1625,7 @@ static int runInteractive(ViewCfg cfg) {
         hs.chalIdx = chalIdx; hs.chalCount = chal::kNumChallenges; hs.chalSolved = chalSolved; hs.chalSecs = chalSecs;
         hs.chalName = (chalIdx >= 0) ? chal::kChallenges[chalIdx].name : nullptr;
         hs.chalGoal = (chalIdx >= 0) ? chal::kChallenges[chalIdx].goal : nullptr;
+        hs.chalProgress = chalSolved ? 1.0f : chalP;
         hud::drawHud(pixels.data(), view, hs, cell);
 
         int cfbW, cfbH; glfwGetFramebufferSize(win, &cfbW, &cfbH); fbW = cfbW; fbH = cfbH;

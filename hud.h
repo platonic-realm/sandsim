@@ -38,6 +38,7 @@ struct State {
     const char* chalGoal = nullptr;
     bool chalSolved = false;
     int chalSecs = 0;
+    float chalProgress = 0.0f;        // 0..1 toward the goal (drawn as a bar)
 };
 
 // Precompute the radial bloom falloff kernel for a given radius into kern (size (2r+1)^2).
@@ -163,16 +164,26 @@ inline void drawHud(uint32_t* px, const View& v, const State& s, CellFn cell) {
         int sc = 3, w = ui::textWidth(pw, sc);
         ui::label(px, W, H, (W - w) / 2, H / 2 - 10, pw, sc, 0xFFFFE060u);
     }
-    if (s.chalIdx >= 0) {                          // challenge banner above the info bar
+    if (s.chalIdx >= 0) {                          // challenge banner + progress bar, just under the palette
+        int rows = (pal.n + pal.cols - 1) / pal.cols;
+        int cy = pal.y0 + rows * (pal.sw + pal.gap) + pal.gap + 8;
+        uint32_t accent = s.chalSolved ? 0xFF70FF90u : 0xFFFFE060u;
         char cb[160];
         std::snprintf(cb, sizeof cb, "CHALLENGE %d/%d   %s:  %s",
                       s.chalIdx + 1, s.chalCount, s.chalName ? s.chalName : "", s.chalGoal ? s.chalGoal : "");
-        ui::label(px, W, H, 6, H - 24 - 22, cb, 1, s.chalSolved ? 0xFF70FF90u : 0xFFFFE060u);
+        ui::label(px, W, H, 8, cy, cb, 1, accent);
+        int barW = (W - 20 < 360) ? (W - 20) : 360, barH = 6, bx = 8, by = cy + 13;
+        int fill = (int)(barW * (s.chalProgress < 0 ? 0 : (s.chalProgress > 1 ? 1 : s.chalProgress)));
+        ui::fillRect(px, W, H, bx, by, barW, barH, 0xFF24242Cu);
+        ui::fillRect(px, W, H, bx, by, fill, barH, accent);
+        ui::outline(px, W, H, bx, by, barW, barH, 1, 0xFF000000u);
+        char pct[8]; std::snprintf(pct, sizeof pct, "%d%%", (int)(s.chalProgress * 100 + 0.5f));
+        ui::text(px, W, H, bx + barW + 6, by - 1, pct, 1, accent);
         if (s.chalSolved) {
             char sv[64];
             std::snprintf(sv, sizeof sv, "SOLVED IN %ds!   ENTER = NEXT", s.chalSecs);
             int sc = 3, w = ui::textWidth(sv, sc);
-            ui::label(px, W, H, (W - w) / 2, H / 2 + 24, sv, sc, 0xFF70FF90u);
+            ui::label(px, W, H, (W - w) / 2, H / 2, sv, sc, 0xFF70FF90u);
         }
     }
 }
