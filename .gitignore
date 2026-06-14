@@ -1,0 +1,10 @@
+# Compiled binaries and objects
+/cpp/sandsim_world
+/opengl/sandsim_world_gl
+/vulkan/sandsim_world_vk
+*.o
+*.spv
+
+# Editor/OS
+__pycache__/
+sandsim.sav
