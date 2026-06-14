@@ -44,7 +44,7 @@ The same ideas, simplified so the **one** engine can run on the CPU and on the
 GPU and produce a **bit-identical** world.
 
 - **Materials** = `EMPTY`, `WALL`, `SAND`, `WATER`, `GAS`, `OIL`, `FIRE`, `LAVA`,
-  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`. Movement is a pure density swap (heavy→light:
+  `STEAM`, `WOOD`, `PLANT`, `ACID`, `SMOKE`, `GLASS`, `ICE`, `SPRING`, `TNT`, `ASH`, `VOLCANO`, `VOID`, `MUD`, `VIRUS`, `SPARK`, `OBSIDIAN`, `SALT`, `SNOW`, `MERCURY`, `GUNPOWDER`, `THERMITE`, `FROST`, `WISP`, `COAL`, `EMBER`, `CLONER`, `CRYSTAL`, `ANTIMATTER`, `MOSS`, `FUMES`, `WIRE`, `EHEAD`, `ETAIL`, `IGNITER`, `SENSOR`, `LIFE`, `GEYSER`, `LYE`, `SODIUM`, `CORAL`, `PHOSPHORUS`, `CEMENT`, `CHLORINE`, `BATTERY`, `FUSE`, `CRYO`, `LAMP`, `PETRIFY`, `FIREWORK`. Movement is a pure density swap (heavy→light:
   `MERCURY > SAND > LAVA > ACID > WATER > OIL > SNOW > air > GAS > FIRE`, `STEAM` light, `WISP` lightest of all). On top of it
   sit the reactions, each kept order-independent so the GPU reproduces them
   exactly. The density extremes are deliberately *one-sided* and cheap: `MERCURY` is
@@ -380,6 +380,23 @@ GPU and produce a **bit-identical** world.
     converts and the curse terminates, deterministic) plus two `worldgen.h` chambers — a
     `PETRIFY`-only block isolating the `hasReactive` edit, and a curse sweeping a plant + wood
     forest — bit-identical across all three backends.
+  - **firework** — `FIREWORK` is the first material whose motion is driven by a *reaction* rather
+    than by the density-swap movement step, which is what lets it climb dead straight instead of
+    dispersing like a gas. It is non-moving in `simd_core.h`; its rise lives entirely in a 2-pass
+    snapshot (passes 82/83). Pass 1 tags each rocket *rising* (empty cell above → 1), *waiting*
+    (another rocket above, still climbing → 0) or *bursting* (a frame-hash fired, or it hit a
+    ceiling → 2). Pass 2 advances the risers — the empty cell above takes the rocket, this one
+    empties — detonates the bursters to `FIRE`, and sprays the burst into the bursting cell's empty
+    neighbours. The move is **race-free**: an empty cell is claimed only by the single rocket
+    directly below it (`scratch[i+SW] == 1`), so no two rockets ever target the same cell, and a
+    stacked column rises top-first without the lower rockets "bursting" on the ones above. It
+    self-launches, so `FIREWORK` is in the `hasReactive` set. Verified: a unit test (a rocket
+    climbs exactly one cell per frame and is conserved, bursts to fire under a ceiling, bursts on
+    its own timer with a fire spray, a stacked column rises without the lower rockets bursting,
+    deterministic) plus a firework-fountain `worldgen.h` chamber — isolating the `hasReactive` edit
+    while exercising the climb, the timed bursts and the spray — bit-identical across all three
+    backends. The reaction-driven straight-up move is a clean way to add directed motion without
+    touching the movement masks.
   - **infection** — `VIRUS` self-propagates: one combined mark/apply pass marks each
     cell `1` (a consumable neighbour of a virus, so it gets infected) or `2` (a virus
     that burns out or is cauterised by `FIRE`/`LAVA`, so it dies to `EMPTY`), then

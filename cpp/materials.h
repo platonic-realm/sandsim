@@ -110,8 +110,8 @@ enum Material : uint8_t {
     ANTIMATTER = 35, MOSS = 36, FUMES = 37, WIRE = 38, EHEAD = 39, ETAIL = 40, IGNITER = 41,
     SENSOR = 42, LIFE = 43, GEYSER = 44, LYE = 45, SODIUM = 46, CORAL = 47, PHOSPHORUS = 48,
     CEMENT = 49, CHLORINE = 50, BATTERY = 51, FUSE = 52, BURNFUSE = 53, CRYO = 54,
-    LAMP = 55, LAMPLIT = 56, PETRIFY = 57,
-    MATERIAL_COUNT = 58
+    LAMP = 55, LAMPLIT = 56, PETRIFY = 57, FIREWORK = 58,
+    MATERIAL_COUNT = 59
 };
 
 // Fire burn-out: a per-cell, time-varying transform that is a PURE function of
@@ -1214,6 +1214,47 @@ inline void petrify(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int
             size_t i = (size_t)y * SW + x;
             if (scratch[i] == 1) grid[i] = PETRIFY;
             else if (scratch[i] == 2) grid[i] = OBSIDIAN;
+        }
+}
+
+// Firework: a self-launching rocket -- the first material whose motion is driven by a
+// REACTION rather than by gravity/density. Paint a FIREWORK and it climbs straight up one
+// cell per frame (this pass moves it into the empty cell above, which is why it rises dead
+// straight instead of dispersing like a gas), until a frame-hash -- or a ceiling -- sets it
+// off, when it BURSTS into a ball of FIRE that sprays its empty neighbours. Spray a handful
+// for a fountain of sparks popping into fireballs at different heights; feed a CLONER and it
+// never stops. Two-pass snapshot: pass 1 tags each rocket rising (1), waiting (0, blocked by
+// another rocket still climbing) or bursting (2); pass 2 advances the risers (the cell above
+// becomes the rocket, this one empties), detonates the bursters and sprays the burst. The
+// move is race-free: an empty cell is claimed only by the single rocket directly below it.
+static constexpr uint32_t FIREWORK_BURST = 8;  // of 256/frame -> a rocket climbs ~20 cells, then pops
+inline bool fireworkBursts(int x, int y, uint32_t frame) {
+    uint32_t h = ((uint32_t)x * 71u + (uint32_t)y * 251u + frame * 139u) & 0xFFu;
+    return h < FIREWORK_BURST;
+}
+inline void launchFirework(uint8_t* grid, uint8_t* scratch, int SW, int X0, int X1, int Y0, int Y1, uint32_t frame) {
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            uint8_t r = 0;
+            if (grid[i] == FIREWORK) {
+                if (fireworkBursts(x, y, frame))   r = 2;   // pops on its timer
+                else if (grid[i-SW] == EMPTY)      r = 1;   // climbs into the empty cell above
+                else if (grid[i-SW] == FIREWORK)   r = 0;   // waits for the rocket above to clear
+                else                               r = 2;   // hit a ceiling -> bursts
+            }
+            scratch[i] = r;
+        }
+    for (int y = Y0; y < Y1; ++y)
+        for (int x = X0; x < X1; ++x) {
+            size_t i = (size_t)y * SW + x;
+            if (scratch[i] == 2)      grid[i] = FIRE;        // burst
+            else if (scratch[i] == 1) grid[i] = EMPTY;       // rocket climbed out of this cell
+            else if (grid[i] == EMPTY) {
+                if (scratch[i+SW] == 1) grid[i] = FIREWORK;  // a rocket climbed up into here
+                else if (scratch[i-1]==2 || scratch[i+1]==2 || scratch[i-SW]==2 || scratch[i+SW]==2)
+                    grid[i] = FIRE;                          // caught in a burst
+            }
         }
 }
 
